@@ -1,6 +1,9 @@
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
+import { loadLocalEnv } from "./localEnv";
+
+loadLocalEnv();
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
