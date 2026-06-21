@@ -1,9 +1,0 @@
-node_modules
-dist
-.netlify
-.env
-.env.local
-.env.*.local
-firebase-debug.log
-firestore-debug.log
-*.tsbuildinfo
