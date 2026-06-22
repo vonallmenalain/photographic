@@ -107,6 +107,19 @@ type ClassChoice = {
   schoolClass: SchoolClass;
 };
 
+type ChildLinkPayload = {
+  email: string;
+  orgId: string;
+  jobId: string;
+  classId: string;
+  displayName: string;
+};
+
+type SaveChildResult = {
+  suggestedLoginUrl?: string;
+  importResult?: RosterImportResult;
+};
+
 export function AdminSetupPage() {
   const { getIdToken } = useAuth();
   const [data, setData] = useState<AdminData>(emptyData);
@@ -230,6 +243,7 @@ export function AdminSetupPage() {
     setMessage("");
     setError("");
     setSuggestedUrl("");
+    setImportResult(null);
 
     try {
       const link = await saveChildAndGuardianLink();
@@ -238,6 +252,9 @@ export function AdminSetupPage() {
       if (link.suggestedLoginUrl) {
         setSuggestedUrl(link.suggestedLoginUrl);
       }
+      if (link.importResult) {
+        setImportResult(link.importResult);
+      }
       setChildLinkForm({ ...childLinkForm, email: "", displayName: "" });
       await refresh();
     } catch (submitError) {
@@ -245,7 +262,7 @@ export function AdminSetupPage() {
     }
   }
 
-  async function saveChildAndGuardianLink() {
+  async function saveChildAndGuardianLink(): Promise<SaveChildResult> {
     const payload = {
       email: childLinkForm.email,
       orgId: childLinkForm.orgId,
@@ -253,6 +270,7 @@ export function AdminSetupPage() {
       classId: childLinkForm.classId,
       displayName: childLinkForm.displayName
     };
+    const selectedContext = getSelectedClassChoice(payload);
 
     try {
       return await apiPost<{ suggestedLoginUrl?: string }>(
@@ -261,10 +279,16 @@ export function AdminSetupPage() {
         getIdToken
       );
     } catch (saveError) {
-      if (!(saveError instanceof ApiError) || saveError.status !== 404 || saveError.code !== "NOT_FOUND") {
+      if (!isMissingRouteError(saveError)) {
         throw saveError;
       }
 
+      return saveViaLegacyEndpoints(payload, selectedContext);
+    }
+  }
+
+  async function saveViaLegacyEndpoints(payload: ChildLinkPayload, selectedContext: ClassChoice) {
+    try {
       const child = await apiPost<{ id: string }>(
         "/api/admin/children",
         {
@@ -275,7 +299,6 @@ export function AdminSetupPage() {
         },
         getIdToken
       );
-
       return apiPost<{ suggestedLoginUrl?: string }>(
         "/api/admin/guardian-links",
         {
@@ -287,7 +310,129 @@ export function AdminSetupPage() {
         },
         getIdToken
       );
+    } catch (legacyError) {
+      if (!isValidationError(legacyError)) {
+        throw legacyError;
+      }
+
+      return saveViaRosterImport(payload, selectedContext);
     }
+  }
+
+  async function saveViaRosterImport(payload: ChildLinkPayload, selectedContext: ClassChoice): Promise<SaveChildResult> {
+    try {
+      const result = await apiPost<RosterImportResult>(
+        "/api/admin/import/roster",
+        {
+          rows: [
+            {
+              Organisation: selectedContext.organization.name,
+              Typ: selectedContext.organization.type,
+              Fotoauftrag: selectedContext.job.title,
+              Datum: selectedContext.job.date,
+              Klasse: selectedContext.schoolClass.name,
+              Lehrperson: selectedContext.schoolClass.teacherName ?? "",
+              Name: payload.displayName,
+              "E-Mail": payload.email
+            }
+          ]
+        },
+        getIdToken
+      );
+
+      if (result.importedRows < 1) {
+        const firstError = result.errors[0]?.message;
+        throw new Error(firstError || "Kind und Elternzugriff konnten nicht importiert werden.");
+      }
+
+      return {
+        suggestedLoginUrl: buildSuggestedLoginUrl(payload.email, payload.jobId),
+        importResult: result
+      };
+    } catch (importError) {
+      if (!isMissingRouteError(importError)) {
+        throw importError;
+      }
+
+      return saveViaFreshStructure(payload, selectedContext);
+    }
+  }
+
+  async function saveViaFreshStructure(payload: ChildLinkPayload, selectedContext: ClassChoice) {
+    const organization = await apiPost<{ id: string }>(
+      "/api/admin/organizations",
+      { name: selectedContext.organization.name, type: selectedContext.organization.type },
+      getIdToken
+    );
+    const job = await apiPost<{ id: string }>(
+      "/api/admin/jobs",
+      {
+        orgId: organization.id,
+        title: selectedContext.job.title,
+        date: selectedContext.job.date,
+        retentionUntil: selectedContext.job.retentionUntil || undefined
+      },
+      getIdToken
+    );
+    const schoolClass = await apiPost<{ id: string }>(
+      "/api/admin/classes",
+      {
+        orgId: organization.id,
+        jobId: job.id,
+        name: selectedContext.schoolClass.name,
+        teacherName: selectedContext.schoolClass.teacherName || undefined
+      },
+      getIdToken
+    );
+    const child = await apiPost<{ id: string }>(
+      "/api/admin/children",
+      {
+        orgId: organization.id,
+        jobId: job.id,
+        classId: schoolClass.id,
+        displayName: payload.displayName
+      },
+      getIdToken
+    );
+
+    return apiPost<{ suggestedLoginUrl?: string }>(
+      "/api/admin/guardian-links",
+      {
+        email: payload.email,
+        orgId: organization.id,
+        jobId: job.id,
+        classId: schoolClass.id,
+        childId: child.id
+      },
+      getIdToken
+    );
+  }
+
+  function getSelectedClassChoice(payload: ChildLinkPayload) {
+    const organization = data.organizations.find((entry) => entry.id === payload.orgId);
+    const job = data.jobs.find((entry) => entry.id === payload.jobId);
+    const schoolClass = data.classes.find((entry) => entry.id === payload.classId);
+
+    if (!organization || !job || !schoolClass) {
+      throw new Error("Bitte waehle Organisation, Auftrag und Klasse aus.");
+    }
+
+    return { organization, job, schoolClass };
+  }
+
+  function isMissingRouteError(error: unknown) {
+    return error instanceof ApiError && error.status === 404;
+  }
+
+  function isValidationError(error: unknown) {
+    return error instanceof ApiError && error.status === 400 && error.code === "VALIDATION_ERROR";
+  }
+
+  function buildSuggestedLoginUrl(email: string, jobId: string) {
+    const loginUrl = new URL("/login", window.location.origin);
+    loginUrl.searchParams.set("email", email.trim());
+    loginUrl.searchParams.set("jobId", jobId);
+    return loginUrl.toString();
   }
 
   function selectOrganization(orgId: string) {
