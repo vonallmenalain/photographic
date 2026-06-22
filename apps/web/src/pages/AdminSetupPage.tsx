@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { FileSpreadsheet, TableProperties, Upload } from "lucide-react";
-import { apiGet, apiPost, apiUploadFormData } from "../api/photosApi";
+import { ApiError, apiGet, apiPost, apiUploadFormData } from "../api/photosApi";
 import { useAuth } from "../auth/useAuth";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -232,17 +232,7 @@ export function AdminSetupPage() {
     setSuggestedUrl("");
 
     try {
-      const link = await apiPost<{ suggestedLoginUrl?: string }>(
-        "/api/admin/children-with-guardian-link",
-        {
-          email: childLinkForm.email,
-          orgId: childLinkForm.orgId,
-          jobId: childLinkForm.jobId,
-          classId: childLinkForm.classId,
-          displayName: childLinkForm.displayName
-        },
-        getIdToken
-      );
+      const link = await saveChildAndGuardianLink();
 
       setMessage("Kind und Elternzugriff gespeichert.");
       if (link.suggestedLoginUrl) {
@@ -252,6 +242,51 @@ export function AdminSetupPage() {
       await refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Kind oder Elternzugriff konnte nicht gespeichert werden.");
+    }
+  }
+
+  async function saveChildAndGuardianLink() {
+    const payload = {
+      email: childLinkForm.email,
+      orgId: childLinkForm.orgId,
+      jobId: childLinkForm.jobId,
+      classId: childLinkForm.classId,
+      displayName: childLinkForm.displayName
+    };
+
+    try {
+      return await apiPost<{ suggestedLoginUrl?: string }>(
+        "/api/admin/children-with-guardian-link",
+        payload,
+        getIdToken
+      );
+    } catch (saveError) {
+      if (!(saveError instanceof ApiError) || saveError.status !== 404 || saveError.code !== "NOT_FOUND") {
+        throw saveError;
+      }
+
+      const child = await apiPost<{ id: string }>(
+        "/api/admin/children",
+        {
+          orgId: payload.orgId,
+          jobId: payload.jobId,
+          classId: payload.classId,
+          displayName: payload.displayName
+        },
+        getIdToken
+      );
+
+      return apiPost<{ suggestedLoginUrl?: string }>(
+        "/api/admin/guardian-links",
+        {
+          email: payload.email,
+          orgId: payload.orgId,
+          jobId: payload.jobId,
+          classId: payload.classId,
+          childId: child.id
+        },
+        getIdToken
+      );
     }
   }
 
