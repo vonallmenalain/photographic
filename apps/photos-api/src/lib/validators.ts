@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-export const idSchema = z.string().regex(/^[A-Za-z0-9_-]{6,80}$/);
+export const idSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(180)
+  .refine((value) => !value.includes("/"), "IDs duerfen keinen Slash enthalten.");
 export const organizationTypeSchema = z.enum(["school", "kindergarten"]);
 export const photoTypeSchema = z.enum(["portrait", "sibling", "class", "classMirror", "event"]);
 export const photoVisibilitySchema = z.enum(["child", "class", "job"]);
