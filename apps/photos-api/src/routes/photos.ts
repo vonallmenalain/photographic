@@ -46,12 +46,12 @@ photosRouter.get("/:photoId/preview", streamProtectedImage("preview"));
 photosRouter.get(
   "/:photoId/original",
   asyncHandler(async (_req, res) => {
-    sendOk(
-      res,
-      {
+    res.status(501).json({
+      ok: false,
+      error: {
+        code: "ORIGINAL_DOWNLOAD_NOT_AVAILABLE",
         message: "Original-Download wird erst nach Zahlung aktiviert."
-      },
-      501
-    );
+      }
+    });
   })
 );
