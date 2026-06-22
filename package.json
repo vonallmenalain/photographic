@@ -11,6 +11,7 @@
     "dev:web": "npm --workspace apps/web run dev",
     "dev:api": "npm --workspace apps/photos-api run dev",
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "regenerate:previews": "npm --workspace apps/photos-api run regenerate:previews",
     "build": "npm run build:api && npm run build:web",
     "build:web": "npm --workspace apps/web run build",
     "build:api": "npm --workspace apps/photos-api run build",

@@ -138,6 +138,16 @@ VITE_PHOTOS_API_BASE_URL=https://api.fotos.alae.app
 5. Cloudflare Tunnel Hostname `api.fotos.alae.app` auf `http://photos-api:8787` routen.
 6. QNAP Admin-Oberflaechen, SMB, WebDAV, File Station und Photo Station niemals oeffentlich exponieren.
 
+## Preview-Dateien neu generieren
+
+Bestehende Preview-Dateien koennen aus den unveraenderten Originaldateien neu erzeugt werden:
+
+```bash
+npm run regenerate:previews
+```
+
+Das Script liest die `photos`-Metadaten aus Firestore, verwendet die vorhandenen `originalPath`- und `previewPath`-Felder und schreibt nur die jeweilige `preview.webp` neu. Originaldateien, Thumbnails und Firestore-Daten werden nicht veraendert. Fehler bei einzelnen Bildern werden geloggt; danach laeuft das Script mit dem naechsten Bild weiter.
+
 ## Sicherheitscheckliste
 
 - Niemals QNAP QTS oder Admin UI oeffentlich exponieren.
