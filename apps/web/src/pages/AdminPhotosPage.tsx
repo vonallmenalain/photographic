@@ -1,6 +1,6 @@
 import { AlertTriangle, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { apiDelete, apiGet, apiPatch, apiPost } from "../api/photosApi";
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "../api/photosApi";
 import { useAuth } from "../auth/useAuth";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -41,6 +41,11 @@ export function AdminPhotosPage() {
       setMessage(`${result.deletedCount} verwaiste Fotoeintraege entfernt.`);
       await refresh();
     } catch (cleanupError) {
+      if (cleanupError instanceof ApiError && cleanupError.status === 404) {
+        setMessage("Diese Bereinigung ist auf der laufenden API noch nicht verfuegbar.");
+        return;
+      }
+
       setError(
         cleanupError instanceof Error
           ? cleanupError.message
@@ -140,6 +145,11 @@ function PhotoEditor({
       setMessage("Foto geloescht.");
       await onSaved();
     } catch (deleteError) {
+      if (deleteError instanceof ApiError && deleteError.status === 404) {
+        setMessage("Diese Loeschfunktion ist auf der laufenden API noch nicht verfuegbar.");
+        return;
+      }
+
       setError(deleteError instanceof Error ? deleteError.message : "Foto konnte nicht geloescht werden.");
     }
   }

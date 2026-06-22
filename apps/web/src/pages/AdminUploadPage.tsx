@@ -8,6 +8,8 @@ import { ErrorState } from "../components/ErrorState";
 import { Loading } from "../components/Loading";
 import { AdminData, PhotoType, PhotoVisibility } from "../types/domain";
 
+const legacyIdPattern = /^[A-Za-z0-9_-]{6,80}$/;
+
 export function AdminUploadPage() {
   const { getIdToken } = useAuth();
   const [data, setData] = useState<AdminData | null>(null);
@@ -27,10 +29,43 @@ export function AdminUploadPage() {
     void apiGet<AdminData>("/api/admin/data", getIdToken).then(setData).catch((loadError: Error) => setError(loadError.message));
   }, [getIdToken]);
 
+  const availableOrganizations = data?.organizations.filter((organization) => legacyIdPattern.test(organization.id)) ?? [];
+  const availableJobs = data?.jobs.filter((job) => legacyIdPattern.test(job.id) && (!form.orgId || job.orgId === form.orgId)) ?? [];
+  const availableClasses =
+    data?.classes.filter(
+      (schoolClass) =>
+        legacyIdPattern.test(schoolClass.id) &&
+        (!form.orgId || schoolClass.orgId === form.orgId) &&
+        (!form.jobId || schoolClass.jobId === form.jobId)
+    ) ?? [];
+  const availableChildren =
+    data?.children.filter(
+      (child) =>
+        legacyIdPattern.test(child.id) &&
+        (!form.orgId || child.orgId === form.orgId) &&
+        (!form.jobId || child.jobId === form.jobId) &&
+        (!form.classId || child.classId === form.classId)
+    ) ?? [];
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!form.file) {
       setError("Bitte waehle eine Bilddatei aus.");
+      return;
+    }
+
+    if (!legacyIdPattern.test(form.orgId) || !legacyIdPattern.test(form.jobId) || !legacyIdPattern.test(form.classId)) {
+      setError("Bitte waehle Stammdaten aus, die ueber die aktuelle Stammdaten-Erfassung oder den Excel-Import angelegt wurden.");
+      return;
+    }
+
+    if (form.visibility === "child" && form.childIds.length === 0) {
+      setError("Bitte waehle fuer ein Portrait mindestens ein Kind aus.");
+      return;
+    }
+
+    if (!form.childIds.every((childId) => legacyIdPattern.test(childId))) {
+      setError("Bitte waehle Kinder aus, die ueber die aktuelle Stammdaten-Erfassung oder den Excel-Import angelegt wurden.");
       return;
     }
 
@@ -41,6 +76,7 @@ export function AdminUploadPage() {
     body.append("childIds", JSON.stringify(form.childIds));
     body.append("type", form.type);
     body.append("visibility", form.visibility);
+    body.append("status", "published");
     body.append("file", form.file);
 
     setError("");
@@ -73,9 +109,24 @@ export function AdminUploadPage() {
       {progressMessage ? <div className={progressMessage === "Foto gespeichert." ? "success-box" : "notice"}>{progressMessage}</div> : null}
       <Card>
         <form className="form" onSubmit={handleSubmit}>
-          <Select label="Organisation" value={form.orgId} items={data.organizations} onChange={(orgId) => setForm({ ...form, orgId })} />
-          <Select label="Auftrag" value={form.jobId} items={data.jobs} onChange={(jobId) => setForm({ ...form, jobId })} />
-          <Select label="Klasse" value={form.classId} items={data.classes} onChange={(classId) => setForm({ ...form, classId })} />
+          <Select
+            label="Organisation"
+            value={form.orgId}
+            items={availableOrganizations}
+            onChange={(orgId) => setForm({ ...form, orgId, jobId: "", classId: "", childIds: [] })}
+          />
+          <Select
+            label="Auftrag"
+            value={form.jobId}
+            items={availableJobs}
+            onChange={(jobId) => setForm({ ...form, jobId, classId: "", childIds: [] })}
+          />
+          <Select
+            label="Klasse"
+            value={form.classId}
+            items={availableClasses}
+            onChange={(classId) => setForm({ ...form, classId, childIds: [] })}
+          />
           <div className="form-row">
             <label>Kinder oder Klassenzuordnung</label>
             <select
@@ -88,7 +139,7 @@ export function AdminUploadPage() {
                 })
               }
             >
-              {data.children.map((child) => (
+              {availableChildren.map((child) => (
                 <option key={child.id} value={child.id}>
                   {child.displayName || child.pseudonym || child.id}
                 </option>

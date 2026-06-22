@@ -218,6 +218,7 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
   }
 
   const selectedMetadata = selected && adminData ? adminPhotoById.get(selected.photoId) : undefined;
+  const selectedChildNames = selected?.childNames ?? [];
   const selectedEmails =
     selected && adminData
       ? uniqueGuardianEmails(
@@ -337,8 +338,8 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
               <div className="card-header">
                 <div>
                   <h2>{labelForPhotoType(selected.type)}</h2>
-                  {selected.childNames.length > 0 ? (
-                    <p>Kinder: {selected.childNames.join(", ")}</p>
+                  {selectedChildNames.length > 0 ? (
+                    <p>Kinder: {selectedChildNames.join(", ")}</p>
                   ) : null}
                   <p>Original-Download wird erst nach Zahlung aktiviert.</p>
                 </div>
@@ -350,7 +351,7 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
                 <div className="meta-grid">
                   <span>Schule: {organizationNameById.get(selectedMetadata.orgId) || selectedMetadata.orgId}</span>
                   <span>Klasse: {classNameById.get(selected.classId) || selected.classId}</span>
-                  <span>Kinder: {selected.childNames.join(", ") || "Keine direkte Kindzuordnung"}</span>
+                  <span>Kinder: {selectedChildNames.join(", ") || "Keine direkte Kindzuordnung"}</span>
                   <span>E-Mail: {selectedEmails.map((email) => email.label).join(", ") || "Keine aktive Zuordnung"}</span>
                 </div>
               ) : null}

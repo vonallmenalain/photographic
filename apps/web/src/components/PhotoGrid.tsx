@@ -13,25 +13,29 @@ export function PhotoGrid({
 }) {
   return (
     <div className="photo-grid">
-      {photos.map((photo) => (
-        <button
-          className="photo-tile"
-          key={photo.photoId}
-          type="button"
-          onClick={() => onOpen(photo)}
-          aria-label={`${labelForPhotoType(photo.type)} oeffnen`}
-        >
-          {thumbnails[photo.photoId] ? (
-            <img src={thumbnails[photo.photoId]} alt="" />
-          ) : (
-            <Loading label="Bild..." />
-          )}
-          <span className="photo-tile-meta">
-            {labelForPhotoType(photo.type)}
-            {photo.childNames.length > 0 ? <small>{photo.childNames.join(", ")}</small> : null}
-          </span>
-        </button>
-      ))}
+      {photos.map((photo) => {
+        const childNames = photo.childNames ?? [];
+
+        return (
+          <button
+            className="photo-tile"
+            key={photo.photoId}
+            type="button"
+            onClick={() => onOpen(photo)}
+            aria-label={`${labelForPhotoType(photo.type)} oeffnen`}
+          >
+            {thumbnails[photo.photoId] ? (
+              <img src={thumbnails[photo.photoId]} alt="" />
+            ) : (
+              <Loading label="Bild..." />
+            )}
+            <span className="photo-tile-meta">
+              {labelForPhotoType(photo.type)}
+              {childNames.length > 0 ? <small>{childNames.join(", ")}</small> : null}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

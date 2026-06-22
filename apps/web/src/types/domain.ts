@@ -120,7 +120,7 @@ export type GalleryPhoto = {
   photoId: string;
   jobId: string;
   classId: string;
-  childNames: string[];
+  childNames?: string[];
   type: PhotoType;
   visibility: PhotoVisibility;
   hasThumb: boolean;
