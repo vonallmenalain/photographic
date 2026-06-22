@@ -8,10 +8,12 @@ import { normalizeEmail } from "../lib/admin";
 import { adminDb, serverTimestamp } from "../lib/firebaseAdmin";
 import { listCollection } from "../lib/firestore";
 import { generatePreviewAndThumb } from "../lib/imageProcessing";
+import { buildPhotoReferenceSets, getPhotoAvailability } from "../lib/photoAvailability";
 import { randomChildPseudonym, randomId } from "../lib/paths";
 import { asyncHandler, AppError, routeParam, sendOk } from "../lib/response";
 import {
   allowedImageMimes,
+  deletePhotoFiles,
   extensionForMime,
   photoRelativePaths,
   resolveInsidePhotoRoot,
@@ -56,6 +58,21 @@ adminRouter.get(
       listCollection("guardianLinks"),
       listCollection<PhotoRecord>("photos")
     ]);
+    const references = buildPhotoReferenceSets({ organizations, jobs, classes, children });
+    const photosWithStatus = await Promise.all(
+      photos.map(async ({ originalPath, previewPath, thumbPath, ...photo }) => {
+        const availability = await getPhotoAvailability(
+          { ...photo, originalPath, previewPath, thumbPath } as PhotoRecord,
+          references
+        );
+        return {
+          ...photo,
+          storageStatus: availability.storage,
+          metadataStatus: availability.metadata,
+          displayable: availability.displayable
+        };
+      })
+    );
 
     sendOk(res, {
       organizations,
@@ -63,7 +80,7 @@ adminRouter.get(
       classes,
       children,
       guardianLinks,
-      photos: photos.map(({ originalPath, previewPath, thumbPath, ...photo }) => photo)
+      photos: photosWithStatus
     });
   })
 );
@@ -244,6 +261,67 @@ adminRouter.post(
 
     const { originalPath, previewPath, thumbPath, ...safeMetadata } = metadata;
     sendOk(res, { id: photoId, ...safeMetadata }, 201);
+  })
+);
+
+adminRouter.post(
+  "/maintenance/cleanup-missing-photos",
+  asyncHandler(async (req, res) => {
+    const auth = getAuthContext(req);
+    const [organizations, jobs, classes, children, photos] = await Promise.all([
+      listCollection("organizations"),
+      listCollection("jobs"),
+      listCollection("classes"),
+      listCollection("children"),
+      listCollection<PhotoRecord>("photos")
+    ]);
+    const references = buildPhotoReferenceSets({ organizations, jobs, classes, children });
+    const deletedPhotoIds: string[] = [];
+
+    for (const photo of photos) {
+      const availability = await getPhotoAvailability(photo, references);
+      if (availability.displayable) {
+        continue;
+      }
+
+      if (!photo.id) {
+        continue;
+      }
+
+      await deletePhotoFiles(photo);
+      await adminDb().collection("photos").doc(photo.id).delete();
+      deletedPhotoIds.push(photo.id);
+    }
+
+    await writeAuditLog(auth, "admin.cleanup.missingPhotos", "photo", "bulk", {
+      deletedCount: deletedPhotoIds.length,
+      deletedPhotoIds
+    });
+
+    sendOk(res, { deletedCount: deletedPhotoIds.length, deletedPhotoIds });
+  })
+);
+
+adminRouter.delete(
+  "/photos/:photoId",
+  asyncHandler(async (req, res) => {
+    const auth = getAuthContext(req);
+    const photoId = routeParam(req, "photoId");
+    const ref = adminDb().collection("photos").doc(photoId);
+    const existing = await ref.get();
+
+    if (!existing.exists) {
+      throw new AppError(404, "PHOTO_NOT_FOUND", "Das Foto wurde nicht gefunden.");
+    }
+
+    const photo = existing.data() as PhotoRecord;
+    const deletedFiles = await deletePhotoFiles(photo);
+    await ref.delete();
+    await writeAuditLog(auth, "admin.delete.photo", "photo", photoId, {
+      deletedFiles
+    });
+
+    sendOk(res, { id: photoId, deletedFiles });
   })
 );
 

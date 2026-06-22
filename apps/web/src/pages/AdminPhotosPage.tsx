@@ -1,5 +1,6 @@
+import { AlertTriangle, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { apiGet, apiPatch } from "../api/photosApi";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../api/photosApi";
 import { useAuth } from "../auth/useAuth";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -13,12 +14,38 @@ export function AdminPhotosPage() {
   const { getIdToken } = useAuth();
   const [data, setData] = useState<AdminData | null>(null);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   async function refresh() {
     try {
       setData(await apiGet<AdminData>("/api/admin/data", getIdToken));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Fotos konnten nicht geladen werden.");
+    }
+  }
+
+  async function cleanupMissingPhotos() {
+    setError("");
+    setMessage("");
+
+    if (!window.confirm("Verwaiste Fotoeintraege ohne vollstaendige Dateien oder Stammdaten wirklich entfernen?")) {
+      return;
+    }
+
+    try {
+      const result = await apiPost<{ deletedCount: number }>(
+        "/api/admin/maintenance/cleanup-missing-photos",
+        {},
+        getIdToken
+      );
+      setMessage(`${result.deletedCount} verwaiste Fotoeintraege entfernt.`);
+      await refresh();
+    } catch (cleanupError) {
+      setError(
+        cleanupError instanceof Error
+          ? cleanupError.message
+          : "Verwaiste Fotoeintraege konnten nicht bereinigt werden."
+      );
     }
   }
 
@@ -38,8 +65,12 @@ export function AdminPhotosPage() {
           <h1>Fotos verwalten</h1>
           <p>Status, Typ, Sichtbarkeit und Zuordnungen einfach korrigieren.</p>
         </div>
+        <Button type="button" variant="secondary" icon={<RefreshCw size={18} />} onClick={cleanupMissingPhotos}>
+          Fehlende bereinigen
+        </Button>
       </div>
       {error ? <ErrorState message={error} /> : null}
+      {message ? <div className="success-box">{message}</div> : null}
       {data.photos.length === 0 ? (
         <EmptyState title="Noch keine Fotos">Lade zuerst Fotos im Adminbereich hoch.</EmptyState>
       ) : (
@@ -73,6 +104,10 @@ function PhotoEditor({
   });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const storageStatus = photo.storageStatus;
+  const metadataStatus = photo.metadataStatus;
+  const hasMissingFiles = storageStatus ? !storageStatus.complete : false;
+  const hasMissingMetadata = metadataStatus ? !metadataStatus.complete : false;
 
   async function save() {
     setError("");
@@ -92,6 +127,23 @@ function PhotoEditor({
     }
   }
 
+  async function deletePhoto() {
+    setError("");
+    setMessage("");
+
+    if (!window.confirm(`Foto "${photo.originalFilename || photo.id}" wirklich loeschen?`)) {
+      return;
+    }
+
+    try {
+      await apiDelete(`/api/admin/photos/${photo.id}`, getIdToken);
+      setMessage("Foto geloescht.");
+      await onSaved();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Foto konnte nicht geloescht werden.");
+    }
+  }
+
   return (
     <Card className="compact">
       <div className="card-header">
@@ -99,8 +151,38 @@ function PhotoEditor({
           <h3>{photo.originalFilename || `Foto ${compactId(photo.id)}`}</h3>
           <p>{labelForPhotoType(photo.type)} · {compactId(photo.id)}</p>
         </div>
-        <span className="pill">{photo.status}</span>
+        <div className="status-pills">
+          <span className="pill">{photo.status}</span>
+          {hasMissingFiles ? (
+            <span className="pill warning">
+              <AlertTriangle size={14} /> Datei fehlt
+            </span>
+          ) : null}
+          {hasMissingMetadata ? (
+            <span className="pill warning">
+              <AlertTriangle size={14} /> Stammdaten fehlen
+            </span>
+          ) : null}
+        </div>
       </div>
+      {storageStatus || metadataStatus ? (
+        <div className="meta-grid compact-meta">
+          {storageStatus ? (
+            <>
+              <span>Original: {storageStatus.original ? "vorhanden" : "fehlt"}</span>
+              <span>Preview: {storageStatus.preview ? "vorhanden" : "fehlt"}</span>
+              <span>Thumb: {storageStatus.thumb ? "vorhanden" : "fehlt"}</span>
+            </>
+          ) : null}
+          {metadataStatus ? (
+            <>
+              <span>Schule: {metadataStatus.organization ? "vorhanden" : "fehlt"}</span>
+              <span>Auftrag: {metadataStatus.job ? "vorhanden" : "fehlt"}</span>
+              <span>Klasse: {metadataStatus.class ? "vorhanden" : "fehlt"}</span>
+            </>
+          ) : null}
+        </div>
+      ) : null}
       <div className="grid three">
         <div className="form-row">
           <label>Status</label>
@@ -147,6 +229,9 @@ function PhotoEditor({
       </div>
       <div className="actions">
         <Button type="button" onClick={save}>Speichern</Button>
+        <Button type="button" variant="danger" icon={<Trash2 size={18} />} onClick={deletePhoto}>
+          Foto loeschen
+        </Button>
       </div>
       {message ? <div className="success-box">{message}</div> : null}
       {error ? <ErrorState message={error} /> : null}

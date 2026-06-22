@@ -46,7 +46,7 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
 }
 
 async function requestJson<T>(
-  method: "GET" | "POST" | "PATCH",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   getIdToken?: TokenProvider,
   body?: unknown
@@ -75,6 +75,10 @@ export function apiPost<T>(path: string, body: unknown, getIdToken?: TokenProvid
 
 export function apiPatch<T>(path: string, body: unknown, getIdToken?: TokenProvider) {
   return requestJson<T>("PATCH", path, getIdToken, body);
+}
+
+export function apiDelete<T>(path: string, getIdToken?: TokenProvider) {
+  return requestJson<T>("DELETE", path, getIdToken);
 }
 
 export async function apiUploadFormData<T>(

@@ -64,6 +64,77 @@ export function resolveInsidePhotoRoot(relativePath: string) {
   return resolved;
 }
 
+export type PhotoFilePaths = {
+  originalPath: string;
+  previewPath: string;
+  thumbPath: string;
+};
+
+export type PhotoStorageStatus = {
+  original: boolean;
+  preview: boolean;
+  thumb: boolean;
+  complete: boolean;
+};
+
+export async function relativeFileExists(relativePath: string) {
+  try {
+    const absolutePath = resolveInsidePhotoRoot(relativePath);
+    await fsp.access(absolutePath, fs.constants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function getPhotoStorageStatus(paths: PhotoFilePaths): Promise<PhotoStorageStatus> {
+  const [original, preview, thumb] = await Promise.all([
+    relativeFileExists(paths.originalPath),
+    relativeFileExists(paths.previewPath),
+    relativeFileExists(paths.thumbPath)
+  ]);
+
+  return {
+    original,
+    preview,
+    thumb,
+    complete: original && preview && thumb
+  };
+}
+
+async function deleteRelativeFileIfExists(relativePath: string) {
+  try {
+    const absolutePath = resolveInsidePhotoRoot(relativePath);
+    await fsp.unlink(absolutePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function deletePhotoFiles(paths: PhotoFilePaths) {
+  const [originalDeleted, previewDeleted, thumbDeleted] = await Promise.all([
+    deleteRelativeFileIfExists(paths.originalPath),
+    deleteRelativeFileIfExists(paths.previewPath),
+    deleteRelativeFileIfExists(paths.thumbPath)
+  ]);
+  const dir = path.posix.dirname(paths.originalPath);
+
+  if (dir && dir !== ".") {
+    try {
+      await fsp.rmdir(resolveInsidePhotoRoot(dir));
+    } catch {
+      // Directory cleanup is best-effort; non-empty or missing folders are fine.
+    }
+  }
+
+  return {
+    originalDeleted,
+    previewDeleted,
+    thumbDeleted
+  };
+}
+
 export async function writeBufferToRelativePath(relativePath: string, buffer: Buffer) {
   const absolutePath = resolveInsidePhotoRoot(relativePath);
   await fsp.mkdir(path.dirname(absolutePath), { recursive: true });

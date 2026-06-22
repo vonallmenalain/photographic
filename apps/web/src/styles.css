@@ -485,6 +485,23 @@ textarea:focus {
   font-weight: 700;
 }
 
+.pill.warning {
+  border-color: rgba(180, 83, 61, 0.34);
+  background: #fff5ed;
+  color: #7a341f;
+}
+
+.status-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.compact-meta {
+  margin: 0 0 12px;
+}
+
 .loading {
   display: inline-flex;
   align-items: center;

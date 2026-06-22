@@ -3,6 +3,7 @@ import { getAuthContext } from "../lib/auth";
 import { writeAuditLog } from "../lib/audit";
 import { adminDb } from "../lib/firebaseAdmin";
 import { canAccessPhoto, getActiveGuardianLinks, listCollection } from "../lib/firestore";
+import { buildPhotoReferenceSets, filterDisplayablePhotos } from "../lib/photoAvailability";
 import { asyncHandler, sendOk } from "../lib/response";
 import { PhotoRecord } from "../types/domain";
 
@@ -13,11 +14,21 @@ galleryRouter.get(
   asyncHandler(async (req, res) => {
     const auth = getAuthContext(req);
     let photos: Array<PhotoRecord & { id: string }> = [];
+    const [organizations, jobs, classes, children] = await Promise.all([
+      listCollection("organizations"),
+      listCollection("jobs"),
+      listCollection("classes"),
+      listCollection("children")
+    ]);
+    const references = buildPhotoReferenceSets({ organizations, jobs, classes, children });
 
     if (auth.role === "admin") {
       photos = (await listCollection<PhotoRecord>("photos")) as Array<PhotoRecord & { id: string }>;
+      const allCount = photos.length;
+      photos = await filterDisplayablePhotos(photos, references);
       await writeAuditLog(auth, "guardian.list.gallery", "gallery", auth.uid, {
         count: photos.length,
+        skippedUnavailable: allCount - photos.length,
         adminPreview: true
       });
     } else {
@@ -41,8 +52,11 @@ galleryRouter.get(
       );
 
       photos = allPhotos.filter((photo) => canAccessPhoto(auth, photo, guardianLinks));
+      const allowedCount = photos.length;
+      photos = await filterDisplayablePhotos(photos, references);
       await writeAuditLog(auth, "guardian.list.gallery", "gallery", auth.uid, {
-        count: photos.length
+        count: photos.length,
+        skippedUnavailable: allowedCount - photos.length
       });
     }
 

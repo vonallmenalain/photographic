@@ -75,6 +75,20 @@ export type Photo = {
   originalSize?: number;
   createdAt?: string;
   updatedAt?: string;
+  storageStatus?: {
+    original: boolean;
+    preview: boolean;
+    thumb: boolean;
+    complete: boolean;
+  };
+  metadataStatus?: {
+    organization: boolean;
+    job: boolean;
+    class: boolean;
+    childReferences: boolean;
+    complete: boolean;
+  };
+  displayable?: boolean;
 };
 
 export type AdminData = {
