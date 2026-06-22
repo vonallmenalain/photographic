@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { FileSpreadsheet, TableProperties, Upload } from "lucide-react";
-import { ApiError, apiGet, apiPost, apiUploadFormData } from "../api/photosApi";
+import { ApiError, apiGet, apiPost } from "../api/photosApi";
 import { useAuth } from "../auth/useAuth";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -119,6 +119,102 @@ type SaveChildResult = {
   suggestedLoginUrl?: string;
   importResult?: RosterImportResult;
 };
+
+type ParsedRosterRow = {
+  rowNumber: number;
+  organizationName: string;
+  organizationType: OrganizationType;
+  jobTitle: string;
+  jobDate: string;
+  className: string;
+  teacherName: string;
+  childName: string;
+  guardianEmail: string;
+};
+
+type MutableAdminData = {
+  organizations: Organization[];
+  jobs: Job[];
+  classes: SchoolClass[];
+  children: AdminData["children"];
+  guardianLinks: AdminData["guardianLinks"];
+};
+
+const legacyIdPattern = /^[A-Za-z0-9_-]{6,80}$/;
+
+const rosterAliases = {
+  organizationName: ["organisation", "organization", "schule", "kita", "kindergarten"],
+  organizationType: ["typ", "organisationstyp", "schultyp"],
+  jobTitle: ["fotoauftrag", "auftrag", "job", "fototag", "shooting"],
+  jobDate: ["datum", "fotodatum", "auftragsdatum", "date"],
+  className: ["klasse", "class", "gruppe"],
+  teacherName: ["lehrperson", "lehrer", "lehrerin", "teacher"],
+  childName: ["name", "name kind", "kind", "kindname", "kind name", "kindernamen"],
+  guardianEmail: ["email", "e-mail", "e mail", "email eltern", "e-mail eltern", "eltern email", "eltern-e-mail", "elternmail", "eltern"]
+};
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function normalizeLookupKey(value: unknown) {
+  return normalizeText(value)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[_./-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function organizationMatchKey(value: unknown) {
+  return normalizeLookupKey(value).replace(/^(schule|kindergarten|kita) /, "");
+}
+
+function lookupRowValue(row: Record<string, unknown>, aliases: string[]) {
+  const entries = Object.entries(row).map(([key, value]) => [normalizeLookupKey(key), value] as const);
+  const normalizedAliases = aliases.map(normalizeLookupKey);
+  const found = entries.find(([key]) => normalizedAliases.includes(key));
+  return normalizeText(found?.[1]);
+}
+
+function normalizeOrganizationType(value: string): OrganizationType {
+  const normalized = normalizeLookupKey(value);
+  return normalized.includes("kita") || normalized.includes("kindergarten") ? "kindergarten" : "school";
+}
+
+function parseRosterRow(row: Record<string, unknown>, index: number): ParsedRosterRow {
+  const parsed = {
+    rowNumber: index + 2,
+    organizationName: lookupRowValue(row, rosterAliases.organizationName),
+    organizationType: normalizeOrganizationType(lookupRowValue(row, rosterAliases.organizationType)),
+    jobTitle: lookupRowValue(row, rosterAliases.jobTitle),
+    jobDate: lookupRowValue(row, rosterAliases.jobDate) || todayIsoDate(),
+    className: lookupRowValue(row, rosterAliases.className),
+    teacherName: lookupRowValue(row, rosterAliases.teacherName),
+    childName: lookupRowValue(row, rosterAliases.childName),
+    guardianEmail: lookupRowValue(row, rosterAliases.guardianEmail)
+  };
+
+  const missing = [
+    ["Organisation/Schule", parsed.organizationName],
+    ["Fotoauftrag/Auftrag", parsed.jobTitle],
+    ["Klasse", parsed.className],
+    ["Name Kind", parsed.childName],
+    ["E-Mail Eltern", parsed.guardianEmail]
+  ]
+    .filter(([, value]) => !value)
+    .map(([label]) => label);
+
+  if (missing.length > 0) {
+    throw new Error(`Pflichtfelder fehlen: ${missing.join(", ")}`);
+  }
+
+  return parsed;
+}
 
 export function AdminSetupPage() {
   const { getIdToken } = useAuth();
@@ -272,125 +368,49 @@ export function AdminSetupPage() {
     };
     const selectedContext = getSelectedClassChoice(payload);
 
-    try {
-      return await apiPost<{ suggestedLoginUrl?: string }>(
-        "/api/admin/children-with-guardian-link",
-        payload,
-        getIdToken
-      );
-    } catch (saveError) {
-      if (!isMissingRouteError(saveError)) {
-        throw saveError;
-      }
-
-      return saveViaLegacyEndpoints(payload, selectedContext);
-    }
+    return saveViaLegacyEndpoints(payload, selectedContext);
   }
 
   async function saveViaLegacyEndpoints(payload: ChildLinkPayload, selectedContext: ClassChoice) {
     try {
-      const child = await apiPost<{ id: string }>(
-        "/api/admin/children",
-        {
-          orgId: payload.orgId,
-          jobId: payload.jobId,
-          classId: payload.classId,
-          displayName: payload.displayName
-        },
-        getIdToken
-      );
-      return apiPost<{ suggestedLoginUrl?: string }>(
-        "/api/admin/guardian-links",
-        {
-          email: payload.email,
-          orgId: payload.orgId,
-          jobId: payload.jobId,
-          classId: payload.classId,
-          childId: child.id
-        },
-        getIdToken
-      );
+      if (!hasLegacySafeIds(payload.orgId, payload.jobId, payload.classId)) {
+        throw new ApiError("Bestehende IDs sind nicht mit der alten API kompatibel.", "VALIDATION_ERROR", 400);
+      }
+
+      return saveChildWithResolvedIds(payload, {
+        orgId: payload.orgId,
+        jobId: payload.jobId,
+        classId: payload.classId
+      });
     } catch (legacyError) {
       if (!isValidationError(legacyError)) {
         throw legacyError;
       }
 
-      return saveViaRosterImport(payload, selectedContext);
+      const resolved = await ensureLegacyCompatibleContext(selectedContext, {
+        organizations: [...data.organizations],
+        jobs: [...data.jobs],
+        classes: [...data.classes],
+        children: [...data.children],
+        guardianLinks: [...data.guardianLinks]
+      });
+      return saveChildWithResolvedIds(payload, resolved);
     }
   }
 
-  async function saveViaRosterImport(payload: ChildLinkPayload, selectedContext: ClassChoice): Promise<SaveChildResult> {
-    try {
-      const result = await apiPost<RosterImportResult>(
-        "/api/admin/import/roster",
-        {
-          rows: [
-            {
-              Organisation: selectedContext.organization.name,
-              Typ: selectedContext.organization.type,
-              Fotoauftrag: selectedContext.job.title,
-              Datum: selectedContext.job.date,
-              Klasse: selectedContext.schoolClass.name,
-              Lehrperson: selectedContext.schoolClass.teacherName ?? "",
-              Name: payload.displayName,
-              "E-Mail": payload.email
-            }
-          ]
-        },
-        getIdToken
-      );
-
-      if (result.importedRows < 1) {
-        const firstError = result.errors[0]?.message;
-        throw new Error(firstError || "Kind und Elternzugriff konnten nicht importiert werden.");
-      }
-
-      return {
-        suggestedLoginUrl: buildSuggestedLoginUrl(payload.email, payload.jobId),
-        importResult: result
-      };
-    } catch (importError) {
-      if (!isMissingRouteError(importError)) {
-        throw importError;
-      }
-
-      return saveViaFreshStructure(payload, selectedContext);
-    }
-  }
-
-  async function saveViaFreshStructure(payload: ChildLinkPayload, selectedContext: ClassChoice) {
-    const organization = await apiPost<{ id: string }>(
-      "/api/admin/organizations",
-      { name: selectedContext.organization.name, type: selectedContext.organization.type },
-      getIdToken
-    );
-    const job = await apiPost<{ id: string }>(
-      "/api/admin/jobs",
-      {
-        orgId: organization.id,
-        title: selectedContext.job.title,
-        date: selectedContext.job.date,
-        retentionUntil: selectedContext.job.retentionUntil || undefined
-      },
-      getIdToken
-    );
-    const schoolClass = await apiPost<{ id: string }>(
-      "/api/admin/classes",
-      {
-        orgId: organization.id,
-        jobId: job.id,
-        name: selectedContext.schoolClass.name,
-        teacherName: selectedContext.schoolClass.teacherName || undefined
-      },
-      getIdToken
-    );
+  async function saveChildWithResolvedIds(
+    payload: ChildLinkPayload,
+    resolved: { orgId: string; jobId: string; classId: string }
+  ) {
     const child = await apiPost<{ id: string }>(
       "/api/admin/children",
       {
-        orgId: organization.id,
-        jobId: job.id,
-        classId: schoolClass.id,
-        displayName: payload.displayName
+        orgId: resolved.orgId,
+        jobId: resolved.jobId,
+        classId: resolved.classId,
+        displayName: payload.displayName,
+        pseudonym: payload.displayName.slice(0, 80),
+        consentStatus: "granted"
       },
       getIdToken
     );
@@ -399,9 +419,9 @@ export function AdminSetupPage() {
       "/api/admin/guardian-links",
       {
         email: payload.email,
-        orgId: organization.id,
-        jobId: job.id,
-        classId: schoolClass.id,
+        orgId: resolved.orgId,
+        jobId: resolved.jobId,
+        classId: resolved.classId,
         childId: child.id
       },
       getIdToken
@@ -420,19 +440,352 @@ export function AdminSetupPage() {
     return { organization, job, schoolClass };
   }
 
-  function isMissingRouteError(error: unknown) {
-    return error instanceof ApiError && error.status === 404;
-  }
-
   function isValidationError(error: unknown) {
     return error instanceof ApiError && error.status === 400 && error.code === "VALIDATION_ERROR";
   }
 
-  function buildSuggestedLoginUrl(email: string, jobId: string) {
-    const loginUrl = new URL("/login", window.location.origin);
-    loginUrl.searchParams.set("email", email.trim());
-    loginUrl.searchParams.set("jobId", jobId);
-    return loginUrl.toString();
+  function hasLegacySafeIds(...ids: string[]) {
+    return ids.every((id) => legacyIdPattern.test(id));
+  }
+
+  async function ensureLegacyCompatibleContext(choice: ClassChoice, workingData: MutableAdminData) {
+    let organization = workingData.organizations.find(
+      (entry) => entry.id === choice.organization.id && legacyIdPattern.test(entry.id)
+    );
+    organization ??= workingData.organizations.find(
+      (entry) => legacyIdPattern.test(entry.id) && organizationMatchKey(entry.name) === organizationMatchKey(choice.organization.name)
+    );
+
+    if (!organization) {
+      const created = await apiPost<{ id: string }>(
+        "/api/admin/organizations",
+        { name: choice.organization.name, type: choice.organization.type },
+        getIdToken
+      );
+      organization = {
+        id: created.id,
+        name: choice.organization.name,
+        type: choice.organization.type
+      };
+      workingData.organizations.push(organization);
+    }
+
+    let job = workingData.jobs.find(
+      (entry) =>
+        entry.id === choice.job.id &&
+        entry.orgId === organization.id &&
+        legacyIdPattern.test(entry.id)
+    );
+    job ??= workingData.jobs.find(
+      (entry) =>
+        entry.orgId === organization.id &&
+        legacyIdPattern.test(entry.id) &&
+        normalizeLookupKey(entry.title) === normalizeLookupKey(choice.job.title)
+    );
+
+    if (!job) {
+      const created = await apiPost<{ id: string }>(
+        "/api/admin/jobs",
+        {
+          orgId: organization.id,
+          title: choice.job.title,
+          date: choice.job.date || todayIsoDate(),
+          retentionUntil: choice.job.retentionUntil || undefined
+        },
+        getIdToken
+      );
+      job = {
+        id: created.id,
+        orgId: organization.id,
+        title: choice.job.title,
+        date: choice.job.date || todayIsoDate(),
+        status: choice.job.status || "draft",
+        retentionUntil: choice.job.retentionUntil
+      };
+      workingData.jobs.push(job);
+    }
+
+    let schoolClass = workingData.classes.find(
+      (entry) =>
+        entry.id === choice.schoolClass.id &&
+        entry.orgId === organization.id &&
+        entry.jobId === job.id &&
+        legacyIdPattern.test(entry.id)
+    );
+    schoolClass ??= workingData.classes.find(
+      (entry) =>
+        entry.orgId === organization.id &&
+        entry.jobId === job.id &&
+        legacyIdPattern.test(entry.id) &&
+        normalizeLookupKey(entry.name) === normalizeLookupKey(choice.schoolClass.name)
+    );
+
+    if (!schoolClass) {
+      const created = await apiPost<{ id: string }>(
+        "/api/admin/classes",
+        {
+          orgId: organization.id,
+          jobId: job.id,
+          name: choice.schoolClass.name,
+          teacherName: choice.schoolClass.teacherName || undefined
+        },
+        getIdToken
+      );
+      schoolClass = {
+        id: created.id,
+        orgId: organization.id,
+        jobId: job.id,
+        name: choice.schoolClass.name,
+        teacherName: choice.schoolClass.teacherName
+      };
+      workingData.classes.push(schoolClass);
+    }
+
+    return {
+      orgId: organization.id,
+      jobId: job.id,
+      classId: schoolClass.id
+    };
+  }
+
+  async function ensureRosterContext(parsed: ParsedRosterRow, workingData: MutableAdminData, result: RosterImportResult) {
+    let organization = workingData.organizations.find(
+      (entry) => legacyIdPattern.test(entry.id) && organizationMatchKey(entry.name) === organizationMatchKey(parsed.organizationName)
+    );
+
+    if (!organization) {
+      const created = await apiPost<{ id: string }>(
+        "/api/admin/organizations",
+        { name: parsed.organizationName, type: parsed.organizationType },
+        getIdToken
+      );
+      organization = {
+        id: created.id,
+        name: parsed.organizationName,
+        type: parsed.organizationType
+      };
+      workingData.organizations.push(organization);
+      result.created.organizations += 1;
+    }
+
+    let job = workingData.jobs.find(
+      (entry) =>
+        entry.orgId === organization.id &&
+        legacyIdPattern.test(entry.id) &&
+        normalizeLookupKey(entry.title) === normalizeLookupKey(parsed.jobTitle)
+    );
+
+    if (!job) {
+      const created = await apiPost<{ id: string }>(
+        "/api/admin/jobs",
+        {
+          orgId: organization.id,
+          title: parsed.jobTitle,
+          date: parsed.jobDate,
+          retentionUntil: undefined
+        },
+        getIdToken
+      );
+      job = {
+        id: created.id,
+        orgId: organization.id,
+        title: parsed.jobTitle,
+        date: parsed.jobDate,
+        status: "draft",
+        retentionUntil: null
+      };
+      workingData.jobs.push(job);
+      result.created.jobs += 1;
+    }
+
+    let schoolClass = workingData.classes.find(
+      (entry) =>
+        entry.orgId === organization.id &&
+        entry.jobId === job.id &&
+        legacyIdPattern.test(entry.id) &&
+        normalizeLookupKey(entry.name) === normalizeLookupKey(parsed.className)
+    );
+
+    if (!schoolClass) {
+      const created = await apiPost<{ id: string }>(
+        "/api/admin/classes",
+        {
+          orgId: organization.id,
+          jobId: job.id,
+          name: parsed.className,
+          teacherName: parsed.teacherName || undefined
+        },
+        getIdToken
+      );
+      schoolClass = {
+        id: created.id,
+        orgId: organization.id,
+        jobId: job.id,
+        name: parsed.className,
+        teacherName: parsed.teacherName
+      };
+      workingData.classes.push(schoolClass);
+      result.created.classes += 1;
+    }
+
+    return { organization, job, schoolClass };
+  }
+
+  async function importRosterRowsLocally(rows: Array<Record<string, unknown>>) {
+    const workingData: MutableAdminData = {
+      organizations: [...data.organizations],
+      jobs: [...data.jobs],
+      classes: [...data.classes],
+      children: [...data.children],
+      guardianLinks: [...data.guardianLinks]
+    };
+    const result: RosterImportResult = {
+      receivedRows: rows.length,
+      importedRows: 0,
+      skippedRows: 0,
+      created: {
+        organizations: 0,
+        jobs: 0,
+        classes: 0,
+        children: 0,
+        guardianLinks: 0
+      },
+      errors: []
+    };
+
+    for (const [index, row] of rows.entries()) {
+      let parsed: ParsedRosterRow;
+      try {
+        parsed = parseRosterRow(row, index);
+      } catch (parseError) {
+        result.skippedRows += 1;
+        result.errors.push({
+          rowNumber: index + 2,
+          message: parseError instanceof Error ? parseError.message : "Zeile konnte nicht gelesen werden."
+        });
+        continue;
+      }
+
+      try {
+        const { organization, job, schoolClass } = await ensureRosterContext(parsed, workingData, result);
+        let child = workingData.children.find(
+          (entry) =>
+            entry.orgId === organization.id &&
+            entry.jobId === job.id &&
+            entry.classId === schoolClass.id &&
+            normalizeLookupKey(entry.displayName || entry.pseudonym || "") === normalizeLookupKey(parsed.childName)
+        );
+
+        if (!child) {
+          const created = await apiPost<{ id: string }>(
+            "/api/admin/children",
+            {
+              orgId: organization.id,
+              jobId: job.id,
+              classId: schoolClass.id,
+              displayName: parsed.childName,
+              pseudonym: parsed.childName.slice(0, 80),
+              consentStatus: "granted"
+            },
+            getIdToken
+          );
+          child = {
+            id: created.id,
+            orgId: organization.id,
+            jobId: job.id,
+            classId: schoolClass.id,
+            displayName: parsed.childName,
+            pseudonym: parsed.childName.slice(0, 80)
+          };
+          workingData.children.push(child);
+          result.created.children += 1;
+        }
+
+        const emailLower = parsed.guardianEmail.trim().toLowerCase();
+        const existingLink = workingData.guardianLinks.find(
+          (entry) =>
+            !entry.revokedAt &&
+            (entry.emailLower || entry.email.trim().toLowerCase()) === emailLower &&
+            entry.orgId === organization.id &&
+            entry.jobId === job.id &&
+            entry.classId === schoolClass.id &&
+            entry.childId === child.id
+        );
+
+        if (!existingLink) {
+          const link = await apiPost<{ id?: string }>(
+            "/api/admin/guardian-links",
+            {
+              email: parsed.guardianEmail,
+              orgId: organization.id,
+              jobId: job.id,
+              classId: schoolClass.id,
+              childId: child.id
+            },
+            getIdToken
+          );
+          workingData.guardianLinks.push({
+            id: link.id ?? `${child.id}-${emailLower}`,
+            email: parsed.guardianEmail,
+            emailLower,
+            orgId: organization.id,
+            jobId: job.id,
+            classId: schoolClass.id,
+            childId: child.id,
+            revokedAt: null
+          });
+          result.created.guardianLinks += 1;
+        }
+
+        result.importedRows += 1;
+      } catch (rowError) {
+        result.skippedRows += 1;
+        result.errors.push({
+          rowNumber: parsed.rowNumber,
+          message: rowError instanceof Error ? rowError.message : "Zeile konnte nicht importiert werden."
+        });
+      }
+    }
+
+    return result;
+  }
+
+  async function parseExcelRows(file: File) {
+    const { default: ExcelJS } = await import("exceljs");
+    const workbook = new ExcelJS.Workbook();
+    const buffer = await file.arrayBuffer();
+    await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+    const worksheet = workbook.worksheets[0];
+
+    if (!worksheet) {
+      throw new Error("Die Excel-Datei enthaelt kein Tabellenblatt.");
+    }
+
+    const headerRow = worksheet.getRow(1);
+    const headers: string[] = [];
+    headerRow.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
+      headers[columnNumber - 1] = normalizeText(cell.text);
+    });
+
+    const rows: Array<Record<string, unknown>> = [];
+    for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+      const worksheetRow = worksheet.getRow(rowNumber);
+      const row: Record<string, unknown> = {};
+      let hasValue = false;
+
+      headers.forEach((header, index) => {
+        if (!header) return;
+        const value = normalizeText(worksheetRow.getCell(index + 1).text);
+        if (value) hasValue = true;
+        row[header] = value;
+      });
+
+      if (hasValue) {
+        rows.push(row);
+      }
+    }
+
+    return rows;
   }
 
   function selectOrganization(orgId: string) {
@@ -503,7 +856,7 @@ export function AdminSetupPage() {
 
     try {
       const rows = parsePastedTable(pastedTable);
-      const result = await apiPost<RosterImportResult>("/api/admin/import/roster", { rows }, getIdToken);
+      const result = await importRosterRowsLocally(rows);
       setImportResult(result);
       setMessage("Tabelle importiert.");
       await refresh();
@@ -527,9 +880,8 @@ export function AdminSetupPage() {
 
     setImporting(true);
     try {
-      const body = new FormData();
-      body.append("file", excelFile);
-      const result = await apiUploadFormData<RosterImportResult>("/api/admin/import/roster-file", body, getIdToken);
+      const rows = await parseExcelRows(excelFile);
+      const result = await importRosterRowsLocally(rows);
       setImportResult(result);
       setMessage("Excel-Datei importiert.");
       await refresh();
