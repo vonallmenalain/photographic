@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
-import { signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { LockKeyhole, LogIn } from "lucide-react";
+import { sendPasswordResetEmail, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
+import { KeyRound, LockKeyhole, LogIn } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiGet } from "../api/photosApi";
 import { Button } from "../components/Button";
@@ -14,13 +14,16 @@ export function AdminLoginPage({ redirectTo = "/admin" }: { redirectTo?: string 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const safeRedirect = redirectTo.startsWith("/admin") ? redirectTo : "/admin";
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError("");
+    setMessage("");
 
     try {
       if (!auth) {
@@ -44,6 +47,34 @@ export function AdminLoginPage({ redirectTo = "/admin" }: { redirectTo?: string 
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handlePasswordReset() {
+    setResetLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      if (!auth) {
+        throw new Error(firebaseConfigError || "Firebase ist nicht konfiguriert.");
+      }
+
+      const trimmedEmail = email.trim();
+      if (!trimmedEmail) {
+        throw new Error("Bitte gib zuerst deine Admin-E-Mail-Adresse ein.");
+      }
+
+      await sendPasswordResetEmail(auth, trimmedEmail);
+      setMessage("Wenn fuer diese E-Mail ein Konto existiert, wurde ein Link zum Passwort-Zuruecksetzen gesendet.");
+    } catch (resetError) {
+      setError(
+        resetError instanceof Error
+          ? resetError.message
+          : "Der Passwort-Link konnte nicht gesendet werden."
+      );
+    } finally {
+      setResetLoading(false);
     }
   }
 
@@ -84,8 +115,18 @@ export function AdminLoginPage({ redirectTo = "/admin" }: { redirectTo?: string 
           <Button disabled={loading} icon={<LogIn size={18} />}>
             {loading ? "Wird geprueft..." : "Einloggen"}
           </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={resetLoading || loading}
+            icon={<KeyRound size={18} />}
+            onClick={handlePasswordReset}
+          >
+            {resetLoading ? "Link wird gesendet..." : "Passwort vergessen"}
+          </Button>
         </form>
         {firebaseConfigError ? <ErrorState message={firebaseConfigError} /> : null}
+        {message ? <div className="success-box">{message}</div> : null}
         {error ? <ErrorState message={error} /> : null}
       </Card>
     </div>
