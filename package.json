@@ -1,0 +1,25 @@
+{
+  "name": "photographic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Secure kindergarten and school photo ordering MVP.",
+  "workspaces": [
+    "apps/web",
+    "apps/photos-api"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:api": "npm --workspace apps/photos-api run dev",
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "build": "npm run build:api && npm run build:web",
+    "build:web": "npm --workspace apps/web run build",
+    "build:api": "npm --workspace apps/photos-api run build",
+    "lint": "npm --workspace apps/web run lint && npm --workspace apps/photos-api run lint"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

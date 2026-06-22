@@ -1,0 +1,12 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // The frontend must not read or write app data directly.
+    // The QNAP photos-api uses the Firebase Admin SDK and checks permissions
+    // server-side before returning metadata or streaming images.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
