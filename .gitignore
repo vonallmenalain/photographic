@@ -27,3 +27,4 @@ pnpm-debug.log*
 Thumbs.db
 
 local-photos/
+.codex-remote-attachments/

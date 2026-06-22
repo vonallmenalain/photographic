@@ -29,6 +29,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth) {
+      setLoading(false);
+      return undefined;
+    }
+
     return onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setLoading(false);
@@ -36,10 +41,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (!auth) {
+      return;
+    }
     await firebaseSignOut(auth);
   }, []);
 
   const getIdToken = useCallback(async () => {
+    if (!auth) {
+      throw new Error("Firebase ist nicht konfiguriert.");
+    }
+
     if (!auth.currentUser) {
       throw new Error("Nicht eingeloggt.");
     }

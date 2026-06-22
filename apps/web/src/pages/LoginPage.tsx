@@ -2,7 +2,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { sendSignInLinkToEmail } from "firebase/auth";
 import { MailCheck, Send } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { auth } from "../firebase/client";
+import { auth, firebaseConfigError } from "../firebase/client";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { ErrorState } from "../components/ErrorState";
@@ -30,6 +30,10 @@ export function LoginPage() {
     setSuccess("");
 
     try {
+      if (!auth) {
+        throw new Error(firebaseConfigError || "Firebase ist nicht konfiguriert.");
+      }
+
       await sendSignInLinkToEmail(auth, email.trim(), {
         url: callbackUrl,
         handleCodeInApp: true
@@ -77,6 +81,7 @@ export function LoginPage() {
             {loading ? "Wird gesendet..." : "Login-Link senden"}
           </Button>
         </form>
+        {firebaseConfigError ? <ErrorState message={firebaseConfigError} /> : null}
         {success ? <div className="success-box">{success}</div> : null}
         {error ? <ErrorState message={error} /> : null}
       </Card>

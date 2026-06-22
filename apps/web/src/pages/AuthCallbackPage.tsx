@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { auth } from "../firebase/client";
+import { auth, firebaseConfigError } from "../firebase/client";
 import { apiGet } from "../api/photosApi";
 import { MeResponse } from "../types/domain";
 import { Button } from "../components/Button";
@@ -23,6 +23,10 @@ export function AuthCallbackPage() {
     setLoading(true);
     setError("");
     try {
+      if (!auth) {
+        throw new Error(firebaseConfigError || "Firebase ist nicht konfiguriert.");
+      }
+
       const href = window.location.href;
       if (!isSignInWithEmailLink(auth, href)) {
         throw new Error("Dieser Login-Link ist ungueltig oder abgelaufen.");
