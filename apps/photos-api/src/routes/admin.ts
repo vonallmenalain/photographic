@@ -22,6 +22,7 @@ import {
 } from "../lib/storage";
 import {
   createChildSchema,
+  createChildWithGuardianLinkSchema,
   createClassSchema,
   createGuardianLinkSchema,
   createJobSchema,
@@ -192,6 +193,69 @@ adminRouter.post(
     });
 
     sendOk(res, { id: childId, displayName: input.displayName }, 201);
+  })
+);
+
+adminRouter.post(
+  "/children-with-guardian-link",
+  asyncHandler(async (req, res) => {
+    const auth = getAuthContext(req);
+    const input = createChildWithGuardianLinkSchema.parse(req.body);
+    const childId = randomId();
+    const guardianLinkId = randomId();
+    const emailLower = normalizeEmail(input.email);
+    const timestamp = serverTimestamp();
+    const db = adminDb();
+    const batch = db.batch();
+
+    batch.set(db.collection("children").doc(childId), {
+      orgId: input.orgId,
+      jobId: input.jobId,
+      classId: input.classId,
+      displayName: input.displayName,
+      createdAt: timestamp,
+      createdByUid: auth.uid
+    });
+    batch.set(db.collection("guardianLinks").doc(guardianLinkId), {
+      email: input.email.trim(),
+      emailLower,
+      orgId: input.orgId,
+      jobId: input.jobId,
+      classId: input.classId,
+      childId,
+      createdAt: timestamp,
+      createdByUid: auth.uid,
+      revokedAt: null
+    });
+
+    await batch.commit();
+
+    const loginUrl = new URL("/login", env.APP_BASE_URL);
+    loginUrl.searchParams.set("email", input.email.trim());
+    loginUrl.searchParams.set("jobId", input.jobId);
+
+    await writeAuditLog(auth, "admin.create.child", "child", childId, {
+      orgId: input.orgId,
+      jobId: input.jobId,
+      classId: input.classId
+    });
+    await writeAuditLog(auth, "admin.create.guardianLink", "guardianLink", guardianLinkId, {
+      orgId: input.orgId,
+      jobId: input.jobId,
+      classId: input.classId,
+      childId
+    });
+
+    sendOk(
+      res,
+      {
+        id: childId,
+        guardianLinkId,
+        displayName: input.displayName,
+        suggestedLoginUrl: loginUrl.toString()
+      },
+      201
+    );
   })
 );
 

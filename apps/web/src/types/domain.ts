@@ -18,6 +18,7 @@ export type Organization = {
   id: string;
   name: string;
   type: OrganizationType;
+  createdAt?: string;
 };
 
 export type Job = {
@@ -27,6 +28,7 @@ export type Job = {
   date: string;
   status: string;
   retentionUntil?: string | null;
+  createdAt?: string;
 };
 
 export type SchoolClass = {
@@ -35,6 +37,7 @@ export type SchoolClass = {
   jobId: string;
   name: string;
   teacherName?: string;
+  createdAt?: string;
 };
 
 export type Child = {

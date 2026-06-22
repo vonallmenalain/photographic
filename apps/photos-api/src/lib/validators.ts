@@ -3,8 +3,8 @@ import { z } from "zod";
 export const idSchema = z
   .string()
   .trim()
-  .min(1)
-  .max(180)
+  .min(1, "Bitte waehle einen Eintrag aus.")
+  .max(180, "Die ID ist zu lang.")
   .refine((value) => !value.includes("/"), "IDs duerfen keinen Slash enthalten.");
 export const organizationTypeSchema = z.enum(["school", "kindergarten"]);
 export const photoTypeSchema = z.enum(["portrait", "sibling", "class", "classMirror", "event"]);
@@ -33,15 +33,19 @@ export const createChildSchema = z.object({
   orgId: idSchema,
   jobId: idSchema,
   classId: idSchema,
-  displayName: z.string().trim().min(1).max(120)
+  displayName: z.string().trim().min(1, "Bitte gib den Namen des Kindes ein.").max(120)
 });
 
 export const createGuardianLinkSchema = z.object({
-  email: z.string().trim().email(),
+  email: z.string().trim().email("Bitte gib eine gueltige E-Mail-Adresse ein."),
   orgId: idSchema,
   jobId: idSchema,
   classId: idSchema,
   childId: idSchema
+});
+
+export const createChildWithGuardianLinkSchema = createChildSchema.extend({
+  email: z.string().trim().email("Bitte gib eine gueltige E-Mail-Adresse ein.")
 });
 
 export const uploadPhotoFieldsSchema = z.object({

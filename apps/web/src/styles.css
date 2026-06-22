@@ -403,6 +403,54 @@ textarea:focus {
   font-size: 0.9rem;
 }
 
+.quick-picks {
+  display: grid;
+  gap: 8px;
+}
+
+.quick-picks > span {
+  color: #35414d;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.quick-pick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quick-pick {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: #34404c;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.quick-pick:hover {
+  border-color: rgba(20, 108, 99, 0.34);
+  background: #effaf7;
+}
+
+.quick-pick span,
+.quick-pick small {
+  display: block;
+}
+
+.quick-pick span {
+  font-weight: 800;
+}
+
+.quick-pick small {
+  margin-top: 2px;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
 .meta-grid {
   display: grid;
   gap: 8px;

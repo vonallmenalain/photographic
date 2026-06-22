@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { FileSpreadsheet, TableProperties, Upload } from "lucide-react";
 import { apiGet, apiPost, apiUploadFormData } from "../api/photosApi";
 import { useAuth } from "../auth/useAuth";
@@ -7,7 +7,7 @@ import { Card } from "../components/Card";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { Loading } from "../components/Loading";
-import { AdminData, OrganizationType, RosterImportResult } from "../types/domain";
+import { AdminData, Job, Organization, OrganizationType, RosterImportResult, SchoolClass } from "../types/domain";
 import { formatDate } from "../utils/format";
 
 const emptyData: AdminData = {
@@ -101,6 +101,12 @@ function ImportResult({ result }: { result: RosterImportResult }) {
   );
 }
 
+type ClassChoice = {
+  organization: Organization;
+  job: Job;
+  schoolClass: SchoolClass;
+};
+
 export function AdminSetupPage() {
   const { getIdToken } = useAuth();
   const [data, setData] = useState<AdminData>(emptyData);
@@ -129,6 +135,31 @@ export function AdminSetupPage() {
     classId: "",
     displayName: ""
   });
+  const classChoices = useMemo(() => {
+    return data.classes
+      .map((schoolClass) => {
+        const organization = data.organizations.find((entry) => entry.id === schoolClass.orgId);
+        const job = data.jobs.find((entry) => entry.id === schoolClass.jobId);
+        if (!organization || !job) {
+          return null;
+        }
+
+        return { organization, job, schoolClass };
+      })
+      .filter((choice): choice is ClassChoice => Boolean(choice))
+      .sort((left, right) => {
+        const leftDate = Date.parse(left.schoolClass.createdAt ?? left.job.createdAt ?? left.job.date ?? "");
+        const rightDate = Date.parse(right.schoolClass.createdAt ?? right.job.createdAt ?? right.job.date ?? "");
+        return (Number.isNaN(rightDate) ? 0 : rightDate) - (Number.isNaN(leftDate) ? 0 : leftDate);
+      });
+  }, [data.classes, data.jobs, data.organizations]);
+  const recentClassChoices = classChoices.slice(0, 5);
+  const availableJobs = data.jobs.filter((job) => !childLinkForm.orgId || job.orgId === childLinkForm.orgId);
+  const availableClasses = data.classes.filter(
+    (schoolClass) =>
+      (!childLinkForm.orgId || schoolClass.orgId === childLinkForm.orgId) &&
+      (!childLinkForm.jobId || schoolClass.jobId === childLinkForm.jobId)
+  );
 
   async function refresh() {
     setLoading(true);
@@ -201,24 +232,14 @@ export function AdminSetupPage() {
     setSuggestedUrl("");
 
     try {
-      const child = await apiPost<{ id: string }>(
-        "/api/admin/children",
-        {
-          orgId: childLinkForm.orgId,
-          jobId: childLinkForm.jobId,
-          classId: childLinkForm.classId,
-          displayName: childLinkForm.displayName
-        },
-        getIdToken
-      );
       const link = await apiPost<{ suggestedLoginUrl?: string }>(
-        "/api/admin/guardian-links",
+        "/api/admin/children-with-guardian-link",
         {
           email: childLinkForm.email,
           orgId: childLinkForm.orgId,
           jobId: childLinkForm.jobId,
           classId: childLinkForm.classId,
-          childId: child.id
+          displayName: childLinkForm.displayName
         },
         getIdToken
       );
@@ -232,6 +253,65 @@ export function AdminSetupPage() {
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Kind oder Elternzugriff konnte nicht gespeichert werden.");
     }
+  }
+
+  function selectOrganization(orgId: string) {
+    setChildLinkForm((current) => {
+      const jobStillFits = data.jobs.some((job) => job.id === current.jobId && job.orgId === orgId);
+      const jobId = jobStillFits ? current.jobId : "";
+      const classStillFits = data.classes.some(
+        (schoolClass) =>
+          schoolClass.id === current.classId &&
+          schoolClass.orgId === orgId &&
+          (!jobId || schoolClass.jobId === jobId)
+      );
+
+      return {
+        ...current,
+        orgId,
+        jobId,
+        classId: classStillFits ? current.classId : ""
+      };
+    });
+  }
+
+  function selectJob(jobId: string) {
+    setChildLinkForm((current) => {
+      const job = data.jobs.find((entry) => entry.id === jobId);
+      const orgId = job?.orgId ?? current.orgId;
+      const classStillFits = data.classes.some(
+        (schoolClass) =>
+          schoolClass.id === current.classId &&
+          schoolClass.jobId === jobId &&
+          (!orgId || schoolClass.orgId === orgId)
+      );
+
+      return {
+        ...current,
+        orgId,
+        jobId,
+        classId: classStillFits ? current.classId : ""
+      };
+    });
+  }
+
+  function selectClass(classId: string) {
+    const schoolClass = data.classes.find((entry) => entry.id === classId);
+    setChildLinkForm((current) => ({
+      ...current,
+      orgId: schoolClass?.orgId ?? current.orgId,
+      jobId: schoolClass?.jobId ?? current.jobId,
+      classId
+    }));
+  }
+
+  function applyClassChoice(choice: ClassChoice) {
+    setChildLinkForm((current) => ({
+      ...current,
+      orgId: choice.organization.id,
+      jobId: choice.job.id,
+      classId: choice.schoolClass.id
+    }));
   }
 
   async function importFromPaste(event: FormEvent) {
@@ -343,9 +423,29 @@ export function AdminSetupPage() {
         <Card>
           <h2>Kind und Elternzugriff</h2>
           <form className="form" onSubmit={submitChildAndLink}>
-            <Select label="Organisation" value={childLinkForm.orgId} items={data.organizations} onChange={(orgId) => setChildLinkForm({ ...childLinkForm, orgId })} />
-            <Select label="Auftrag" value={childLinkForm.jobId} items={data.jobs} onChange={(jobId) => setChildLinkForm({ ...childLinkForm, jobId })} />
-            <Select label="Klasse" value={childLinkForm.classId} items={data.classes} onChange={(classId) => setChildLinkForm({ ...childLinkForm, classId })} />
+            {recentClassChoices.length > 0 ? (
+              <div className="quick-picks">
+                <span>Zuletzt verwendet</span>
+                <div className="quick-pick-list">
+                  {recentClassChoices.map((choice) => (
+                    <button
+                      key={choice.schoolClass.id}
+                      className="quick-pick"
+                      type="button"
+                      onClick={() => applyClassChoice(choice)}
+                    >
+                      <span>{choice.schoolClass.name}</span>
+                      <small>
+                        {choice.organization.name} | {choice.job.title}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <Select label="Organisation" value={childLinkForm.orgId} items={data.organizations} onChange={selectOrganization} />
+            <Select label="Auftrag" value={childLinkForm.jobId} items={availableJobs} onChange={selectJob} />
+            <Select label="Klasse" value={childLinkForm.classId} items={availableClasses} onChange={selectClass} />
             <div className="form-row">
               <label>Name Kind</label>
               <input required value={childLinkForm.displayName} onChange={(event) => setChildLinkForm({ ...childLinkForm, displayName: event.target.value })} />

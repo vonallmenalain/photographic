@@ -19,11 +19,21 @@ export function errorHandler(error: unknown, _req: Request, res: Response, _next
   }
 
   if (error instanceof ZodError) {
+    const details = error.issues
+      .slice(0, 4)
+      .map((issue) => {
+        const field = issue.path.length > 0 ? issue.path.join(".") : "Daten";
+        return `${field}: ${issue.message}`;
+      })
+      .join(" ");
+
     return res.status(400).json({
       ok: false,
       error: {
         code: "VALIDATION_ERROR",
-        message: "Bitte pruefe die eingegebenen Daten."
+        message: details
+          ? `Bitte pruefe die eingegebenen Daten. ${details}`
+          : "Bitte pruefe die eingegebenen Daten."
       }
     });
   }
