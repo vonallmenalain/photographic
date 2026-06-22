@@ -1,5 +1,5 @@
-import { X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Filter, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { apiGet, fetchAuthorizedBlob } from "../api/photosApi";
 import { useAuth } from "../auth/useAuth";
 import { Button } from "../components/Button";
@@ -7,12 +7,68 @@ import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { Loading } from "../components/Loading";
 import { PhotoGrid } from "../components/PhotoGrid";
-import { CartItem, GalleryPhoto, GalleryResponse } from "../types/domain";
+import {
+  AdminData,
+  CartItem,
+  GalleryPhoto,
+  GalleryResponse,
+  GuardianLink,
+  Photo,
+  PhotoStatus
+} from "../types/domain";
 import { labelForPhotoType } from "../utils/format";
 
-export function GalleryPage() {
+const ALL = "all";
+
+type AdminGalleryFilters = {
+  orgId: string;
+  jobId: string;
+  classId: string;
+  emailLower: string;
+  status: PhotoStatus | typeof ALL;
+};
+
+const initialAdminFilters: AdminGalleryFilters = {
+  orgId: ALL,
+  jobId: ALL,
+  classId: ALL,
+  emailLower: ALL,
+  status: ALL
+};
+
+function linkMatchesPhoto(link: GuardianLink, photo: GalleryPhoto, metadata?: Photo) {
+  if (metadata?.childIds.includes(link.childId)) {
+    return true;
+  }
+
+  if (photo.visibility === "class") {
+    return photo.classId === link.classId;
+  }
+
+  if (photo.visibility === "job") {
+    return photo.jobId === link.jobId && photo.classId === link.classId;
+  }
+
+  return photo.jobId === link.jobId && photo.classId === link.classId;
+}
+
+function uniqueGuardianEmails(links: GuardianLink[]) {
+  const emails = new Map<string, string>();
+  links
+    .filter((link) => !link.revokedAt)
+    .forEach((link) => {
+      emails.set(link.emailLower, link.email || link.emailLower);
+    });
+  return [...emails.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
   const { getIdToken } = useAuth();
   const [gallery, setGallery] = useState<GalleryResponse | null>(null);
+  const [adminData, setAdminData] = useState<AdminData | null>(null);
+  const [filters, setFilters] = useState<AdminGalleryFilters>(initialAdminFilters);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<GalleryPhoto | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -32,6 +88,25 @@ export function GalleryPage() {
       active = false;
     };
   }, [getIdToken]);
+
+  useEffect(() => {
+    if (!adminView) {
+      return undefined;
+    }
+
+    let active = true;
+    apiGet<AdminData>("/api/admin/data", getIdToken)
+      .then((result) => {
+        if (active) setAdminData(result);
+      })
+      .catch((loadError: Error) => {
+        if (active) setError(loadError.message);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [adminView, getIdToken]);
 
   useEffect(() => {
     if (!gallery?.photos.length) {
@@ -65,6 +140,56 @@ export function GalleryPage() {
     };
   }, [gallery, getIdToken]);
 
+  const adminPhotoById = useMemo(() => {
+    return new Map((adminData?.photos ?? []).map((photo) => [photo.id, photo]));
+  }, [adminData]);
+
+  const organizationNameById = useMemo(() => {
+    return new Map((adminData?.organizations ?? []).map((organization) => [organization.id, organization.name]));
+  }, [adminData]);
+
+  const classNameById = useMemo(() => {
+    return new Map((adminData?.classes ?? []).map((schoolClass) => [schoolClass.id, schoolClass.name]));
+  }, [adminData]);
+
+  const emailOptions = useMemo(() => uniqueGuardianEmails(adminData?.guardianLinks ?? []), [adminData]);
+
+  const visiblePhotos = useMemo(() => {
+    const photos = gallery?.photos ?? [];
+    if (!adminView || !adminData) {
+      return photos;
+    }
+
+    return photos.filter((photo) => {
+      const metadata = adminPhotoById.get(photo.photoId);
+
+      if (filters.orgId !== ALL && metadata?.orgId !== filters.orgId) {
+        return false;
+      }
+
+      if (filters.jobId !== ALL && photo.jobId !== filters.jobId) {
+        return false;
+      }
+
+      if (filters.classId !== ALL && photo.classId !== filters.classId) {
+        return false;
+      }
+
+      if (filters.status !== ALL && metadata?.status !== filters.status) {
+        return false;
+      }
+
+      if (filters.emailLower !== ALL) {
+        const linksForEmail = adminData.guardianLinks.filter(
+          (link) => link.emailLower === filters.emailLower && !link.revokedAt
+        );
+        return linksForEmail.some((link) => linkMatchesPhoto(link, photo, metadata));
+      }
+
+      return true;
+    });
+  }, [adminData, adminPhotoById, adminView, filters, gallery]);
+
   async function openPreview(photo: GalleryPhoto) {
     setSelected(photo);
     setPreviewUrl("");
@@ -95,24 +220,135 @@ export function GalleryPage() {
     setMessage("Foto wurde in den Warenkorb gelegt.");
   }
 
-  if (!gallery) {
+  if (!gallery || (adminView && !adminData && !error)) {
     return error ? <ErrorState message={error} /> : <Loading label="Galerie wird geladen..." />;
   }
+
+  const selectedMetadata = selected && adminData ? adminPhotoById.get(selected.photoId) : undefined;
+  const selectedEmails =
+    selected && adminData
+      ? uniqueGuardianEmails(
+          adminData.guardianLinks.filter((link) =>
+            linkMatchesPhoto(link, selected, selectedMetadata)
+          )
+        )
+      : [];
 
   return (
     <div className="grid">
       <div className="page-heading">
         <div>
-          <h1>Meine Galerie</h1>
-          <p>{gallery.message || "Freigegebene Fotos werden geschuetzt geladen."}</p>
+          <h1>{adminView ? "Admin-Galerie" : "Meine Galerie"}</h1>
+          <p>
+            {adminView
+              ? "Alle hochgeladenen Fotos pruefen und gezielt nach Schule, Klasse, E-Mail oder Status filtern."
+              : gallery.message || "Freigegebene Fotos werden geschuetzt geladen."}
+          </p>
         </div>
+        {adminView ? (
+          <span className="pill">{visiblePhotos.length} von {gallery.photos.length} Fotos</span>
+        ) : null}
       </div>
+
+      {adminView && adminData ? (
+        <div className="filter-panel">
+          <div className="filter-panel-heading">
+            <Filter size={18} />
+            <strong>Filter</strong>
+          </div>
+          <div className="grid five">
+            <div className="form-row">
+              <label htmlFor="filter-org">Schule</label>
+              <select
+                id="filter-org"
+                value={filters.orgId}
+                onChange={(event) => setFilters({ ...filters, orgId: event.target.value })}
+              >
+                <option value={ALL}>Alle Schulen</option>
+                {adminData.organizations.map((organization) => (
+                  <option key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-row">
+              <label htmlFor="filter-job">Auftrag</label>
+              <select
+                id="filter-job"
+                value={filters.jobId}
+                onChange={(event) => setFilters({ ...filters, jobId: event.target.value })}
+              >
+                <option value={ALL}>Alle Auftraege</option>
+                {adminData.jobs.map((job) => (
+                  <option key={job.id} value={job.id}>
+                    {job.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-row">
+              <label htmlFor="filter-class">Klasse</label>
+              <select
+                id="filter-class"
+                value={filters.classId}
+                onChange={(event) => setFilters({ ...filters, classId: event.target.value })}
+              >
+                <option value={ALL}>Alle Klassen</option>
+                {adminData.classes.map((schoolClass) => (
+                  <option key={schoolClass.id} value={schoolClass.id}>
+                    {schoolClass.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-row">
+              <label htmlFor="filter-email">E-Mail-Adresse</label>
+              <select
+                id="filter-email"
+                value={filters.emailLower}
+                onChange={(event) => setFilters({ ...filters, emailLower: event.target.value })}
+              >
+                <option value={ALL}>Alle E-Mails</option>
+                {emailOptions.map((email) => (
+                  <option key={email.value} value={email.value}>
+                    {email.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-row">
+              <label htmlFor="filter-status">Status</label>
+              <select
+                id="filter-status"
+                value={filters.status}
+                onChange={(event) =>
+                  setFilters({ ...filters, status: event.target.value as PhotoStatus | typeof ALL })
+                }
+              >
+                <option value={ALL}>Alle Status</option>
+                <option value="hidden">Versteckt</option>
+                <option value="review">Pruefung</option>
+                <option value="published">Veroeffentlicht</option>
+              </select>
+            </div>
+          </div>
+          <div className="actions compact-actions">
+            <Button type="button" variant="secondary" onClick={() => setFilters(initialAdminFilters)}>
+              Filter zuruecksetzen
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {error ? <ErrorState message={error} /> : null}
       {message ? <div className="success-box">{message}</div> : null}
-      {gallery.photos.length === 0 ? (
-        <EmptyState title="Noch keine Fotos">{gallery.message || "Fuer diese E-Mail-Adresse wurden noch keine Fotos freigegeben."}</EmptyState>
+      {visiblePhotos.length === 0 ? (
+        <EmptyState title="Noch keine Fotos">
+          {adminView ? "Keine Fotos passen zu den aktuellen Filtern." : gallery.message || "Fuer diese E-Mail-Adresse wurden noch keine Fotos freigegeben."}
+        </EmptyState>
       ) : (
-        <PhotoGrid photos={gallery.photos} thumbnails={thumbs} onOpen={openPreview} />
+        <PhotoGrid photos={visiblePhotos} thumbnails={thumbs} onOpen={openPreview} />
       )}
 
       {selected ? (
@@ -129,6 +365,14 @@ export function GalleryPage() {
                   <X size={20} />
                 </button>
               </div>
+              {adminView && selectedMetadata ? (
+                <div className="meta-grid">
+                  <span>Schule: {organizationNameById.get(selectedMetadata.orgId) || selectedMetadata.orgId}</span>
+                  <span>Klasse: {classNameById.get(selected.classId) || selected.classId}</span>
+                  <span>Status: {selectedMetadata.status}</span>
+                  <span>E-Mail: {selectedEmails.map((email) => email.label).join(", ") || "Keine aktive Zuordnung"}</span>
+                </div>
+              ) : null}
               <div className="actions">
                 <Button type="button" onClick={() => addToCart(selected)}>In den Warenkorb</Button>
                 <Button type="button" variant="secondary" disabled>

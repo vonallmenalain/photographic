@@ -1,4 +1,4 @@
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card } from "../components/Card";
 
@@ -17,9 +17,6 @@ export function HomePage() {
           <div className="actions">
             <Link className="button" to="/login">
               Einloggen <ArrowRight size={18} />
-            </Link>
-            <Link className="button secondary" to="/admin">
-              <ShieldCheck size={18} /> Adminbereich
             </Link>
           </div>
         </div>

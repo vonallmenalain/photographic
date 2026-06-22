@@ -29,6 +29,8 @@ export default function App() {
           <Route path="/admin/setup" element={<AdminSetupPage />} />
           <Route path="/admin/upload" element={<AdminUploadPage />} />
           <Route path="/admin/photos" element={<AdminPhotosPage />} />
+          <Route path="/admin/gallery" element={<GalleryPage adminView />} />
+          <Route path="/admin/cart" element={<CartPage adminView />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>

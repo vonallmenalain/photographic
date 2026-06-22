@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth";
+import { isSignInWithEmailLink, signInWithEmailLink, signOut as firebaseSignOut } from "firebase/auth";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { auth, firebaseConfigError } from "../firebase/client";
 import { apiGet } from "../api/photosApi";
@@ -35,7 +35,12 @@ export function AuthCallbackPage() {
       const result = await signInWithEmailLink(auth, emailAddress.trim(), href);
       window.localStorage.removeItem("emailForSignIn");
       const me = await apiGet<MeResponse>("/api/me", () => result.user.getIdToken());
-      navigate(me.role === "admin" ? "/admin" : "/gallery", { replace: true });
+      if (me.role === "admin") {
+        await firebaseSignOut(auth);
+        navigate("/admin", { replace: true });
+        return;
+      }
+      navigate("/gallery", { replace: true });
     } catch (callbackError) {
       setError(
         callbackError instanceof Error

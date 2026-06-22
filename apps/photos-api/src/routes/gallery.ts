@@ -15,9 +15,7 @@ galleryRouter.get(
     let photos: Array<PhotoRecord & { id: string }> = [];
 
     if (auth.role === "admin") {
-      photos = (await listCollection<PhotoRecord>("photos")).filter(
-        (photo) => photo.status === "published"
-      ) as Array<PhotoRecord & { id: string }>;
+      photos = (await listCollection<PhotoRecord>("photos")) as Array<PhotoRecord & { id: string }>;
       await writeAuditLog(auth, "guardian.list.gallery", "gallery", auth.uid, {
         count: photos.length,
         adminPreview: true

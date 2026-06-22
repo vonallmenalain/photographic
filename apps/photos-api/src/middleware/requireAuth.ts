@@ -15,8 +15,10 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     const decoded = await adminAuth().verifyIdToken(match[1]);
     const email = decoded.email;
     const emailVerified = decoded.email_verified === true;
+    const emailLower = email ? normalizeEmail(email) : "";
+    const role = emailLower && isAdminEmail(emailLower) ? "admin" : "guardian";
 
-    if (!email || !emailVerified) {
+    if (!email || (!emailVerified && role !== "admin")) {
       throw new AppError(
         403,
         "EMAIL_NOT_VERIFIED",
@@ -24,13 +26,12 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       );
     }
 
-    const emailLower = normalizeEmail(email);
     (req as AuthenticatedRequest).auth = {
       uid: decoded.uid,
       email,
       emailLower,
       emailVerified,
-      role: isAdminEmail(emailLower) ? "admin" : "guardian"
+      role
     };
 
     next();

@@ -237,6 +237,10 @@ p {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.grid.five {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
 .card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -331,6 +335,68 @@ textarea:focus {
 
 .page-heading p {
   margin-bottom: 0;
+}
+
+.admin-login-wrap {
+  width: min(460px, 100%);
+  margin: 8vh auto 0;
+}
+
+.section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.section-tab {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 11px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #34404c;
+  font-weight: 700;
+}
+
+.section-tab.active,
+.section-tab:hover {
+  border-color: rgba(20, 108, 99, 0.32);
+  background: #effaf7;
+  color: var(--primary-dark);
+}
+
+.filter-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.filter-panel-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #34404c;
+}
+
+.compact-actions {
+  margin-top: 12px;
+}
+
+.meta-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  margin: 12px 0;
+  color: #34404c;
+  font-size: 0.9rem;
 }
 
 .photo-grid {

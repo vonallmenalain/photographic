@@ -1,9 +1,19 @@
-import { ShieldAlert } from "lucide-react";
+import {
+  Database,
+  Images,
+  LayoutDashboard,
+  LogOut,
+  Settings,
+  ShieldAlert,
+  ShoppingCart
+} from "lucide-react";
 import { useEffect, useState } from "react";
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { apiGet } from "../api/photosApi";
+import { AdminLoginPage } from "../pages/AdminLoginPage";
 import { MeResponse } from "../types/domain";
+import { Button } from "./Button";
 import { ErrorState } from "./ErrorState";
 import { Loading } from "./Loading";
 
@@ -13,7 +23,7 @@ type GateState =
   | { status: "denied"; message: string };
 
 export function AdminRoute() {
-  const { user, loading, getIdToken } = useAuth();
+  const { user, loading, getIdToken, signOut } = useAuth();
   const location = useLocation();
   const [gate, setGate] = useState<GateState>({ status: "checking" });
 
@@ -55,7 +65,7 @@ export function AdminRoute() {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    return <AdminLoginPage redirectTo={location.pathname} />;
   }
 
   if (gate.status === "checking") {
@@ -69,9 +79,44 @@ export function AdminRoute() {
           <ShieldAlert size={16} /> Kein Adminzugriff
         </div>
         <ErrorState message={gate.message} />
+        <div className="actions">
+          <Button type="button" variant="secondary" icon={<LogOut size={18} />} onClick={signOut}>
+            Abmelden und als Admin einloggen
+          </Button>
+        </div>
       </div>
     );
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <nav className="section-tabs" aria-label="Adminbereiche">
+        <NavLink className="section-tab" to="/admin" end>
+          <LayoutDashboard size={17} />
+          <span>Uebersicht</span>
+        </NavLink>
+        <NavLink className="section-tab" to="/admin/setup">
+          <Database size={17} />
+          <span>Stammdaten</span>
+        </NavLink>
+        <NavLink className="section-tab" to="/admin/upload">
+          <Images size={17} />
+          <span>Upload</span>
+        </NavLink>
+        <NavLink className="section-tab" to="/admin/photos">
+          <Settings size={17} />
+          <span>Verwaltung</span>
+        </NavLink>
+        <NavLink className="section-tab" to="/admin/gallery">
+          <Images size={17} />
+          <span>Galerie</span>
+        </NavLink>
+        <NavLink className="section-tab" to="/admin/cart">
+          <ShoppingCart size={17} />
+          <span>Warenkorb</span>
+        </NavLink>
+      </nav>
+      <Outlet />
+    </>
+  );
 }

@@ -9,7 +9,7 @@ import { ErrorState } from "../components/ErrorState";
 import { CartItem } from "../types/domain";
 import { labelForPhotoType } from "../utils/format";
 
-export function CartPage() {
+export function CartPage({ adminView = false }: { adminView?: boolean }) {
   const { getIdToken } = useAuth();
   const [items, setItems] = useState<CartItem[]>([]);
   const [error, setError] = useState("");
@@ -52,13 +52,19 @@ export function CartPage() {
       <div className="page-heading">
         <div>
           <h1>Warenkorb</h1>
-          <p>Zahlung wird in einer spaeteren Version mit Stripe ergaenzt.</p>
+          <p>
+            {adminView
+              ? "Testbereich fuer Mock-Bestellungen aus der Admin-Galerie."
+              : "Zahlung wird in einer spaeteren Version mit Stripe ergaenzt."}
+          </p>
         </div>
       </div>
       {error ? <ErrorState message={error} /> : null}
       {message ? <div className="success-box">{message}</div> : null}
       {items.length === 0 ? (
-        <EmptyState title="Der Warenkorb ist leer">Fuege Fotos aus der Galerie hinzu.</EmptyState>
+        <EmptyState title="Der Warenkorb ist leer">
+          {adminView ? "Fuege Fotos aus der Admin-Galerie hinzu." : "Fuege Fotos aus der Galerie hinzu."}
+        </EmptyState>
       ) : (
         <Card>
           <div className="table-list">
