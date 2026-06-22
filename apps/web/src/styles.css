@@ -265,6 +265,38 @@ p {
   margin-bottom: 12px;
 }
 
+.admin-photo-card-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-photo-card-heading h3,
+.admin-photo-card-heading p {
+  overflow-wrap: anywhere;
+}
+
+.admin-photo-thumb {
+  width: 72px;
+  aspect-ratio: 1;
+  flex: 0 0 72px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--muted);
+}
+
+.admin-photo-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
 .form {
   display: grid;
   gap: 12px;

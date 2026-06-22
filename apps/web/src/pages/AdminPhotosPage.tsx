@@ -1,6 +1,6 @@
-import { AlertTriangle, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, ImageIcon, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "../api/photosApi";
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost, fetchAuthorizedBlob } from "../api/photosApi";
 import { useAuth } from "../auth/useAuth";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
@@ -108,6 +108,7 @@ function PhotoEditor({
   });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [thumbUrl, setThumbUrl] = useState("");
   const storageStatus = photo.storageStatus;
   const metadataStatus = photo.metadataStatus;
   const hasMissingFiles = storageStatus ? !storageStatus.complete : false;
@@ -116,6 +117,42 @@ function PhotoEditor({
     .map((childId) => data.children.find((child) => child.id === childId))
     .map((child) => child?.displayName || child?.pseudonym || "")
     .filter(Boolean);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl = "";
+
+    async function loadThumb() {
+      if (storageStatus && !storageStatus.thumb) {
+        setThumbUrl("");
+        return;
+      }
+
+      try {
+        const blob = await fetchAuthorizedBlob(`/api/photos/${photo.id}/thumb`, getIdToken);
+
+        if (!active) {
+          return;
+        }
+
+        objectUrl = URL.createObjectURL(blob);
+        setThumbUrl(objectUrl);
+      } catch {
+        if (active) {
+          setThumbUrl("");
+        }
+      }
+    }
+
+    void loadThumb();
+
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [getIdToken, photo.id, storageStatus]);
 
   async function save() {
     setError("");
@@ -157,10 +194,15 @@ function PhotoEditor({
   return (
     <Card className="compact">
       <div className="card-header">
-        <div>
-          <h3>{photo.originalFilename || `Foto ${compactId(photo.id)}`}</h3>
-          <p>{childNames.join(", ") || "Keine direkte Kindzuordnung"}</p>
-          <p>{labelForPhotoType(photo.type)} · {compactId(photo.id)}</p>
+        <div className="admin-photo-card-heading">
+          <div className="admin-photo-thumb">
+            {thumbUrl ? <img src={thumbUrl} alt="" /> : <ImageIcon size={24} aria-hidden="true" />}
+          </div>
+          <div>
+            <h3>{photo.originalFilename || `Foto ${compactId(photo.id)}`}</h3>
+            <p>{childNames.join(", ") || "Keine direkte Kindzuordnung"}</p>
+            <p>{labelForPhotoType(photo.type)} · {compactId(photo.id)}</p>
+          </div>
         </div>
         <div className="status-pills">
           {hasMissingFiles ? (

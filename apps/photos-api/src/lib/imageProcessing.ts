@@ -2,48 +2,108 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 
-type Glyph = {
+type Segment = readonly [number, number, number, number];
+
+type Glyph = Readonly<{
   width: number;
-  paths: string[];
+  segments: readonly Segment[];
+}>;
+
+type Point = {
+  x: number;
+  y: number;
 };
 
 const WATERMARK_GLYPHS: Record<string, Glyph> = {
   V: {
     width: 12,
-    paths: ["M0 1 L6 15 L12 1"]
+    segments: [
+      [0, 1, 6, 15],
+      [6, 15, 12, 1]
+    ]
   },
   O: {
     width: 12,
-    paths: ["M2 1 H10 Q12 1 12 3 V13 Q12 15 10 15 H2 Q0 15 0 13 V3 Q0 1 2 1"]
+    segments: [
+      [2, 1, 10, 1],
+      [10, 1, 12, 3],
+      [12, 3, 12, 13],
+      [12, 13, 10, 15],
+      [10, 15, 2, 15],
+      [2, 15, 0, 13],
+      [0, 13, 0, 3],
+      [0, 3, 2, 1]
+    ]
   },
   R: {
     width: 12,
-    paths: ["M0 15 V1 H8 Q12 1 12 5 V6 Q12 10 8 10 H0", "M7 10 L12 15"]
+    segments: [
+      [0, 15, 0, 1],
+      [0, 1, 8, 1],
+      [8, 1, 12, 4],
+      [12, 4, 12, 7],
+      [12, 7, 8, 10],
+      [8, 10, 0, 10],
+      [7, 10, 12, 15]
+    ]
   },
   S: {
     width: 12,
-    paths: ["M12 2 H3 Q0 2 0 5 Q0 8 3 8 H9 Q12 8 12 11 Q12 14 9 14 H0"]
+    segments: [
+      [12, 2, 3, 2],
+      [3, 2, 0, 5],
+      [0, 5, 3, 8],
+      [3, 8, 9, 8],
+      [9, 8, 12, 11],
+      [12, 11, 9, 14],
+      [9, 14, 0, 14]
+    ]
   },
   C: {
     width: 12,
-    paths: ["M12 3 Q10 1 7 1 H5 Q0 1 0 8 Q0 15 5 15 H7 Q10 15 12 13"]
+    segments: [
+      [12, 3, 10, 1],
+      [10, 1, 4, 1],
+      [4, 1, 0, 5],
+      [0, 5, 0, 11],
+      [0, 11, 4, 15],
+      [4, 15, 10, 15],
+      [10, 15, 12, 13]
+    ]
   },
   H: {
     width: 12,
-    paths: ["M0 1 V15", "M12 1 V15", "M0 8 H12"]
+    segments: [
+      [0, 1, 0, 15],
+      [12, 1, 12, 15],
+      [0, 8, 12, 8]
+    ]
   },
   A: {
     width: 12,
-    paths: ["M0 15 L6 1 L12 15", "M2.4 10 H9.6"]
+    segments: [
+      [0, 15, 6, 1],
+      [6, 1, 12, 15],
+      [2.5, 10, 9.5, 10]
+    ]
   },
   U: {
     width: 12,
-    paths: ["M0 1 V11 Q0 15 6 15 Q12 15 12 11 V1"]
+    segments: [
+      [0, 1, 0, 11],
+      [0, 11, 3, 15],
+      [3, 15, 9, 15],
+      [9, 15, 12, 11],
+      [12, 11, 12, 1]
+    ]
   }
 };
 
 const WATERMARK_TEXT = "VORSCHAU";
-const WATERMARK_GAP = 4;
+const WATERMARK_GAP = 4.4;
+const GLYPH_HEIGHT = 16;
+const WATERMARK_ANGLE = (-31 * Math.PI) / 180;
+const PREVIEW_MAX_SIZE = 1080;
 
 function watermarkWordWidth() {
   return WATERMARK_TEXT.split("").reduce((width, letter, index) => {
@@ -51,65 +111,171 @@ function watermarkWordWidth() {
   }, 0);
 }
 
-function watermarkWordPaths() {
-  let offset = 0;
-  const paths: string[] = [];
+const WATERMARK_WORD_WIDTH = watermarkWordWidth();
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function blendPixel(
+  pixels: Buffer,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  color: readonly [number, number, number],
+  alpha: number
+) {
+  const pixelX = Math.round(x);
+  const pixelY = Math.round(y);
+
+  if (pixelX < 0 || pixelY < 0 || pixelX >= width || pixelY >= height || alpha <= 0) {
+    return;
+  }
+
+  const sourceAlpha = clamp(alpha, 0, 1);
+  const index = (pixelY * width + pixelX) * 4;
+  const targetAlpha = pixels[index + 3] / 255;
+  const outputAlpha = sourceAlpha + targetAlpha * (1 - sourceAlpha);
+
+  if (outputAlpha <= 0) {
+    return;
+  }
+
+  pixels[index] = Math.round((color[0] * sourceAlpha + pixels[index] * targetAlpha * (1 - sourceAlpha)) / outputAlpha);
+  pixels[index + 1] = Math.round(
+    (color[1] * sourceAlpha + pixels[index + 1] * targetAlpha * (1 - sourceAlpha)) / outputAlpha
+  );
+  pixels[index + 2] = Math.round(
+    (color[2] * sourceAlpha + pixels[index + 2] * targetAlpha * (1 - sourceAlpha)) / outputAlpha
+  );
+  pixels[index + 3] = Math.round(outputAlpha * 255);
+}
+
+function drawLine(
+  pixels: Buffer,
+  width: number,
+  height: number,
+  start: Point,
+  end: Point,
+  thickness: number,
+  color: readonly [number, number, number],
+  alpha: number
+) {
+  const radius = thickness / 2;
+  const minX = Math.max(0, Math.floor(Math.min(start.x, end.x) - radius - 1));
+  const maxX = Math.min(width - 1, Math.ceil(Math.max(start.x, end.x) + radius + 1));
+  const minY = Math.max(0, Math.floor(Math.min(start.y, end.y) - radius - 1));
+  const maxY = Math.min(height - 1, Math.ceil(Math.max(start.y, end.y) + radius + 1));
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+
+  if (lengthSquared === 0) {
+    return;
+  }
+
+  for (let pixelY = minY; pixelY <= maxY; pixelY += 1) {
+    for (let pixelX = minX; pixelX <= maxX; pixelX += 1) {
+      const centerX = pixelX + 0.5;
+      const centerY = pixelY + 0.5;
+      const segmentPosition = clamp(
+        ((centerX - start.x) * deltaX + (centerY - start.y) * deltaY) / lengthSquared,
+        0,
+        1
+      );
+      const nearestX = start.x + segmentPosition * deltaX;
+      const nearestY = start.y + segmentPosition * deltaY;
+      const distance = Math.hypot(centerX - nearestX, centerY - nearestY);
+
+      if (distance <= radius + 0.8) {
+        blendPixel(pixels, width, height, pixelX, pixelY, color, alpha * clamp(radius + 0.8 - distance, 0, 1));
+      }
+    }
+  }
+}
+
+function transformGlyphPoint(
+  x: number,
+  y: number,
+  offsetX: number,
+  centerX: number,
+  centerY: number,
+  scale: number
+) {
+  const localX = (offsetX + x - WATERMARK_WORD_WIDTH / 2) * scale;
+  const localY = (y - GLYPH_HEIGHT / 2) * scale;
+  const cos = Math.cos(WATERMARK_ANGLE);
+  const sin = Math.sin(WATERMARK_ANGLE);
+
+  return {
+    x: centerX + localX * cos - localY * sin,
+    y: centerY + localX * sin + localY * cos
+  };
+}
+
+function drawWatermarkWord(
+  pixels: Buffer,
+  width: number,
+  height: number,
+  centerX: number,
+  centerY: number,
+  fontSize: number,
+  opacity: number
+) {
+  const scale = fontSize / GLYPH_HEIGHT;
+  const strokeWidth = Math.max(4, fontSize * 0.105);
+  const shadowOffset = Math.max(1.6, fontSize * 0.022);
+  let offsetX = 0;
+  const segments: Array<{ start: Point; end: Point }> = [];
 
   for (const letter of WATERMARK_TEXT) {
     const glyph = WATERMARK_GLYPHS[letter];
-    for (const glyphPath of glyph.paths) {
-      paths.push(`<path d="${glyphPath}" transform="translate(${offset} 0)" />`);
+
+    for (const [x1, y1, x2, y2] of glyph.segments) {
+      segments.push({
+        start: transformGlyphPoint(x1, y1, offsetX, centerX, centerY, scale),
+        end: transformGlyphPoint(x2, y2, offsetX, centerX, centerY, scale)
+      });
     }
-    offset += glyph.width + WATERMARK_GAP;
+
+    offsetX += glyph.width + WATERMARK_GAP;
   }
 
-  return paths.join("");
+  for (const { start, end } of segments) {
+    drawLine(
+      pixels,
+      width,
+      height,
+      { x: start.x + shadowOffset, y: start.y + shadowOffset },
+      { x: end.x + shadowOffset, y: end.y + shadowOffset },
+      strokeWidth * 1.35,
+      [0, 0, 0],
+      opacity * 0.48
+    );
+  }
+
+  for (const { start, end } of segments) {
+    drawLine(pixels, width, height, start, end, strokeWidth, [255, 255, 255], opacity);
+  }
 }
 
-const WATERMARK_WORD_WIDTH = watermarkWordWidth();
-const WATERMARK_WORD_PATHS = watermarkWordPaths();
+function createPreviewWatermarkOverlay(width: number, height: number) {
+  const pixels = Buffer.alloc(width * height * 4);
+  const baseFontSize = Math.max(58, Math.round(Math.min(width, height) * 0.092));
+  const wordWidth = WATERMARK_WORD_WIDTH * (baseFontSize / GLYPH_HEIGHT);
+  const gapX = Math.round(wordWidth * 0.78);
+  const gapY = Math.round(baseFontSize * 1.45);
 
-function watermarkWord(x: number, y: number, fontSize: number, opacity: number) {
-  const scale = fontSize / 16;
-  const left = x - (WATERMARK_WORD_WIDTH * scale) / 2;
-  const top = y - (16 * scale) / 2;
-
-  return `
-    <g transform="translate(${left} ${top}) scale(${scale})" fill="none" stroke-linecap="round" stroke-linejoin="round">
-      <g transform="translate(0.9 0.9)" stroke="#000000" stroke-opacity="${Math.min(opacity * 0.82, 0.34)}" stroke-width="3.2">
-        ${WATERMARK_WORD_PATHS}
-      </g>
-      <g stroke="#ffffff" stroke-opacity="${opacity}" stroke-width="2.35">
-        ${WATERMARK_WORD_PATHS}
-      </g>
-    </g>
-  `;
-}
-
-export function createPreviewWatermarkSvg(width: number, height: number) {
-  const fontSize = Math.max(48, Math.round(Math.min(width, height) * 0.082));
-  const wordWidth = WATERMARK_WORD_WIDTH * (fontSize / 16);
-  const gapX = Math.round(wordWidth * 1.32);
-  const gapY = Math.round(fontSize * 2.35);
-  let wordNodes = "";
-
-  for (let y = -height; y < height * 2; y += gapY) {
-    for (let x = -width; x < width * 2; x += gapX) {
-      wordNodes += watermarkWord(x, y, fontSize, 0.36);
+  for (let y = -height; y <= height * 2; y += gapY) {
+    for (let x = -width; x <= width * 2; x += gapX) {
+      drawWatermarkWord(pixels, width, height, x, y, baseFontSize, 0.46);
     }
   }
 
-  const centerFontSize = Math.round(fontSize * 1.72);
+  drawWatermarkWord(pixels, width, height, width / 2, height / 2, Math.round(baseFontSize * 1.85), 0.68);
 
-  return Buffer.from(`
-    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${width}" height="${height}" fill="#ffffff" fill-opacity="0.035" />
-      <g transform="rotate(-30 ${width / 2} ${height / 2})">
-        ${wordNodes}
-        ${watermarkWord(width / 2, height / 2, centerFontSize, 0.44)}
-      </g>
-    </svg>
-  `);
+  return pixels;
 }
 
 export async function createWatermarkedPreview(
@@ -121,8 +287,8 @@ export async function createWatermarkedPreview(
   const resized = await sharp(originalAbsolutePath)
     .rotate()
     .resize({
-      width: 1080,
-      height: 1080,
+      width: PREVIEW_MAX_SIZE,
+      height: PREVIEW_MAX_SIZE,
       fit: "inside",
       withoutEnlargement: true
     })
@@ -130,7 +296,7 @@ export async function createWatermarkedPreview(
     .raw()
     .toBuffer({ resolveWithObject: true });
 
-  const watermark = createPreviewWatermarkSvg(resized.info.width, resized.info.height);
+  const watermark = createPreviewWatermarkOverlay(resized.info.width, resized.info.height);
 
   await sharp(resized.data, {
     raw: {
@@ -139,8 +305,15 @@ export async function createWatermarkedPreview(
       channels: resized.info.channels
     }
   })
-    .composite([{ input: watermark, top: 0, left: 0 }])
-    .webp({ quality: 54, effort: 5 })
+    .composite([
+      {
+        input: watermark,
+        raw: { width: resized.info.width, height: resized.info.height, channels: 4 },
+        top: 0,
+        left: 0
+      }
+    ])
+    .webp({ quality: 52, effort: 5 })
     .toFile(previewAbsolutePath);
 }
 
