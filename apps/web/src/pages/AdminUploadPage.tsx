@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { UploadCloud } from "lucide-react";
 import { apiGet, apiUploadFormData } from "../api/photosApi";
 import { useAuth } from "../auth/useAuth";
@@ -6,9 +6,15 @@ import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { ErrorState } from "../components/ErrorState";
 import { Loading } from "../components/Loading";
-import { AdminData, PhotoType, PhotoVisibility } from "../types/domain";
+import { AdminData, Job, Organization, PhotoType, PhotoVisibility, SchoolClass } from "../types/domain";
 
 const legacyIdPattern = /^[A-Za-z0-9_-]{6,80}$/;
+
+type ClassChoice = {
+  organization: Organization;
+  job: Job;
+  schoolClass: SchoolClass;
+};
 
 export function AdminUploadPage() {
   const { getIdToken } = useAuth();
@@ -46,6 +52,44 @@ export function AdminUploadPage() {
         (!form.jobId || child.jobId === form.jobId) &&
         (!form.classId || child.classId === form.classId)
     ) ?? [];
+  const recentClassChoices = useMemo(() => {
+    if (!data) {
+      return [];
+    }
+
+    return data.classes
+      .filter((schoolClass) => legacyIdPattern.test(schoolClass.id))
+      .map((schoolClass) => {
+        const organization = data.organizations.find(
+          (entry) => entry.id === schoolClass.orgId && legacyIdPattern.test(entry.id)
+        );
+        const job = data.jobs.find(
+          (entry) => entry.id === schoolClass.jobId && legacyIdPattern.test(entry.id)
+        );
+        if (!organization || !job) {
+          return null;
+        }
+
+        return { organization, job, schoolClass };
+      })
+      .filter((choice): choice is ClassChoice => Boolean(choice))
+      .sort((left, right) => {
+        const leftDate = Date.parse(left.schoolClass.createdAt ?? left.job.createdAt ?? left.job.date ?? "");
+        const rightDate = Date.parse(right.schoolClass.createdAt ?? right.job.createdAt ?? right.job.date ?? "");
+        return (Number.isNaN(rightDate) ? 0 : rightDate) - (Number.isNaN(leftDate) ? 0 : leftDate);
+      })
+      .slice(0, 5);
+  }, [data]);
+
+  function applyClassChoice(choice: ClassChoice) {
+    setForm({
+      ...form,
+      orgId: choice.organization.id,
+      jobId: choice.job.id,
+      classId: choice.schoolClass.id,
+      childIds: []
+    });
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -109,6 +153,26 @@ export function AdminUploadPage() {
       {progressMessage ? <div className={progressMessage === "Foto gespeichert." ? "success-box" : "notice"}>{progressMessage}</div> : null}
       <Card>
         <form className="form" onSubmit={handleSubmit}>
+          {recentClassChoices.length > 0 ? (
+            <div className="quick-picks">
+              <span>Zuletzt verwendet</span>
+              <div className="quick-pick-list">
+                {recentClassChoices.map((choice) => (
+                  <button
+                    key={choice.schoolClass.id}
+                    className="quick-pick"
+                    type="button"
+                    onClick={() => applyClassChoice(choice)}
+                  >
+                    <span>{choice.schoolClass.name}</span>
+                    <small>
+                      {choice.organization.name} | {choice.job.title}
+                    </small>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <Select
             label="Organisation"
             value={form.orgId}
