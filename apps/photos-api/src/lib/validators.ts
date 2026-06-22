@@ -2,10 +2,8 @@ import { z } from "zod";
 
 export const idSchema = z.string().regex(/^[A-Za-z0-9_-]{6,80}$/);
 export const organizationTypeSchema = z.enum(["school", "kindergarten"]);
-export const consentStatusSchema = z.enum(["unknown", "granted", "denied"]);
 export const photoTypeSchema = z.enum(["portrait", "sibling", "class", "classMirror", "event"]);
 export const photoVisibilitySchema = z.enum(["child", "class", "job"]);
-export const photoStatusSchema = z.enum(["hidden", "review", "published"]);
 
 export const createOrganizationSchema = z.object({
   name: z.string().trim().min(1).max(180),
@@ -30,9 +28,7 @@ export const createChildSchema = z.object({
   orgId: idSchema,
   jobId: idSchema,
   classId: idSchema,
-  displayName: z.string().trim().max(120).optional(),
-  pseudonym: z.string().trim().max(80).optional(),
-  consentStatus: consentStatusSchema
+  displayName: z.string().trim().min(1).max(120)
 });
 
 export const createGuardianLinkSchema = z.object({
@@ -48,13 +44,11 @@ export const uploadPhotoFieldsSchema = z.object({
   jobId: idSchema,
   classId: idSchema,
   type: photoTypeSchema,
-  visibility: photoVisibilitySchema,
-  status: photoStatusSchema
+  visibility: photoVisibilitySchema
 });
 
 export const updatePhotoSchema = z
   .object({
-    status: photoStatusSchema.optional(),
     type: photoTypeSchema.optional(),
     visibility: photoVisibilitySchema.optional(),
     classId: idSchema.optional(),

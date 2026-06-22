@@ -36,7 +36,7 @@ export function AdminDashboardPage() {
       to: "/admin/photos",
       icon: <Settings size={24} />,
       title: "Fotos verwalten",
-      text: "Status, Sichtbarkeit, Typ und Zuordnungen korrigieren."
+      text: "Sichtbarkeit, Typ, Zuordnungen und Dateien kontrollieren."
     },
     {
       to: "/admin/gallery",

@@ -13,8 +13,7 @@ import {
   GalleryPhoto,
   GalleryResponse,
   GuardianLink,
-  Photo,
-  PhotoStatus
+  Photo
 } from "../types/domain";
 import { labelForPhotoType } from "../utils/format";
 
@@ -25,15 +24,13 @@ type AdminGalleryFilters = {
   jobId: string;
   classId: string;
   emailLower: string;
-  status: PhotoStatus | typeof ALL;
 };
 
 const initialAdminFilters: AdminGalleryFilters = {
   orgId: ALL,
   jobId: ALL,
   classId: ALL,
-  emailLower: ALL,
-  status: ALL
+  emailLower: ALL
 };
 
 function linkMatchesPhoto(link: GuardianLink, photo: GalleryPhoto, metadata?: Photo) {
@@ -175,10 +172,6 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
         return false;
       }
 
-      if (filters.status !== ALL && metadata?.status !== filters.status) {
-        return false;
-      }
-
       if (filters.emailLower !== ALL) {
         const linksForEmail = adminData.guardianLinks.filter(
           (link) => link.emailLower === filters.emailLower && !link.revokedAt
@@ -241,7 +234,7 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
           <h1>{adminView ? "Admin-Galerie" : "Meine Galerie"}</h1>
           <p>
             {adminView
-              ? "Alle hochgeladenen Fotos pruefen und gezielt nach Schule, Klasse, E-Mail oder Status filtern."
+              ? "Alle hochgeladenen Fotos pruefen und gezielt nach Schule, Klasse oder E-Mail filtern."
               : gallery.message || "Freigegebene Fotos werden geschuetzt geladen."}
           </p>
         </div>
@@ -256,7 +249,7 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
             <Filter size={18} />
             <strong>Filter</strong>
           </div>
-          <div className="grid five">
+          <div className="grid four">
             <div className="form-row">
               <label htmlFor="filter-org">Schule</label>
               <select
@@ -317,21 +310,6 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
                 ))}
               </select>
             </div>
-            <div className="form-row">
-              <label htmlFor="filter-status">Status</label>
-              <select
-                id="filter-status"
-                value={filters.status}
-                onChange={(event) =>
-                  setFilters({ ...filters, status: event.target.value as PhotoStatus | typeof ALL })
-                }
-              >
-                <option value={ALL}>Alle Status</option>
-                <option value="hidden">Versteckt</option>
-                <option value="review">Pruefung</option>
-                <option value="published">Veroeffentlicht</option>
-              </select>
-            </div>
           </div>
           <div className="actions compact-actions">
             <Button type="button" variant="secondary" onClick={() => setFilters(initialAdminFilters)}>
@@ -359,6 +337,9 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
               <div className="card-header">
                 <div>
                   <h2>{labelForPhotoType(selected.type)}</h2>
+                  {selected.childNames.length > 0 ? (
+                    <p>Kinder: {selected.childNames.join(", ")}</p>
+                  ) : null}
                   <p>Original-Download wird erst nach Zahlung aktiviert.</p>
                 </div>
                 <button className="icon-button" type="button" onClick={closePreview} title="Schliessen">
@@ -369,7 +350,7 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
                 <div className="meta-grid">
                   <span>Schule: {organizationNameById.get(selectedMetadata.orgId) || selectedMetadata.orgId}</span>
                   <span>Klasse: {classNameById.get(selected.classId) || selected.classId}</span>
-                  <span>Status: {selectedMetadata.status}</span>
+                  <span>Kinder: {selected.childNames.join(", ") || "Keine direkte Kindzuordnung"}</span>
                   <span>E-Mail: {selectedEmails.map((email) => email.label).join(", ") || "Keine aktive Zuordnung"}</span>
                 </div>
               ) : null}

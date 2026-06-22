@@ -237,6 +237,10 @@ p {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.grid.four {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
 .grid.five {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
@@ -434,6 +438,14 @@ textarea:focus {
   padding: 5px 7px;
   font-size: 0.76rem;
   text-align: left;
+}
+
+.photo-tile-meta small {
+  display: block;
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.7rem;
+  line-height: 1.25;
 }
 
 .modal-backdrop {

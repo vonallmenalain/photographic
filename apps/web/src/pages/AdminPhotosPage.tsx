@@ -7,7 +7,7 @@ import { Card } from "../components/Card";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { Loading } from "../components/Loading";
-import { AdminData, Photo, PhotoStatus, PhotoType, PhotoVisibility } from "../types/domain";
+import { AdminData, Photo, PhotoType, PhotoVisibility } from "../types/domain";
 import { compactId, labelForPhotoType } from "../utils/format";
 
 export function AdminPhotosPage() {
@@ -63,7 +63,7 @@ export function AdminPhotosPage() {
       <div className="page-heading">
         <div>
           <h1>Fotos verwalten</h1>
-          <p>Status, Typ, Sichtbarkeit und Zuordnungen einfach korrigieren.</p>
+          <p>Typ, Sichtbarkeit, Zuordnungen und Dateien einfach kontrollieren.</p>
         </div>
         <Button type="button" variant="secondary" icon={<RefreshCw size={18} />} onClick={cleanupMissingPhotos}>
           Fehlende bereinigen
@@ -96,11 +96,10 @@ function PhotoEditor({
   getIdToken: () => Promise<string>;
 }) {
   const [draft, setDraft] = useState({
-    status: photo.status,
     type: photo.type,
     visibility: photo.visibility,
     classId: photo.classId,
-    childIds: photo.childIds.join(",")
+    childIds: photo.childIds
   });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -108,6 +107,10 @@ function PhotoEditor({
   const metadataStatus = photo.metadataStatus;
   const hasMissingFiles = storageStatus ? !storageStatus.complete : false;
   const hasMissingMetadata = metadataStatus ? !metadataStatus.complete : false;
+  const childNames = photo.childIds
+    .map((childId) => data.children.find((child) => child.id === childId))
+    .map((child) => child?.displayName || child?.pseudonym || "")
+    .filter(Boolean);
 
   async function save() {
     setError("");
@@ -116,9 +119,6 @@ function PhotoEditor({
       await apiPatch(`/api/admin/photos/${photo.id}`, {
         ...draft,
         childIds: draft.childIds
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean)
       }, getIdToken);
       setMessage("Gespeichert.");
       await onSaved();
@@ -149,10 +149,10 @@ function PhotoEditor({
       <div className="card-header">
         <div>
           <h3>{photo.originalFilename || `Foto ${compactId(photo.id)}`}</h3>
+          <p>{childNames.join(", ") || "Keine direkte Kindzuordnung"}</p>
           <p>{labelForPhotoType(photo.type)} · {compactId(photo.id)}</p>
         </div>
         <div className="status-pills">
-          <span className="pill">{photo.status}</span>
           {hasMissingFiles ? (
             <span className="pill warning">
               <AlertTriangle size={14} /> Datei fehlt
@@ -183,15 +183,7 @@ function PhotoEditor({
           ) : null}
         </div>
       ) : null}
-      <div className="grid three">
-        <div className="form-row">
-          <label>Status</label>
-          <select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as PhotoStatus })}>
-            <option value="hidden">Versteckt</option>
-            <option value="review">Pruefung</option>
-            <option value="published">Veroeffentlicht</option>
-          </select>
-        </div>
+      <div className="grid two">
         <div className="form-row">
           <label>Typ</label>
           <select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value as PhotoType })}>
@@ -223,8 +215,23 @@ function PhotoEditor({
           </select>
         </div>
         <div className="form-row">
-          <label>Kind-IDs, kommagetrennt</label>
-          <input value={draft.childIds} onChange={(event) => setDraft({ ...draft, childIds: event.target.value })} />
+          <label>Kinder</label>
+          <select
+            multiple
+            value={draft.childIds}
+            onChange={(event) =>
+              setDraft({
+                ...draft,
+                childIds: Array.from(event.target.selectedOptions).map((option) => option.value)
+              })
+            }
+          >
+            {data.children.map((child) => (
+              <option key={child.id} value={child.id}>
+                {child.displayName || child.pseudonym || child.id}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
       <div className="actions">

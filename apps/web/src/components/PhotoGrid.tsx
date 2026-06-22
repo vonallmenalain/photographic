@@ -26,7 +26,10 @@ export function PhotoGrid({
           ) : (
             <Loading label="Bild..." />
           )}
-          <span className="photo-tile-meta">{labelForPhotoType(photo.type)}</span>
+          <span className="photo-tile-meta">
+            {labelForPhotoType(photo.type)}
+            {photo.childNames.length > 0 ? <small>{photo.childNames.join(", ")}</small> : null}
+          </span>
         </button>
       ))}
     </div>

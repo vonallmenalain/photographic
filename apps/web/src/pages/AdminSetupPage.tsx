@@ -6,7 +6,7 @@ import { Card } from "../components/Card";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { Loading } from "../components/Loading";
-import { AdminData, ConsentStatus, OrganizationType } from "../types/domain";
+import { AdminData, OrganizationType } from "../types/domain";
 import { formatDate } from "../utils/format";
 
 const emptyData: AdminData = {
@@ -33,9 +33,7 @@ export function AdminSetupPage() {
     orgId: "",
     jobId: "",
     classId: "",
-    displayName: "",
-    pseudonym: "",
-    consentStatus: "unknown" as ConsentStatus
+    displayName: ""
   });
   const [linkForm, setLinkForm] = useState({
     email: "",
@@ -159,26 +157,14 @@ export function AdminSetupPage() {
         </Card>
 
         <Card>
-          <h2>Kind / Pseudonym</h2>
-          <form className="form" onSubmit={(event) => submit(event, "/api/admin/children", { ...childForm, displayName: childForm.displayName || undefined, pseudonym: childForm.pseudonym || undefined }, "Kind gespeichert.")}>
+          <h2>Kind</h2>
+          <form className="form" onSubmit={(event) => submit(event, "/api/admin/children", childForm, "Kind gespeichert.")}>
             <Select label="Organisation" value={childForm.orgId} items={data.organizations} onChange={(orgId) => setChildForm({ ...childForm, orgId })} />
             <Select label="Auftrag" value={childForm.jobId} items={data.jobs} onChange={(jobId) => setChildForm({ ...childForm, jobId })} />
             <Select label="Klasse" value={childForm.classId} items={data.classes} onChange={(classId) => setChildForm({ ...childForm, classId })} />
             <div className="form-row">
-              <label>Anzeigename optional</label>
-              <input value={childForm.displayName} onChange={(event) => setChildForm({ ...childForm, displayName: event.target.value })} />
-            </div>
-            <div className="form-row">
-              <label>Pseudonym optional</label>
-              <input value={childForm.pseudonym} onChange={(event) => setChildForm({ ...childForm, pseudonym: event.target.value })} />
-            </div>
-            <div className="form-row">
-              <label>Einwilligung</label>
-              <select value={childForm.consentStatus} onChange={(event) => setChildForm({ ...childForm, consentStatus: event.target.value as ConsentStatus })}>
-                <option value="unknown">Unbekannt</option>
-                <option value="granted">Erteilt</option>
-                <option value="denied">Abgelehnt</option>
-              </select>
+              <label>Name</label>
+              <input required value={childForm.displayName} onChange={(event) => setChildForm({ ...childForm, displayName: event.target.value })} />
             </div>
             <Button>Kind erstellen</Button>
           </form>
@@ -194,7 +180,7 @@ export function AdminSetupPage() {
             <Select label="Organisation" value={linkForm.orgId} items={data.organizations} onChange={(orgId) => setLinkForm({ ...linkForm, orgId })} />
             <Select label="Auftrag" value={linkForm.jobId} items={data.jobs} onChange={(jobId) => setLinkForm({ ...linkForm, jobId })} />
             <Select label="Klasse" value={linkForm.classId} items={data.classes} onChange={(classId) => setLinkForm({ ...linkForm, classId })} />
-            <Select label="Kind" value={linkForm.childId} items={data.children.map((child) => ({ id: child.id, name: child.pseudonym }))} onChange={(childId) => setLinkForm({ ...linkForm, childId })} />
+            <Select label="Kind" value={linkForm.childId} items={data.children.map((child) => ({ id: child.id, name: child.displayName || child.pseudonym || child.id }))} onChange={(childId) => setLinkForm({ ...linkForm, childId })} />
             <Button>Link erstellen</Button>
           </form>
         </Card>

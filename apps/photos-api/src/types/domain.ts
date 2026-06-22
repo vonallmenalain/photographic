@@ -2,8 +2,6 @@ export type UserRole = "admin" | "guardian";
 export type OrganizationType = "school" | "kindergarten";
 export type PhotoType = "portrait" | "sibling" | "class" | "classMirror" | "event";
 export type PhotoVisibility = "child" | "class" | "job";
-export type PhotoStatus = "hidden" | "review" | "published";
-export type ConsentStatus = "unknown" | "granted" | "denied";
 
 export type UserRecord = {
   uid: string;
@@ -26,6 +24,15 @@ export type GuardianLinkRecord = {
   revokedAt: unknown | null;
 };
 
+export type ChildRecord = {
+  id?: string;
+  orgId: string;
+  jobId: string;
+  classId: string;
+  displayName: string;
+  pseudonym?: string;
+};
+
 export type PhotoRecord = {
   id?: string;
   orgId: string;
@@ -34,7 +41,6 @@ export type PhotoRecord = {
   childIds: string[];
   type: PhotoType;
   visibility: PhotoVisibility;
-  status: PhotoStatus;
   originalPath: string;
   previewPath: string;
   thumbPath: string;

@@ -5,7 +5,7 @@ import { adminDb } from "../lib/firebaseAdmin";
 import { canAccessPhoto, getActiveGuardianLinks, listCollection } from "../lib/firestore";
 import { buildPhotoReferenceSets, filterDisplayablePhotos } from "../lib/photoAvailability";
 import { asyncHandler, sendOk } from "../lib/response";
-import { PhotoRecord } from "../types/domain";
+import { ChildRecord, PhotoRecord } from "../types/domain";
 
 export const galleryRouter = Router();
 
@@ -21,6 +21,12 @@ galleryRouter.get(
       listCollection("children")
     ]);
     const references = buildPhotoReferenceSets({ organizations, jobs, classes, children });
+    const childNameById = new Map(
+      (children as Array<ChildRecord & { id: string }>).map((child) => [
+        child.id,
+        child.displayName || child.pseudonym || child.id
+      ])
+    );
 
     if (auth.role === "admin") {
       photos = (await listCollection<PhotoRecord>("photos")) as Array<PhotoRecord & { id: string }>;
@@ -65,6 +71,7 @@ galleryRouter.get(
         photoId: photo.id,
         jobId: photo.jobId,
         classId: photo.classId,
+        childNames: photo.childIds.map((childId) => childNameById.get(childId) || childId),
         type: photo.type,
         visibility: photo.visibility,
         hasThumb: Boolean(photo.thumbPath),

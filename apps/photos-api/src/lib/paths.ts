@@ -1,11 +1,5 @@
-import { nanoid, customAlphabet } from "nanoid";
-
-const childCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 6);
+import { nanoid } from "nanoid";
 
 export function randomId(size = 16) {
   return nanoid(size);
-}
-
-export function randomChildPseudonym() {
-  return `Kind ${childCode()}`;
 }

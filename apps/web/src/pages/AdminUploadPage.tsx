@@ -6,13 +6,13 @@ import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { ErrorState } from "../components/ErrorState";
 import { Loading } from "../components/Loading";
-import { AdminData, PhotoStatus, PhotoType, PhotoVisibility } from "../types/domain";
+import { AdminData, PhotoType, PhotoVisibility } from "../types/domain";
 
 export function AdminUploadPage() {
   const { getIdToken } = useAuth();
   const [data, setData] = useState<AdminData | null>(null);
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
+  const [progressMessage, setProgressMessage] = useState("");
   const [form, setForm] = useState({
     orgId: "",
     jobId: "",
@@ -20,7 +20,6 @@ export function AdminUploadPage() {
     childIds: [] as string[],
     type: "portrait" as PhotoType,
     visibility: "child" as PhotoVisibility,
-    status: "review" as PhotoStatus,
     file: null as File | null
   });
 
@@ -42,19 +41,18 @@ export function AdminUploadPage() {
     body.append("childIds", JSON.stringify(form.childIds));
     body.append("type", form.type);
     body.append("visibility", form.visibility);
-    body.append("status", form.status);
     body.append("file", form.file);
 
     setError("");
-    setStatus("Datei wird an das lokale Foto-Backend uebertragen...");
+    setProgressMessage("Datei wird an das lokale Foto-Backend uebertragen...");
     try {
-      window.setTimeout(() => setStatus("Vorschau und Thumbnail werden erzeugt..."), 350);
+      window.setTimeout(() => setProgressMessage("Vorschau und Thumbnail werden erzeugt..."), 350);
       await apiUploadFormData("/api/admin/photos/upload", body, getIdToken);
-      setStatus("Metadaten werden gespeichert...");
-      window.setTimeout(() => setStatus("Foto gespeichert."), 250);
+      setProgressMessage("Metadaten werden gespeichert...");
+      window.setTimeout(() => setProgressMessage("Foto gespeichert."), 250);
       setForm({ ...form, file: null });
     } catch (uploadError) {
-      setStatus("");
+      setProgressMessage("");
       setError(uploadError instanceof Error ? uploadError.message : "Das Foto konnte nicht gespeichert werden.");
     }
   }
@@ -72,7 +70,7 @@ export function AdminUploadPage() {
         </div>
       </div>
       {error ? <ErrorState message={error} /> : null}
-      {status ? <div className={status === "Foto gespeichert." ? "success-box" : "notice"}>{status}</div> : null}
+      {progressMessage ? <div className={progressMessage === "Foto gespeichert." ? "success-box" : "notice"}>{progressMessage}</div> : null}
       <Card>
         <form className="form" onSubmit={handleSubmit}>
           <Select label="Organisation" value={form.orgId} items={data.organizations} onChange={(orgId) => setForm({ ...form, orgId })} />
@@ -92,12 +90,12 @@ export function AdminUploadPage() {
             >
               {data.children.map((child) => (
                 <option key={child.id} value={child.id}>
-                  {child.pseudonym}
+                  {child.displayName || child.pseudonym || child.id}
                 </option>
               ))}
             </select>
           </div>
-          <div className="grid three">
+          <div className="grid two">
             <div className="form-row">
               <label>Typ</label>
               <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as PhotoType })}>
@@ -114,14 +112,6 @@ export function AdminUploadPage() {
                 <option value="child">Kind</option>
                 <option value="class">Klasse</option>
                 <option value="job">Auftrag</option>
-              </select>
-            </div>
-            <div className="form-row">
-              <label>Status</label>
-              <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as PhotoStatus })}>
-                <option value="hidden">Versteckt</option>
-                <option value="review">Pruefung</option>
-                <option value="published">Veroeffentlicht</option>
               </select>
             </div>
           </div>

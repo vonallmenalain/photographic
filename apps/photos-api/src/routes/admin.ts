@@ -9,7 +9,7 @@ import { adminDb, serverTimestamp } from "../lib/firebaseAdmin";
 import { listCollection } from "../lib/firestore";
 import { generatePreviewAndThumb } from "../lib/imageProcessing";
 import { buildPhotoReferenceSets, getPhotoAvailability } from "../lib/photoAvailability";
-import { randomChildPseudonym, randomId } from "../lib/paths";
+import { randomId } from "../lib/paths";
 import { asyncHandler, AppError, routeParam, sendOk } from "../lib/response";
 import {
   allowedImageMimes,
@@ -59,7 +59,7 @@ adminRouter.get(
       listCollection<PhotoRecord>("photos")
     ]);
     const references = buildPhotoReferenceSets({ organizations, jobs, classes, children });
-    const photosWithStatus = await Promise.all(
+    const photosWithAvailability = await Promise.all(
       photos.map(async ({ originalPath, previewPath, thumbPath, ...photo }) => {
         const availability = await getPhotoAvailability(
           { ...photo, originalPath, previewPath, thumbPath } as PhotoRecord,
@@ -80,7 +80,7 @@ adminRouter.get(
       classes,
       children,
       guardianLinks,
-      photos: photosWithStatus
+      photos: photosWithAvailability
     });
   })
 );
@@ -158,12 +158,9 @@ adminRouter.post(
     const auth = getAuthContext(req);
     const input = createChildSchema.parse(req.body);
     const childId = randomId();
-    const pseudonym = input.pseudonym || randomChildPseudonym();
 
     await adminDb().collection("children").doc(childId).set({
       ...input,
-      displayName: input.displayName || "",
-      pseudonym,
       createdAt: serverTimestamp(),
       createdByUid: auth.uid
     });
@@ -174,7 +171,7 @@ adminRouter.post(
       classId: input.classId
     });
 
-    sendOk(res, { id: childId, pseudonym }, 201);
+    sendOk(res, { id: childId, displayName: input.displayName }, 201);
   })
 );
 
@@ -237,7 +234,6 @@ adminRouter.post(
       childIds,
       type: fields.type,
       visibility: fields.visibility,
-      status: fields.status,
       originalPath: paths.originalPath,
       previewPath: paths.previewPath,
       thumbPath: paths.thumbPath,
@@ -256,7 +252,7 @@ adminRouter.post(
       classId: fields.classId,
       type: fields.type,
       visibility: fields.visibility,
-      status: fields.status
+      childIds
     });
 
     const { originalPath, previewPath, thumbPath, ...safeMetadata } = metadata;

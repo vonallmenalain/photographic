@@ -67,10 +67,6 @@ export function canAccessPhoto(
     return true;
   }
 
-  if (photo.status !== "published") {
-    return false;
-  }
-
   const activeLinks = guardianLinks.filter((link) => !link.revokedAt);
   const allowedChildIds = new Set(activeLinks.map((link) => link.childId));
   const allowedClassIds = new Set(activeLinks.map((link) => link.classId));
