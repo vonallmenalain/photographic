@@ -1,12 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
-import { apiGet, apiPost } from "../api/photosApi";
+import { FileSpreadsheet, TableProperties, Upload } from "lucide-react";
+import { apiGet, apiPost, apiUploadFormData } from "../api/photosApi";
 import { useAuth } from "../auth/useAuth";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { Loading } from "../components/Loading";
-import { AdminData, OrganizationType } from "../types/domain";
+import { AdminData, OrganizationType, RosterImportResult } from "../types/domain";
 import { formatDate } from "../utils/format";
 
 const emptyData: AdminData = {
@@ -18,6 +19,88 @@ const emptyData: AdminData = {
   photos: []
 };
 
+const samplePaste = [
+  "Organisation\tFotoauftrag\tKlasse\tName\tE-Mail",
+  "Schule Muster\tFotos 2026\t1A\tMia Beispiel\tmama@example.com",
+  "Schule Muster\tFotos 2026\t1A\tNoah Beispiel\tpapa@example.com"
+].join("\n");
+
+function splitDelimitedLine(line: string, delimiter: string) {
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (const character of line) {
+    if (character === '"') {
+      quoted = !quoted;
+      continue;
+    }
+
+    if (character === delimiter && !quoted) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+function delimiterForLine(line: string) {
+  if (line.includes("\t")) return "\t";
+  if (line.includes(";")) return ";";
+  return ",";
+}
+
+function parsePastedTable(value: string) {
+  const lines = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) {
+    throw new Error("Bitte fuege eine Tabelle mit Kopfzeile und mindestens einer Datenzeile ein.");
+  }
+
+  const delimiter = delimiterForLine(lines[0]);
+  const headers = splitDelimitedLine(lines[0], delimiter);
+
+  return lines.slice(1).map((line) => {
+    const cells = splitDelimitedLine(line, delimiter);
+    return Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ""]));
+  });
+}
+
+function ImportResult({ result }: { result: RosterImportResult }) {
+  return (
+    <div className="notice">
+      <strong>
+        Importiert: {result.importedRows} von {result.receivedRows} Zeilen
+      </strong>
+      <div className="import-summary">
+        <span>Schulen: {result.created.organizations}</span>
+        <span>Auftraege: {result.created.jobs}</span>
+        <span>Klassen: {result.created.classes}</span>
+        <span>Kinder: {result.created.children}</span>
+        <span>Elternlinks: {result.created.guardianLinks}</span>
+      </div>
+      {result.errors.length > 0 ? (
+        <div className="error-box">
+          {result.errors.slice(0, 6).map((error) => (
+            <p key={`${error.rowNumber}-${error.message}`}>
+              Zeile {error.rowNumber}: {error.message}
+            </p>
+          ))}
+          {result.errors.length > 6 ? <p>Weitere Fehler: {result.errors.length - 6}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function AdminSetupPage() {
   const { getIdToken } = useAuth();
   const [data, setData] = useState<AdminData>(emptyData);
@@ -25,22 +108,26 @@ export function AdminSetupPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [suggestedUrl, setSuggestedUrl] = useState("");
+  const [importResult, setImportResult] = useState<RosterImportResult | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [pastedTable, setPastedTable] = useState(samplePaste);
 
-  const [orgForm, setOrgForm] = useState({ name: "", type: "school" as OrganizationType });
-  const [jobForm, setJobForm] = useState({ orgId: "", title: "", date: "", retentionUntil: "" });
-  const [classForm, setClassForm] = useState({ orgId: "", jobId: "", name: "", teacherName: "" });
-  const [childForm, setChildForm] = useState({
-    orgId: "",
-    jobId: "",
-    classId: "",
-    displayName: ""
+  const [structureForm, setStructureForm] = useState({
+    orgName: "",
+    orgType: "school" as OrganizationType,
+    jobTitle: "",
+    date: "",
+    retentionUntil: "",
+    className: "",
+    teacherName: ""
   });
-  const [linkForm, setLinkForm] = useState({
+  const [childLinkForm, setChildLinkForm] = useState({
     email: "",
     orgId: "",
     jobId: "",
     classId: "",
-    childId: ""
+    displayName: ""
   });
 
   async function refresh() {
@@ -61,19 +148,135 @@ export function AdminSetupPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function submit<T>(event: FormEvent, path: string, body: T, done: string) {
+  async function submitStructure(event: FormEvent) {
     event.preventDefault();
     setMessage("");
     setError("");
+    setSuggestedUrl("");
+
     try {
-      const result = await apiPost<{ suggestedLoginUrl?: string }>(path, body, getIdToken);
-      setMessage(done);
-      if (result.suggestedLoginUrl) {
-        setSuggestedUrl(result.suggestedLoginUrl);
-      }
+      const organization = await apiPost<{ id: string }>(
+        "/api/admin/organizations",
+        { name: structureForm.orgName, type: structureForm.orgType },
+        getIdToken
+      );
+      const job = await apiPost<{ id: string }>(
+        "/api/admin/jobs",
+        {
+          orgId: organization.id,
+          title: structureForm.jobTitle,
+          date: structureForm.date,
+          retentionUntil: structureForm.retentionUntil || undefined
+        },
+        getIdToken
+      );
+      const schoolClass = await apiPost<{ id: string }>(
+        "/api/admin/classes",
+        {
+          orgId: organization.id,
+          jobId: job.id,
+          name: structureForm.className,
+          teacherName: structureForm.teacherName || undefined
+        },
+        getIdToken
+      );
+
+      setMessage("Schule, Fotoauftrag und Klasse gespeichert.");
+      setChildLinkForm({
+        ...childLinkForm,
+        orgId: organization.id,
+        jobId: job.id,
+        classId: schoolClass.id
+      });
       await refresh();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Die Aktion ist fehlgeschlagen.");
+      setError(submitError instanceof Error ? submitError.message : "Die Stammdaten konnten nicht gespeichert werden.");
+    }
+  }
+
+  async function submitChildAndLink(event: FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+    setSuggestedUrl("");
+
+    try {
+      const child = await apiPost<{ id: string }>(
+        "/api/admin/children",
+        {
+          orgId: childLinkForm.orgId,
+          jobId: childLinkForm.jobId,
+          classId: childLinkForm.classId,
+          displayName: childLinkForm.displayName
+        },
+        getIdToken
+      );
+      const link = await apiPost<{ suggestedLoginUrl?: string }>(
+        "/api/admin/guardian-links",
+        {
+          email: childLinkForm.email,
+          orgId: childLinkForm.orgId,
+          jobId: childLinkForm.jobId,
+          classId: childLinkForm.classId,
+          childId: child.id
+        },
+        getIdToken
+      );
+
+      setMessage("Kind und Elternzugriff gespeichert.");
+      if (link.suggestedLoginUrl) {
+        setSuggestedUrl(link.suggestedLoginUrl);
+      }
+      setChildLinkForm({ ...childLinkForm, email: "", displayName: "" });
+      await refresh();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Kind oder Elternzugriff konnte nicht gespeichert werden.");
+    }
+  }
+
+  async function importFromPaste(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    setImportResult(null);
+    setImporting(true);
+
+    try {
+      const rows = parsePastedTable(pastedTable);
+      const result = await apiPost<RosterImportResult>("/api/admin/import/roster", { rows }, getIdToken);
+      setImportResult(result);
+      setMessage("Tabelle importiert.");
+      await refresh();
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Die Tabelle konnte nicht importiert werden.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function importFromExcel(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    setImportResult(null);
+
+    if (!excelFile) {
+      setError("Bitte waehle eine .xlsx-Datei aus.");
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const body = new FormData();
+      body.append("file", excelFile);
+      const result = await apiUploadFormData<RosterImportResult>("/api/admin/import/roster-file", body, getIdToken);
+      setImportResult(result);
+      setMessage("Excel-Datei importiert.");
+      await refresh();
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Die Excel-Datei konnte nicht importiert werden.");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -86,7 +289,7 @@ export function AdminSetupPage() {
       <div className="page-heading">
         <div>
           <h1>Stammdaten erfassen</h1>
-          <p>Alle Namen bleiben in Firestore. Dateipfade nutzen nur zufaellige IDs.</p>
+          <p>Die Namen sind in der App sichtbar. Dateipfade nutzen weiterhin nur zufaellige IDs.</p>
         </div>
       </div>
       {error ? <ErrorState message={error} /> : null}
@@ -96,115 +299,129 @@ export function AdminSetupPage() {
           <strong>Vorgeschlagener Login-Link:</strong>
           <br />
           <code>{suggestedUrl}</code>
-          <p>Der echte Klassen-Mailversand wird spaeter ergaenzt.</p>
         </div>
       ) : null}
+      {importResult ? <ImportResult result={importResult} /> : null}
 
       <div className="grid two">
         <Card>
-          <h2>Organisation / Schule</h2>
-          <form className="form" onSubmit={(event) => submit(event, "/api/admin/organizations", orgForm, "Organisation gespeichert.")}>
-            <div className="form-row">
-              <label>Name</label>
-              <input required value={orgForm.name} onChange={(event) => setOrgForm({ ...orgForm, name: event.target.value })} />
+          <h2>Schule, Auftrag und Klasse</h2>
+          <form className="form" onSubmit={submitStructure}>
+            <div className="grid two">
+              <div className="form-row">
+                <label>Organisation / Schule</label>
+                <input required value={structureForm.orgName} onChange={(event) => setStructureForm({ ...structureForm, orgName: event.target.value })} />
+              </div>
+              <div className="form-row">
+                <label>Typ</label>
+                <select value={structureForm.orgType} onChange={(event) => setStructureForm({ ...structureForm, orgType: event.target.value as OrganizationType })}>
+                  <option value="school">Schule</option>
+                  <option value="kindergarten">Kindergarten</option>
+                </select>
+              </div>
+              <div className="form-row">
+                <label>Fotoauftrag</label>
+                <input required value={structureForm.jobTitle} onChange={(event) => setStructureForm({ ...structureForm, jobTitle: event.target.value })} />
+              </div>
+              <div className="form-row">
+                <label>Datum</label>
+                <input required type="date" value={structureForm.date} onChange={(event) => setStructureForm({ ...structureForm, date: event.target.value })} />
+              </div>
+              <div className="form-row">
+                <label>Klasse</label>
+                <input required value={structureForm.className} onChange={(event) => setStructureForm({ ...structureForm, className: event.target.value })} />
+              </div>
+              <div className="form-row">
+                <label>Lehrperson optional</label>
+                <input value={structureForm.teacherName} onChange={(event) => setStructureForm({ ...structureForm, teacherName: event.target.value })} />
+              </div>
             </div>
-            <div className="form-row">
-              <label>Typ</label>
-              <select value={orgForm.type} onChange={(event) => setOrgForm({ ...orgForm, type: event.target.value as OrganizationType })}>
-                <option value="school">Schule</option>
-                <option value="kindergarten">Kindergarten</option>
-              </select>
-            </div>
-            <Button>Organisation erstellen</Button>
+            <Button>Speichern</Button>
           </form>
         </Card>
 
         <Card>
-          <h2>Fotoauftrag</h2>
-          <form className="form" onSubmit={(event) => submit(event, "/api/admin/jobs", { ...jobForm, retentionUntil: jobForm.retentionUntil || undefined }, "Fotoauftrag gespeichert.")}>
-            <Select label="Organisation" value={jobForm.orgId} items={data.organizations} onChange={(orgId) => setJobForm({ ...jobForm, orgId })} />
+          <h2>Kind und Elternzugriff</h2>
+          <form className="form" onSubmit={submitChildAndLink}>
+            <Select label="Organisation" value={childLinkForm.orgId} items={data.organizations} onChange={(orgId) => setChildLinkForm({ ...childLinkForm, orgId })} />
+            <Select label="Auftrag" value={childLinkForm.jobId} items={data.jobs} onChange={(jobId) => setChildLinkForm({ ...childLinkForm, jobId })} />
+            <Select label="Klasse" value={childLinkForm.classId} items={data.classes} onChange={(classId) => setChildLinkForm({ ...childLinkForm, classId })} />
             <div className="form-row">
-              <label>Titel</label>
-              <input required value={jobForm.title} onChange={(event) => setJobForm({ ...jobForm, title: event.target.value })} />
+              <label>Name Kind</label>
+              <input required value={childLinkForm.displayName} onChange={(event) => setChildLinkForm({ ...childLinkForm, displayName: event.target.value })} />
             </div>
             <div className="form-row">
-              <label>Datum</label>
-              <input required type="date" value={jobForm.date} onChange={(event) => setJobForm({ ...jobForm, date: event.target.value })} />
+              <label>E-Mail Eltern</label>
+              <input required type="email" value={childLinkForm.email} onChange={(event) => setChildLinkForm({ ...childLinkForm, email: event.target.value })} />
             </div>
-            <div className="form-row">
-              <label>Aufbewahrung bis</label>
-              <input type="date" value={jobForm.retentionUntil} onChange={(event) => setJobForm({ ...jobForm, retentionUntil: event.target.value })} />
-            </div>
-            <Button>Auftrag erstellen</Button>
+            <Button>Kind und Elternzugriff speichern</Button>
           </form>
-        </Card>
-
-        <Card>
-          <h2>Klasse</h2>
-          <form className="form" onSubmit={(event) => submit(event, "/api/admin/classes", classForm, "Klasse gespeichert.")}>
-            <Select label="Organisation" value={classForm.orgId} items={data.organizations} onChange={(orgId) => setClassForm({ ...classForm, orgId })} />
-            <Select label="Auftrag" value={classForm.jobId} items={data.jobs} onChange={(jobId) => setClassForm({ ...classForm, jobId })} />
-            <div className="form-row">
-              <label>Klassenname</label>
-              <input required value={classForm.name} onChange={(event) => setClassForm({ ...classForm, name: event.target.value })} />
-            </div>
-            <div className="form-row">
-              <label>Lehrperson optional</label>
-              <input value={classForm.teacherName} onChange={(event) => setClassForm({ ...classForm, teacherName: event.target.value })} />
-            </div>
-            <Button>Klasse erstellen</Button>
-          </form>
-        </Card>
-
-        <Card>
-          <h2>Kind</h2>
-          <form className="form" onSubmit={(event) => submit(event, "/api/admin/children", childForm, "Kind gespeichert.")}>
-            <Select label="Organisation" value={childForm.orgId} items={data.organizations} onChange={(orgId) => setChildForm({ ...childForm, orgId })} />
-            <Select label="Auftrag" value={childForm.jobId} items={data.jobs} onChange={(jobId) => setChildForm({ ...childForm, jobId })} />
-            <Select label="Klasse" value={childForm.classId} items={data.classes} onChange={(classId) => setChildForm({ ...childForm, classId })} />
-            <div className="form-row">
-              <label>Name</label>
-              <input required value={childForm.displayName} onChange={(event) => setChildForm({ ...childForm, displayName: event.target.value })} />
-            </div>
-            <Button>Kind erstellen</Button>
-          </form>
-        </Card>
-
-        <Card>
-          <h2>Elternzugriff verknuepfen</h2>
-          <form className="form" onSubmit={(event) => submit(event, "/api/admin/guardian-links", linkForm, "Elternzugriff gespeichert.")}>
-            <div className="form-row">
-              <label>E-Mail</label>
-              <input required type="email" value={linkForm.email} onChange={(event) => setLinkForm({ ...linkForm, email: event.target.value })} />
-            </div>
-            <Select label="Organisation" value={linkForm.orgId} items={data.organizations} onChange={(orgId) => setLinkForm({ ...linkForm, orgId })} />
-            <Select label="Auftrag" value={linkForm.jobId} items={data.jobs} onChange={(jobId) => setLinkForm({ ...linkForm, jobId })} />
-            <Select label="Klasse" value={linkForm.classId} items={data.classes} onChange={(classId) => setLinkForm({ ...linkForm, classId })} />
-            <Select label="Kind" value={linkForm.childId} items={data.children.map((child) => ({ id: child.id, name: child.displayName || child.pseudonym || child.id }))} onChange={(childId) => setLinkForm({ ...linkForm, childId })} />
-            <Button>Link erstellen</Button>
-          </form>
-        </Card>
-
-        <Card>
-          <h2>Uebersicht</h2>
-          {data.organizations.length === 0 ? (
-            <EmptyState title="Noch keine Stammdaten">Lege zuerst eine Organisation an.</EmptyState>
-          ) : (
-            <div className="table-list">
-              <span className="pill">{data.organizations.length} Organisationen</span>
-              <span className="pill">{data.jobs.length} Auftraege</span>
-              <span className="pill">{data.classes.length} Klassen</span>
-              <span className="pill">{data.children.length} Kinder</span>
-              <span className="pill">{data.guardianLinks.length} Elternlinks</span>
-              {data.jobs.map((job) => (
-                <p key={job.id}>
-                  {job.title} · {formatDate(job.date)}
-                </p>
-              ))}
-            </div>
-          )}
         </Card>
       </div>
+
+      <div className="grid two">
+        <Card>
+          <div className="card-header">
+            <div>
+              <h2>Excel importieren</h2>
+              <p>Unterstuetzt .xlsx mit Kopfzeile.</p>
+            </div>
+            <FileSpreadsheet aria-hidden="true" />
+          </div>
+          <form className="form" onSubmit={importFromExcel}>
+            <div className="form-row">
+              <label>Excel-Datei</label>
+              <input
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={(event) => setExcelFile(event.target.files?.[0] ?? null)}
+              />
+            </div>
+            <Button disabled={importing} icon={<Upload size={18} />}>
+              {importing ? "Import laeuft..." : "Excel importieren"}
+            </Button>
+          </form>
+        </Card>
+
+        <Card>
+          <div className="card-header">
+            <div>
+              <h2>Tabelle einfuegen</h2>
+              <p>Aus Excel, Numbers oder Google Sheets kopieren und einfuegen.</p>
+            </div>
+            <TableProperties aria-hidden="true" />
+          </div>
+          <form className="form" onSubmit={importFromPaste}>
+            <div className="form-row">
+              <label>Tabellendaten</label>
+              <textarea rows={8} value={pastedTable} onChange={(event) => setPastedTable(event.target.value)} />
+            </div>
+            <Button disabled={importing} icon={<TableProperties size={18} />}>
+              {importing ? "Import laeuft..." : "Tabelle importieren"}
+            </Button>
+          </form>
+        </Card>
+      </div>
+
+      <Card>
+        <h2>Uebersicht</h2>
+        {data.organizations.length === 0 ? (
+          <EmptyState title="Noch keine Stammdaten">Lege zuerst eine Schule oder importiere eine Tabelle.</EmptyState>
+        ) : (
+          <div className="table-list">
+            <span className="pill">{data.organizations.length} Organisationen</span>
+            <span className="pill">{data.jobs.length} Auftraege</span>
+            <span className="pill">{data.classes.length} Klassen</span>
+            <span className="pill">{data.children.length} Kinder</span>
+            <span className="pill">{data.guardianLinks.length} Elternlinks</span>
+            {data.jobs.map((job) => (
+              <p key={job.id}>
+                {job.title} | {formatDate(job.date)}
+              </p>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

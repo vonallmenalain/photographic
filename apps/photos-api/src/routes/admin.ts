@@ -10,6 +10,7 @@ import { listCollection } from "../lib/firestore";
 import { generatePreviewAndThumb } from "../lib/imageProcessing";
 import { buildPhotoReferenceSets, getPhotoAvailability } from "../lib/photoAvailability";
 import { randomId } from "../lib/paths";
+import { importRosterRows, parseRosterRowsFromExcel } from "../lib/rosterImport";
 import { asyncHandler, AppError, routeParam, sendOk } from "../lib/response";
 import {
   allowedImageMimes,
@@ -26,6 +27,7 @@ import {
   createJobSchema,
   createOrganizationSchema,
   parseChildIds,
+  rosterImportSchema,
   updatePhotoSchema,
   uploadPhotoFieldsSchema
 } from "../lib/validators";
@@ -41,6 +43,24 @@ const upload = multer({
   fileFilter: (_req, file, callback) => {
     if (!allowedImageMimes.has(file.mimetype)) {
       callback(new AppError(400, "UNSUPPORTED_IMAGE_TYPE", "Dieser Bildtyp wird nicht unterstuetzt."));
+      return;
+    }
+    callback(null, true);
+  }
+});
+
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024
+  },
+  fileFilter: (_req, file, callback) => {
+    const supported = new Set([
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/octet-stream"
+    ]);
+    if (!supported.has(file.mimetype) || !file.originalname.toLowerCase().endsWith(".xlsx")) {
+      callback(new AppError(400, "UNSUPPORTED_IMPORT_TYPE", "Bitte lade eine Excel-Datei im .xlsx-Format hoch."));
       return;
     }
     callback(null, true);
@@ -257,6 +277,31 @@ adminRouter.post(
 
     const { originalPath, previewPath, thumbPath, ...safeMetadata } = metadata;
     sendOk(res, { id: photoId, ...safeMetadata }, 201);
+  })
+);
+
+adminRouter.post(
+  "/import/roster",
+  asyncHandler(async (req, res) => {
+    const auth = getAuthContext(req);
+    const input = rosterImportSchema.parse(req.body);
+    const result = await importRosterRows(input.rows, auth);
+    sendOk(res, result);
+  })
+);
+
+adminRouter.post(
+  "/import/roster-file",
+  importUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    const auth = getAuthContext(req);
+    if (!req.file) {
+      throw new AppError(400, "FILE_REQUIRED", "Bitte lade eine Excel-Datei hoch.");
+    }
+
+    const rows = await parseRosterRowsFromExcel(req.file.buffer);
+    const result = await importRosterRows(rows, auth);
+    sendOk(res, result);
   })
 );
 

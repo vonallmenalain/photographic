@@ -70,6 +70,10 @@ export const mockOrderSchema = z.object({
     .max(100)
 });
 
+export const rosterImportSchema = z.object({
+  rows: z.array(z.record(z.string(), z.unknown())).min(1).max(1000)
+});
+
 export function parseChildIds(value: unknown) {
   if (Array.isArray(value)) {
     return z.array(idSchema).parse(value);

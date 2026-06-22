@@ -394,6 +394,15 @@ textarea:focus {
   margin-top: 12px;
 }
 
+.import-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 10px 0;
+  color: #34404c;
+  font-size: 0.9rem;
+}
+
 .meta-grid {
   display: grid;
   gap: 8px;

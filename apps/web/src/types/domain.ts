@@ -96,6 +96,23 @@ export type AdminData = {
   photos: Photo[];
 };
 
+export type RosterImportResult = {
+  receivedRows: number;
+  importedRows: number;
+  skippedRows: number;
+  created: {
+    organizations: number;
+    jobs: number;
+    classes: number;
+    children: number;
+    guardianLinks: number;
+  };
+  errors: Array<{
+    rowNumber: number;
+    message: string;
+  }>;
+};
+
 export type GalleryPhoto = {
   photoId: string;
   jobId: string;
