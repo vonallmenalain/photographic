@@ -25,7 +25,7 @@ const missingConfig = requiredConfig
 
 export let firebaseConfigError: string | null =
   missingConfig.length > 0
-    ? `Firebase ist nicht vollstaendig konfiguriert. Fehlend: ${missingConfig.join(", ")}.`
+    ? `Firebase ist nicht vollständig konfiguriert. Fehlend: ${missingConfig.join(", ")}.`
     : null;
 
 export let firebaseApp: FirebaseApp | null = null;
@@ -39,6 +39,6 @@ if (!firebaseConfigError) {
   } catch (error) {
     console.error("Firebase konnte nicht initialisiert werden.", error);
     firebaseConfigError =
-      "Firebase konnte nicht initialisiert werden. Bitte pruefe die VITE_FIREBASE_* Variablen in Netlify.";
+      "Firebase konnte nicht initialisiert werden. Bitte prüfe die VITE_FIREBASE_* Variablen in Netlify.";
   }
 }

@@ -25,13 +25,13 @@ export function extensionForMime(mime: string) {
     case "image/tiff":
       return "tiff";
     default:
-      throw new AppError(400, "UNSUPPORTED_IMAGE_TYPE", "Dieser Bildtyp wird nicht unterstuetzt.");
+      throw new AppError(400, "UNSUPPORTED_IMAGE_TYPE", "Dieser Bildtyp wird nicht unterstützt.");
   }
 }
 
 function assertSafeSegment(value: string, label: string) {
   if (!SAFE_SEGMENT.test(value)) {
-    throw new AppError(400, "INVALID_ID", `${label} ist ungueltig.`);
+    throw new AppError(400, "INVALID_ID", `${label} ist ungültig.`);
   }
 }
 
@@ -51,7 +51,7 @@ export function photoRelativePaths(orgId: string, jobId: string, photoId: string
 
 export function resolveInsidePhotoRoot(relativePath: string) {
   if (!relativePath || path.isAbsolute(relativePath)) {
-    throw new AppError(400, "INVALID_STORAGE_PATH", "Der Speicherpfad ist ungueltig.");
+    throw new AppError(400, "INVALID_STORAGE_PATH", "Der Speicherpfad ist ungültig.");
   }
 
   const photoRoot = path.resolve(env.PHOTO_ROOT);
@@ -172,7 +172,7 @@ async function deleteRelativeFileIfExists(kind: PhotoFileKind, relativePath?: st
 
     throw storageMutationError(
       error,
-      `Die ${kind}-Datei konnte nicht geloescht werden. Das Firestore-Dokument wurde nicht veraendert`
+      `Die ${kind}-Datei konnte nicht gelöscht werden. Das Firestore-Dokument wurde nicht verändert`
     );
   }
 }

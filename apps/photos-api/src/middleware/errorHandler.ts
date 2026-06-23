@@ -69,7 +69,7 @@ function classifyFirebaseAuthError(error: unknown): ClassifiedError | null {
   return {
     status: 401,
     code: "AUTH_TOKEN_INVALID",
-    message: "Das Anmeldetoken ist ungueltig. Bitte melde dich erneut an."
+    message: "Das Anmeldetoken ist ungültig. Bitte melde dich erneut an."
   };
 }
 
@@ -82,7 +82,7 @@ function classifyFirestoreError(error: unknown): ClassifiedError | null {
     return {
       status: 403,
       code: "FIRESTORE_PERMISSION_DENIED",
-      message: "Firestore hat den Zugriff verweigert. Bitte pruefe Service Account und IAM-Rechte."
+      message: "Firestore hat den Zugriff verweigert. Bitte prüfe Service Account und IAM-Rechte."
     };
   }
 
@@ -90,7 +90,7 @@ function classifyFirestoreError(error: unknown): ClassifiedError | null {
     return {
       status: 503,
       code: "FIRESTORE_UNAVAILABLE",
-      message: "Firestore ist gerade nicht erreichbar. Bitte spaeter erneut versuchen."
+      message: "Firestore ist gerade nicht erreichbar. Bitte später erneut versuchen."
     };
   }
 
@@ -107,7 +107,7 @@ function classifyFilesystemError(error: unknown): ClassifiedError | null {
     return {
       status: 500,
       code: "PHOTO_STORAGE_PERMISSION_DENIED",
-      message: `Der Foto-Speicher ist nicht beschreibbar oder nicht loeschbar (${code}).`
+      message: `Der Foto-Speicher ist nicht beschreibbar oder nicht löschbar (${code}).`
     };
   }
 
@@ -139,7 +139,7 @@ function classifyImageProcessingError(error: unknown): ClassifiedError | null {
   return {
     status: 400,
     code: "PHOTO_PROCESSING_FAILED",
-    message: "Das Bild konnte nicht verarbeitet werden. Bitte pruefe Dateityp und Bilddatei."
+    message: "Das Bild konnte nicht verarbeitet werden. Bitte prüfe Dateityp und Bilddatei."
   };
 }
 
@@ -164,8 +164,8 @@ export function errorHandler(error: unknown, req: Request, res: Response, _next:
       400,
       "VALIDATION_ERROR",
       details
-        ? `Bitte pruefe die eingegebenen Daten. ${details}`
-        : "Bitte pruefe die eingegebenen Daten.",
+        ? `Bitte prüfe die eingegebenen Daten. ${details}`
+        : "Bitte prüfe die eingegebenen Daten.",
       requestId
     );
   }

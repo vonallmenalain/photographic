@@ -29,7 +29,7 @@ export function AuthCallbackPage() {
 
       const href = window.location.href;
       if (!isSignInWithEmailLink(auth, href)) {
-        throw new Error("Dieser Login-Link ist ungueltig oder abgelaufen.");
+        throw new Error("Dieser Login-Link ist ungültig oder abgelaufen.");
       }
 
       const result = await signInWithEmailLink(auth, emailAddress.trim(), href);
@@ -70,7 +70,7 @@ export function AuthCallbackPage() {
   }
 
   if (loading) {
-    return <Loading label="Login-Link wird geprueft..." />;
+    return <Loading label="Login-Link wird geprüft..." />;
   }
 
   return (

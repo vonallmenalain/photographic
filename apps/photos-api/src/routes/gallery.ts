@@ -44,7 +44,7 @@ galleryRouter.get(
         await writeAuditLog(auth, "guardian.list.gallery", "gallery", auth.uid, { count: 0 });
         sendOk(res, {
           photos: [],
-          message: "Fuer diese E-Mail-Adresse wurden noch keine Fotos freigegeben."
+          message: "Für diese E-Mail-Adresse wurden noch keine Fotos freigegeben."
         });
         return;
       }

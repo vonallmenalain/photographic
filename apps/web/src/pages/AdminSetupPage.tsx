@@ -62,7 +62,7 @@ function parsePastedTable(value: string) {
     .filter(Boolean);
 
   if (lines.length < 2) {
-    throw new Error("Bitte fuege eine Tabelle mit Kopfzeile und mindestens einer Datenzeile ein.");
+    throw new Error("Bitte füge eine Tabelle mit Kopfzeile und mindestens einer Datenzeile ein.");
   }
 
   const delimiter = delimiterForLine(lines[0]);
@@ -82,7 +82,7 @@ function ImportResult({ result }: { result: RosterImportResult }) {
       </strong>
       <div className="import-summary">
         <span>Schulen: {result.created.organizations}</span>
-        <span>Auftraege: {result.created.jobs}</span>
+        <span>Aufträge: {result.created.jobs}</span>
         <span>Klassen: {result.created.classes}</span>
         <span>Kinder: {result.created.children}</span>
         <span>Elternlinks: {result.created.guardianLinks}</span>
@@ -434,7 +434,7 @@ export function AdminSetupPage() {
     const schoolClass = data.classes.find((entry) => entry.id === payload.classId);
 
     if (!organization || !job || !schoolClass) {
-      throw new Error("Bitte waehle Organisation, Auftrag und Klasse aus.");
+      throw new Error("Bitte wähle Organisation, Auftrag und Klasse aus.");
     }
 
     return { organization, job, schoolClass };
@@ -758,7 +758,7 @@ export function AdminSetupPage() {
     const worksheet = workbook.worksheets[0];
 
     if (!worksheet) {
-      throw new Error("Die Excel-Datei enthaelt kein Tabellenblatt.");
+      throw new Error("Die Excel-Datei enthält kein Tabellenblatt.");
     }
 
     const headerRow = worksheet.getRow(1);
@@ -874,7 +874,7 @@ export function AdminSetupPage() {
     setImportResult(null);
 
     if (!excelFile) {
-      setError("Bitte waehle eine .xlsx-Datei aus.");
+      setError("Bitte wähle eine .xlsx-Datei aus.");
       return;
     }
 
@@ -901,7 +901,7 @@ export function AdminSetupPage() {
       <div className="page-heading">
         <div>
           <h1>Stammdaten erfassen</h1>
-          <p>Die Namen sind in der App sichtbar. Dateipfade nutzen weiterhin nur zufaellige IDs.</p>
+          <p>Die Namen sind in der App sichtbar. Dateipfade nutzen weiterhin nur zufällige IDs.</p>
         </div>
       </div>
       {error ? <ErrorState message={error} /> : null}
@@ -996,7 +996,7 @@ export function AdminSetupPage() {
           <div className="card-header">
             <div>
               <h2>Excel importieren</h2>
-              <p>Unterstuetzt .xlsx mit Kopfzeile.</p>
+              <p>Unterstützt .xlsx mit Kopfzeile.</p>
             </div>
             <FileSpreadsheet aria-hidden="true" />
           </div>
@@ -1010,7 +1010,7 @@ export function AdminSetupPage() {
               />
             </div>
             <Button disabled={importing} icon={<Upload size={18} />}>
-              {importing ? "Import laeuft..." : "Excel importieren"}
+              {importing ? "Import läuft..." : "Excel importieren"}
             </Button>
           </form>
         </Card>
@@ -1018,8 +1018,8 @@ export function AdminSetupPage() {
         <Card>
           <div className="card-header">
             <div>
-              <h2>Tabelle einfuegen</h2>
-              <p>Aus Excel, Numbers oder Google Sheets kopieren und einfuegen.</p>
+              <h2>Tabelle einfügen</h2>
+              <p>Aus Excel, Numbers oder Google Sheets kopieren und einfügen.</p>
             </div>
             <TableProperties aria-hidden="true" />
           </div>
@@ -1029,20 +1029,20 @@ export function AdminSetupPage() {
               <textarea rows={8} value={pastedTable} onChange={(event) => setPastedTable(event.target.value)} />
             </div>
             <Button disabled={importing} icon={<TableProperties size={18} />}>
-              {importing ? "Import laeuft..." : "Tabelle importieren"}
+              {importing ? "Import läuft..." : "Tabelle importieren"}
             </Button>
           </form>
         </Card>
       </div>
 
       <Card>
-        <h2>Uebersicht</h2>
+        <h2>Übersicht</h2>
         {data.organizations.length === 0 ? (
           <EmptyState title="Noch keine Stammdaten">Lege zuerst eine Schule oder importiere eine Tabelle.</EmptyState>
         ) : (
           <div className="table-list">
             <span className="pill">{data.organizations.length} Organisationen</span>
-            <span className="pill">{data.jobs.length} Auftraege</span>
+            <span className="pill">{data.jobs.length} Aufträge</span>
             <span className="pill">{data.classes.length} Klassen</span>
             <span className="pill">{data.children.length} Kinder</span>
             <span className="pill">{data.guardianLinks.length} Elternlinks</span>
@@ -1073,7 +1073,7 @@ function Select({
     <div className="form-row">
       <label>{label}</label>
       <select required value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Bitte waehlen</option>
+        <option value="">Bitte wählen</option>
         {items.map((item) => (
           <option key={item.id} value={item.id}>
             {item.name || item.title || item.id}

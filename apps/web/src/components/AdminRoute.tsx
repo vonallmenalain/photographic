@@ -43,7 +43,7 @@ export function AdminRoute() {
             ? { status: "allowed" }
             : {
                 status: "denied",
-                message: "Dieser Bereich ist nur fuer Administratorinnen und Administratoren freigegeben."
+                message: "Dieser Bereich ist nur für Administratorinnen und Administratoren freigegeben."
               }
         );
       })
@@ -51,7 +51,7 @@ export function AdminRoute() {
         if (!active) return;
         setGate({
           status: "denied",
-          message: error.message || "Die Admin-Berechtigung konnte nicht geprueft werden."
+          message: error.message || "Die Admin-Berechtigung konnte nicht geprüft werden."
         });
       });
 
@@ -61,7 +61,7 @@ export function AdminRoute() {
   }, [getIdToken, user]);
 
   if (loading) {
-    return <Loading label="Anmeldung wird geprueft..." />;
+    return <Loading label="Anmeldung wird geprüft..." />;
   }
 
   if (!user) {
@@ -69,7 +69,7 @@ export function AdminRoute() {
   }
 
   if (gate.status === "checking") {
-    return <Loading label="Admin-Berechtigung wird geprueft..." />;
+    return <Loading label="Admin-Berechtigung wird geprüft..." />;
   }
 
   if (gate.status === "denied") {
@@ -93,7 +93,7 @@ export function AdminRoute() {
       <nav className="section-tabs" aria-label="Adminbereiche">
         <NavLink className="section-tab" to="/admin" end>
           <LayoutDashboard size={17} />
-          <span>Uebersicht</span>
+          <span>Übersicht</span>
         </NavLink>
         <NavLink className="section-tab" to="/admin/setup">
           <Database size={17} />

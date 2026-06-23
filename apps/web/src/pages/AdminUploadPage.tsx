@@ -103,17 +103,17 @@ export function AdminUploadPage() {
     }
 
     if (!form.file) {
-      setError("Bitte waehle eine Bilddatei aus.");
+      setError("Bitte wähle eine Bilddatei aus.");
       return;
     }
 
     if (!form.orgId || !form.jobId || !form.classId) {
-      setError("Bitte waehle Organisation, Auftrag und Klasse aus.");
+      setError("Bitte wähle Organisation, Auftrag und Klasse aus.");
       return;
     }
 
     if (form.visibility === "child" && form.childIds.length === 0) {
-      setError("Bitte waehle fuer ein Portrait mindestens ein Kind aus.");
+      setError("Bitte wähle für ein Portrait mindestens ein Kind aus.");
       return;
     }
 
@@ -130,7 +130,7 @@ export function AdminUploadPage() {
     setError("");
     setIsUploading(true);
     clearProgressTimers();
-    setProgressMessage("Datei wird an das lokale Foto-Backend uebertragen...");
+    setProgressMessage("Datei wird an das lokale Foto-Backend übertragen...");
     try {
       progressTimers.current.push(
         window.setTimeout(() => setProgressMessage("Vorschau und Thumbnail werden erzeugt..."), 350)
@@ -256,7 +256,7 @@ export function AdminUploadPage() {
             />
           </div>
           <Button icon={<UploadCloud size={18} />} disabled={isUploading}>
-            {isUploading ? "Upload laeuft..." : "Foto hochladen"}
+            {isUploading ? "Upload läuft..." : "Foto hochladen"}
           </Button>
         </form>
       </Card>
@@ -279,7 +279,7 @@ function Select({
     <div className="form-row">
       <label>{label}</label>
       <select required value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Bitte waehlen</option>
+        <option value="">Bitte wählen</option>
         {items.map((item) => (
           <option key={item.id} value={item.id}>
             {item.name || item.title || item.id}

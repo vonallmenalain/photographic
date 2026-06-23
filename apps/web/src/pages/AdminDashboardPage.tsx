@@ -24,7 +24,7 @@ export function AdminDashboardPage() {
       to: "/admin/setup",
       icon: <Database size={24} />,
       title: "Stammdaten erfassen",
-      text: "Schulen, Auftraege, Klassen, Kinder und Elternlinks anlegen."
+      text: "Schulen, Aufträge, Klassen, Kinder und Elternlinks anlegen."
     },
     {
       to: "/admin/upload",
@@ -41,14 +41,14 @@ export function AdminDashboardPage() {
     {
       to: "/admin/gallery",
       icon: <ScanSearch size={24} />,
-      title: "Galerie pruefen",
+      title: "Galerie prüfen",
       text: "Alle hochgeladenen Fotos mit Admin-Filtern kontrollieren."
     },
     {
       to: "/admin/cart",
       icon: <ShoppingCart size={24} />,
       title: "Warenkorb testen",
-      text: "Mock-Bestellungen aus der Admin-Galerie pruefen."
+      text: "Mock-Bestellungen aus der Admin-Galerie prüfen."
     }
   ];
 

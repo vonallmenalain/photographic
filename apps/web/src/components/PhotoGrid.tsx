@@ -22,7 +22,7 @@ export function PhotoGrid({
             key={photo.photoId}
             type="button"
             onClick={() => onOpen(photo)}
-            aria-label={`${labelForPhotoType(photo.type)} oeffnen`}
+            aria-label={`${labelForPhotoType(photo.type)} öffnen`}
           >
             {thumbnails[photo.photoId] ? (
               <img src={thumbnails[photo.photoId]} alt="" />

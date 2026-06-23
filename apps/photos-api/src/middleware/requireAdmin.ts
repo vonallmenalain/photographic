@@ -9,7 +9,7 @@ export function requireAdmin(req: Request, _res: Response, next: NextFunction) {
       throw new AppError(
         403,
         "ADMIN_REQUIRED",
-        "Diese Aktion ist nur fuer Administratorinnen und Administratoren erlaubt."
+        "Diese Aktion ist nur für Administratorinnen und Administratoren erlaubt."
       );
     }
     next();

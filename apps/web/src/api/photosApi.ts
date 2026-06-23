@@ -138,7 +138,7 @@ export async function fetchAuthorizedBlob(path: string, getIdToken: TokenProvide
     const message =
       payload && !payload.ok
         ? payload.error.message
-        : "Das geschuetzte Bild konnte nicht geladen werden.";
+        : "Das geschützte Bild konnte nicht geladen werden.";
     const code = payload && !payload.ok ? payload.error.code : "IMAGE_FETCH_FAILED";
     throw new ApiError(message, code, response.status, requestId || undefined);
   }

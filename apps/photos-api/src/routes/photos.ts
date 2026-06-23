@@ -30,7 +30,7 @@ function streamProtectedImage(kind: "thumb" | "preview") {
       }
 
       if (photo.processingStatus === "error") {
-        throw new AppError(404, "PHOTO_NOT_AVAILABLE", "Die Vorschau ist nicht verfuegbar.");
+        throw new AppError(404, "PHOTO_NOT_AVAILABLE", "Die Vorschau ist nicht verfügbar.");
       }
 
       const relativePath = kind === "thumb" ? photo.thumbPath : photo.previewPath;

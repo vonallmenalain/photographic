@@ -35,7 +35,7 @@ export function createApp() {
           return;
         }
         callback(
-          new AppError(403, "CORS_BLOCKED", "Diese Herkunft ist fuer die API nicht freigegeben.")
+          new AppError(403, "CORS_BLOCKED", "Diese Herkunft ist für die API nicht freigegeben.")
         );
       },
       exposedHeaders: ["X-Request-ID"]

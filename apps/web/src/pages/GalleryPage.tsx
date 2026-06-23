@@ -260,8 +260,8 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
           <h1>{adminView ? "Admin-Galerie" : "Meine Galerie"}</h1>
           <p>
             {adminView
-              ? "Alle hochgeladenen Fotos pruefen und gezielt nach Schule, Klasse oder E-Mail filtern."
-              : gallery.message || "Freigegebene Fotos werden geschuetzt geladen."}
+              ? "Alle hochgeladenen Fotos prüfen und gezielt nach Schule, Klasse oder E-Mail filtern."
+              : gallery.message || "Freigegebene Fotos werden geschützt geladen."}
           </p>
         </div>
         {adminView ? (
@@ -298,7 +298,7 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
                 value={filters.jobId}
                 onChange={(event) => setFilters({ ...filters, jobId: event.target.value })}
               >
-                <option value={ALL}>Alle Auftraege</option>
+                <option value={ALL}>Alle Aufträge</option>
                 {adminData.jobs.map((job) => (
                   <option key={job.id} value={job.id}>
                     {job.title}
@@ -339,7 +339,7 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
           </div>
           <div className="actions compact-actions">
             <Button type="button" variant="secondary" onClick={() => setFilters(initialAdminFilters)}>
-              Filter zuruecksetzen
+              Filter zurücksetzen
             </Button>
           </div>
         </div>
@@ -349,7 +349,7 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
       {message ? <div className="success-box">{message}</div> : null}
       {visiblePhotos.length === 0 ? (
         <EmptyState title="Noch keine Fotos">
-          {adminView ? "Keine Fotos passen zu den aktuellen Filtern." : gallery.message || "Fuer diese E-Mail-Adresse wurden noch keine Fotos freigegeben."}
+          {adminView ? "Keine Fotos passen zu den aktuellen Filtern." : gallery.message || "Für diese E-Mail-Adresse wurden noch keine Fotos freigegeben."}
         </EmptyState>
       ) : (
         <PhotoGrid photos={visiblePhotos} thumbnails={thumbs} onOpen={openPreview} />

@@ -42,7 +42,7 @@ export function LoginPage() {
       if (jobId) {
         window.localStorage.setItem("inviteJobId", jobId);
       }
-      setSuccess("Der Login-Link wurde versendet. Bitte oeffne die E-Mail auf diesem Geraet.");
+      setSuccess("Der Login-Link wurde versendet. Bitte öffne die E-Mail auf diesem Gerät.");
     } catch (sendError) {
       setError(
         sendError instanceof Error
@@ -60,7 +60,7 @@ export function LoginPage() {
         <div className="card-header">
           <div>
             <h1>Einloggen</h1>
-            <p>Du erhaeltst einen sicheren Login-Link per E-Mail.</p>
+            <p>Du erhältst einen sicheren Login-Link per E-Mail.</p>
           </div>
           <MailCheck aria-hidden="true" />
         </div>
@@ -89,10 +89,10 @@ export function LoginPage() {
         <h2>Sicherer Zugriff</h2>
         <p>
           Ein weitergeleiteter Link allein reicht nicht aus. Nach dem Login
-          prueft das Foto-Backend deine verifizierte Firebase-E-Mail-Adresse und
+          prüft das Foto-Backend deine verifizierte Firebase-E-Mail-Adresse und
           gibt nur passende Bilder frei.
         </p>
-        {jobId ? <p className="pill">Einladung fuer Auftrag {jobId}</p> : null}
+        {jobId ? <p className="pill">Einladung für Auftrag {jobId}</p> : null}
       </Card>
     </div>
   );

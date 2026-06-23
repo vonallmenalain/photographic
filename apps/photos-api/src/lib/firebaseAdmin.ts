@@ -18,7 +18,7 @@ function decodeServiceAccount() {
     throw new AppError(
       500,
       "FIREBASE_CONFIG_INVALID",
-      "Firebase Admin Konfiguration ist ungueltig."
+      "Firebase Admin Konfiguration ist ungültig."
     );
   }
 }

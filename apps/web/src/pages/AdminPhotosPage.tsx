@@ -40,7 +40,7 @@ export function AdminPhotosPage() {
     setError("");
     setMessage("");
 
-    if (!window.confirm("Verwaiste Fotoeintraege ohne vollstaendige Dateien oder Stammdaten wirklich entfernen?")) {
+    if (!window.confirm("Verwaiste Fotoeinträge ohne vollständige Dateien oder Stammdaten wirklich entfernen?")) {
       return;
     }
 
@@ -50,7 +50,7 @@ export function AdminPhotosPage() {
         {},
         getIdToken
       );
-      setMessage(`${result.deletedCount} verwaiste Fotoeintraege entfernt.`);
+      setMessage(`${result.deletedCount} verwaiste Fotoeinträge entfernt.`);
       await refresh();
     } catch (cleanupError) {
       if (
@@ -58,14 +58,14 @@ export function AdminPhotosPage() {
         cleanupError.status === 404 &&
         cleanupError.code === "NOT_FOUND"
       ) {
-        setMessage("Diese Bereinigung ist auf der laufenden API noch nicht verfuegbar.");
+        setMessage("Diese Bereinigung ist auf der laufenden API noch nicht verfügbar.");
         return;
       }
 
       setError(
         cleanupError instanceof Error
           ? cleanupError.message
-          : "Verwaiste Fotoeintraege konnten nicht bereinigt werden."
+          : "Verwaiste Fotoeinträge konnten nicht bereinigt werden."
       );
     }
   }
@@ -97,7 +97,13 @@ export function AdminPhotosPage() {
       ) : (
         <div className="table-list">
           {data.photos.map((photo) => (
-            <PhotoEditor key={photo.id} photo={photo} data={data} onSaved={refresh} getIdToken={getIdToken} />
+            <PhotoEditor
+              key={photo.id || photo.photoId}
+              photo={photo}
+              data={data}
+              onSaved={refresh}
+              getIdToken={getIdToken}
+            />
           ))}
         </div>
       )}
@@ -127,6 +133,7 @@ function PhotoEditor({
   const [thumbUrl, setThumbUrl] = useState("");
   const storageStatus = photo.storageStatus;
   const metadataStatus = photo.metadataStatus;
+  const photoIdentifier = photo.id || photo.photoId || "";
   const hasMissingFiles = storageStatus ? !storageStatus.complete : false;
   const hasMissingMetadata = metadataStatus ? !metadataStatus.complete : false;
   const hasProcessingError = photo.processingStatus === "error";
@@ -146,7 +153,12 @@ function PhotoEditor({
       }
 
       try {
-        const blob = await fetchAuthorizedBlob(`/api/photos/${photo.id}/thumb`, getIdToken);
+        if (!photoIdentifier) {
+          setThumbUrl("");
+          return;
+        }
+
+        const blob = await fetchAuthorizedBlob(`/api/photos/${photoIdentifier}/thumb`, getIdToken);
 
         if (!active) {
           return;
@@ -169,7 +181,7 @@ function PhotoEditor({
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [getIdToken, photo.id, storageStatus]);
+  }, [getIdToken, photoIdentifier, storageStatus]);
 
   async function save() {
     setError("");
@@ -186,17 +198,37 @@ function PhotoEditor({
     }
   }
 
+  async function deletePhotoOnServer() {
+    if (!photoIdentifier) {
+      throw new Error("Dieses Foto hat keine gültige ID und kann nicht gelöscht werden.");
+    }
+
+    try {
+      return await apiDelete(`/api/admin/photos/${photoIdentifier}`, getIdToken);
+    } catch (deleteError) {
+      if (
+        deleteError instanceof ApiError &&
+        deleteError.status === 404 &&
+        deleteError.code === "NOT_FOUND"
+      ) {
+        return apiPost(`/api/admin/photos/${photoIdentifier}/delete`, {}, getIdToken);
+      }
+
+      throw deleteError;
+    }
+  }
+
   async function deletePhoto() {
     setError("");
     setMessage("");
 
-    if (!window.confirm(`Foto "${photo.originalFilename || photo.id}" wirklich loeschen?`)) {
+    if (!window.confirm(`Foto "${photo.originalFilename || photoIdentifier}" wirklich löschen?`)) {
       return;
     }
 
     try {
-      await apiDelete(`/api/admin/photos/${photo.id}`, getIdToken);
-      setMessage("Foto geloescht.");
+      await deletePhotoOnServer();
+      setMessage("Foto gelöscht.");
       await onSaved();
     } catch (deleteError) {
       if (
@@ -204,17 +236,19 @@ function PhotoEditor({
         deleteError.status === 404 &&
         deleteError.code === "NOT_FOUND"
       ) {
-        setMessage("Diese Loeschfunktion ist auf der laufenden API noch nicht verfuegbar.");
+        setError(
+          "Die Foto-Löschroute ist auf der laufenden API nicht erreichbar. Bitte den photos-api-Container neu deployen und prüfen, ob der Tunnel POST/DELETE an /api/admin/photos/:id weiterleitet."
+        );
         return;
       }
 
       if (deleteError instanceof ApiError && deleteError.code === "PHOTO_NOT_FOUND") {
-        setError("Das Foto wurde bereits geloescht oder ist nicht mehr vorhanden.");
+        setError("Das Foto wurde bereits gelöscht oder ist nicht mehr vorhanden.");
         await onSaved();
         return;
       }
 
-      setError(deleteError instanceof Error ? deleteError.message : "Foto konnte nicht geloescht werden.");
+      setError(deleteError instanceof Error ? deleteError.message : "Foto konnte nicht gelöscht werden.");
     }
   }
 
@@ -226,9 +260,9 @@ function PhotoEditor({
             {thumbUrl ? <img src={thumbUrl} alt="" /> : <ImageIcon size={24} aria-hidden="true" />}
           </div>
           <div>
-            <h3>{photo.originalFilename || `Foto ${compactId(photo.id)}`}</h3>
+            <h3>{photo.originalFilename || `Foto ${compactId(photoIdentifier)}`}</h3>
             <p>{childNames.join(", ") || "Keine direkte Kindzuordnung"}</p>
-            <p>{labelForPhotoType(photo.type)} - {compactId(photo.id)}</p>
+            <p>{labelForPhotoType(photo.type)} - {compactId(photoIdentifier)}</p>
           </div>
         </div>
         <div className="status-pills">
@@ -256,9 +290,9 @@ function PhotoEditor({
               <span>Original: {storageStatus.original ? "vorhanden" : "fehlt"}</span>
               <span>Preview: {storageStatus.preview ? "vorhanden" : "fehlt"}</span>
               <span>Thumb: {storageStatus.thumb ? "vorhanden" : "fehlt"}</span>
-              <span>Originalgroesse: {formatBytes(photo.fileSizeOriginal || photo.originalSize)}</span>
-              <span>Previewgroesse: {formatBytes(photo.fileSizePreview)}</span>
-              <span>Thumbgroesse: {formatBytes(photo.fileSizeThumb)}</span>
+              <span>Originalgrösse: {formatBytes(photo.fileSizeOriginal || photo.originalSize)}</span>
+              <span>Previewgrösse: {formatBytes(photo.fileSizePreview)}</span>
+              <span>Thumbgrösse: {formatBytes(photo.fileSizeThumb)}</span>
             </>
           ) : null}
           {photo.width && photo.height ? <span>Pixel: {photo.width} x {photo.height}</span> : null}
@@ -327,7 +361,7 @@ function PhotoEditor({
       <div className="actions">
         <Button type="button" onClick={save}>Speichern</Button>
         <Button type="button" variant="danger" icon={<Trash2 size={18} />} onClick={deletePhoto}>
-          Foto loeschen
+          Foto löschen
         </Button>
       </div>
       {message ? <div className="success-box">{message}</div> : null}

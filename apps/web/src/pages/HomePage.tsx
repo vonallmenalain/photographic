@@ -8,11 +8,11 @@ export function HomePage() {
       <section className="hero">
         <div className="hero-content">
           <p className="eyebrow">Photographic</p>
-          <h1>Geschuetzte Schul- und Kindergartenfotos</h1>
+          <h1>Geschützte Schul- und Kindergartenfotos</h1>
           <p className="lead">
             Eltern greifen sicher auf freigegebene Fotos ihres Kindes zu und
-            koennen diese spaeter bestellen. Die Dateien bleiben privat auf dem
-            lokalen Foto-Backend, jeder Zugriff wird serverseitig geprueft.
+            können diese später bestellen. Die Dateien bleiben privat auf dem
+            lokalen Foto-Backend, jeder Zugriff wird serverseitig geprüft.
           </p>
           <div className="actions">
             <Link className="button" to="/login">
@@ -24,15 +24,15 @@ export function HomePage() {
       <div className="grid three">
         <Card>
           <h3>Magic Link</h3>
-          <p>Kein Passwort fuer Eltern. Der Zugriff basiert auf verifizierter E-Mail.</p>
+          <p>Kein Passwort für Eltern. Der Zugriff basiert auf verifizierter E-Mail.</p>
         </Card>
         <Card>
           <h3>Private Fotos</h3>
-          <p>Thumbnails und Previews werden nur ueber authentifizierte API-Requests geladen.</p>
+          <p>Thumbnails und Previews werden nur über authentifizierte API-Requests geladen.</p>
         </Card>
         <Card>
           <h3>Lokales Archiv</h3>
-          <p>Originaldateien bleiben auf dem QNAP und werden erst nach Berechtigungs- und Kaufpruefung gestreamt.</p>
+          <p>Originaldateien bleiben auf dem QNAP und werden erst nach Berechtigungs- und Kaufprüfung gestreamt.</p>
         </Card>
       </div>
     </>

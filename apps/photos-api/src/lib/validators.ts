@@ -3,9 +3,9 @@ import { z } from "zod";
 export const idSchema = z
   .string()
   .trim()
-  .min(1, "Bitte waehle einen Eintrag aus.")
+  .min(1, "Bitte wähle einen Eintrag aus.")
   .max(180, "Die ID ist zu lang.")
-  .refine((value) => !value.includes("/"), "IDs duerfen keinen Slash enthalten.");
+  .refine((value) => !value.includes("/"), "IDs dürfen keinen Slash enthalten.");
 export const organizationTypeSchema = z.enum(["school", "kindergarten"]);
 export const photoTypeSchema = z.enum(["portrait", "sibling", "class", "classMirror", "event"]);
 export const photoVisibilitySchema = z.enum(["child", "class", "job"]);
@@ -37,7 +37,7 @@ export const createChildSchema = z.object({
 });
 
 export const createGuardianLinkSchema = z.object({
-  email: z.string().trim().email("Bitte gib eine gueltige E-Mail-Adresse ein."),
+  email: z.string().trim().email("Bitte gib eine gültige E-Mail-Adresse ein."),
   orgId: idSchema,
   jobId: idSchema,
   classId: idSchema,
@@ -45,7 +45,7 @@ export const createGuardianLinkSchema = z.object({
 });
 
 export const createChildWithGuardianLinkSchema = createChildSchema.extend({
-  email: z.string().trim().email("Bitte gib eine gueltige E-Mail-Adresse ein.")
+  email: z.string().trim().email("Bitte gib eine gültige E-Mail-Adresse ein.")
 });
 
 export const uploadPhotoFieldsSchema = z.object({
@@ -96,6 +96,6 @@ export function parseChildIds(value: unknown) {
     const parsed = JSON.parse(value);
     return z.array(idSchema).parse(parsed);
   } catch {
-    throw new Error("childIds muss ein JSON Array mit gueltigen IDs sein.");
+    throw new Error("childIds muss ein JSON Array mit gültigen IDs sein.");
   }
 }

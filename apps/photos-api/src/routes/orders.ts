@@ -46,7 +46,7 @@ ordersRouter.post(
 
     sendOk(res, {
       orderId: orderRef.id,
-      message: "Mock-Bestellung gespeichert. Zahlung wird in einer spaeteren Version mit Stripe ergaenzt."
+      message: "Mock-Bestellung gespeichert. Zahlung wird in einer späteren Version mit Stripe ergänzt."
     });
   })
 );

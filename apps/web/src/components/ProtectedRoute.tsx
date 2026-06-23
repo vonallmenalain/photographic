@@ -7,7 +7,7 @@ export function ProtectedRoute() {
   const location = useLocation();
 
   if (loading) {
-    return <Loading label="Anmeldung wird geprueft..." />;
+    return <Loading label="Anmeldung wird geprüft..." />;
   }
 
   if (!user) {

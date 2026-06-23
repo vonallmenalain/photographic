@@ -54,8 +54,8 @@ export function CartPage({ adminView = false }: { adminView?: boolean }) {
           <h1>Warenkorb</h1>
           <p>
             {adminView
-              ? "Testbereich fuer Mock-Bestellungen aus der Admin-Galerie."
-              : "Zahlung wird in einer spaeteren Version mit Stripe ergaenzt."}
+              ? "Testbereich für Mock-Bestellungen aus der Admin-Galerie."
+              : "Zahlung wird in einer späteren Version mit Stripe ergänzt."}
           </p>
         </div>
       </div>
@@ -63,7 +63,7 @@ export function CartPage({ adminView = false }: { adminView?: boolean }) {
       {message ? <div className="success-box">{message}</div> : null}
       {items.length === 0 ? (
         <EmptyState title="Der Warenkorb ist leer">
-          {adminView ? "Fuege Fotos aus der Admin-Galerie hinzu." : "Fuege Fotos aus der Galerie hinzu."}
+          {adminView ? "Füge Fotos aus der Admin-Galerie hinzu." : "Füge Fotos aus der Galerie hinzu."}
         </EmptyState>
       ) : (
         <Card>

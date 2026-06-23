@@ -66,7 +66,7 @@ export function AdminLoginPage({ redirectTo = "/admin" }: { redirectTo?: string 
       }
 
       await sendPasswordResetEmail(auth, trimmedEmail);
-      setMessage("Wenn fuer diese E-Mail ein Konto existiert, wurde ein Link zum Passwort-Zuruecksetzen gesendet.");
+      setMessage("Wenn für diese E-Mail ein Konto existiert, wurde ein Link zum Passwort-Zurücksetzen gesendet.");
     } catch (resetError) {
       setError(
         resetError instanceof Error
@@ -113,7 +113,7 @@ export function AdminLoginPage({ redirectTo = "/admin" }: { redirectTo?: string 
             />
           </div>
           <Button disabled={loading} icon={<LogIn size={18} />}>
-            {loading ? "Wird geprueft..." : "Einloggen"}
+            {loading ? "Wird geprüft..." : "Einloggen"}
           </Button>
           <Button
             type="button"

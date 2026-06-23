@@ -32,7 +32,7 @@ export function routeParam(req: Request, name: string) {
   const singleValue = Array.isArray(value) ? value[0] : value;
 
   if (!singleValue) {
-    throw new AppError(400, "INVALID_ROUTE_PARAM", "Der Routenparameter ist ungueltig.");
+    throw new AppError(400, "INVALID_ROUTE_PARAM", "Der Routenparameter ist ungültig.");
   }
 
   return singleValue;

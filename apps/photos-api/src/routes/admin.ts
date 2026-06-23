@@ -1,5 +1,5 @@
 import multer from "multer";
-import { Router } from "express";
+import { Request, Response, Router } from "express";
 import { createHash } from "node:crypto";
 import { nanoid } from "nanoid";
 import { env } from "../config/env";
@@ -46,7 +46,7 @@ const upload = multer({
   },
   fileFilter: (_req, file, callback) => {
     if (!allowedImageMimes.has(file.mimetype)) {
-      callback(new AppError(400, "UNSUPPORTED_IMAGE_TYPE", "Dieser Bildtyp wird nicht unterstuetzt."));
+      callback(new AppError(400, "UNSUPPORTED_IMAGE_TYPE", "Dieser Bildtyp wird nicht unterstützt."));
       return;
     }
     callback(null, true);
@@ -113,7 +113,7 @@ async function validateUploadReferences(fields: UploadPhotoFields, childIds: str
     throw new AppError(
       400,
       "INVALID_PHOTO_REFERENCES",
-      "Fuer ein Kind-Foto muss mindestens ein Kind ausgewaehlt sein."
+      "Für ein Kind-Foto muss mindestens ein Kind ausgewählt sein."
     );
   }
 
@@ -127,7 +127,7 @@ async function validateUploadReferences(fields: UploadPhotoFields, childIds: str
     throw new AppError(
       400,
       "INVALID_PHOTO_REFERENCES",
-      "Der Auftrag gehoert nicht zur ausgewaehlten Organisation."
+      "Der Auftrag gehört nicht zur ausgewählten Organisation."
     );
   }
 
@@ -135,7 +135,7 @@ async function validateUploadReferences(fields: UploadPhotoFields, childIds: str
     throw new AppError(
       400,
       "INVALID_PHOTO_REFERENCES",
-      "Die Klasse gehoert nicht zur ausgewaehlten Organisation und zum Auftrag."
+      "Die Klasse gehört nicht zur ausgewählten Organisation und zum Auftrag."
     );
   }
 
@@ -158,7 +158,7 @@ async function validateUploadReferences(fields: UploadPhotoFields, childIds: str
         throw new AppError(
           400,
           "INVALID_PHOTO_REFERENCES",
-          `Kind ${uniqueChildIds[index]} gehoert nicht zur ausgewaehlten Klasse.`
+          `Kind ${uniqueChildIds[index]} gehört nicht zur ausgewählten Klasse.`
         );
       }
     });
@@ -187,7 +187,7 @@ function photoProcessingError(error: unknown) {
   return new AppError(
     400,
     "PHOTO_PROCESSING_FAILED",
-    "Das Bild konnte nicht verarbeitet werden. Bitte pruefe Dateityp und Bilddatei.",
+    "Das Bild konnte nicht verarbeitet werden. Bitte prüfe Dateityp und Bilddatei.",
     { cause: error }
   );
 }
@@ -574,28 +574,28 @@ adminRouter.post(
   })
 );
 
-adminRouter.delete(
-  "/photos/:photoId",
-  asyncHandler(async (req, res) => {
-    const auth = getAuthContext(req);
-    const photoId = routeParam(req, "photoId");
-    const ref = adminDb().collection("photos").doc(photoId);
-    const existing = await ref.get();
+async function deletePhotoById(req: Request, res: Response) {
+  const auth = getAuthContext(req);
+  const photoId = routeParam(req, "photoId");
+  const ref = adminDb().collection("photos").doc(photoId);
+  const existing = await ref.get();
 
-    if (!existing.exists) {
-      throw new AppError(404, "PHOTO_NOT_FOUND", "Das Foto wurde nicht gefunden.");
-    }
+  if (!existing.exists) {
+    throw new AppError(404, "PHOTO_NOT_FOUND", "Das Foto wurde nicht gefunden.");
+  }
 
-    const photo = existing.data() as PhotoRecord;
-    const deletedFiles = await deletePhotoFiles(photo);
-    await ref.delete();
-    await writeAuditLog(auth, "admin.delete.photo", "photo", photoId, {
-      deletedFiles
-    });
+  const photo = existing.data() as PhotoRecord;
+  const deletedFiles = await deletePhotoFiles(photo);
+  await ref.delete();
+  await writeAuditLog(auth, "admin.delete.photo", "photo", photoId, {
+    deletedFiles
+  });
 
-    sendOk(res, { id: photoId, ...deletedFiles });
-  })
-);
+  sendOk(res, { id: photoId, ...deletedFiles });
+}
+
+adminRouter.post("/photos/:photoId/delete", asyncHandler(deletePhotoById));
+adminRouter.delete("/photos/:photoId", asyncHandler(deletePhotoById));
 
 adminRouter.patch(
   "/photos/:photoId",
