@@ -78,7 +78,7 @@ export async function getPhotoAvailability(
   return {
     storage,
     metadata,
-    displayable: storage.complete && metadata.complete
+    displayable: storage.complete && metadata.complete && photo.processingStatus !== "error"
   };
 }
 

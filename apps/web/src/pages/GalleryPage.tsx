@@ -1,4 +1,4 @@
-import { Filter, X } from "lucide-react";
+import { Download, Filter, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, fetchAuthorizedBlob } from "../api/photosApi";
 import { useAuth } from "../auth/useAuth";
@@ -213,6 +213,27 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
     setMessage("Foto wurde in den Warenkorb gelegt.");
   }
 
+  async function downloadOriginal(photo: GalleryPhoto) {
+    setError("");
+    try {
+      const blob = await fetchAuthorizedBlob(`/api/photos/${photo.photoId}/original`, getIdToken);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `foto-${photo.photoId}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Das Original konnte nicht heruntergeladen werden."
+      );
+    }
+  }
+
   if (!gallery || (adminView && !adminData && !error)) {
     return error ? <ErrorState message={error} /> : <Loading label="Galerie wird geladen..." />;
   }
@@ -357,8 +378,13 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
               ) : null}
               <div className="actions">
                 <Button type="button" onClick={() => addToCart(selected)}>In den Warenkorb</Button>
-                <Button type="button" variant="secondary" disabled>
-                  Digitaler Download spaeter verfuegbar
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon={<Download size={18} />}
+                  onClick={() => downloadOriginal(selected)}
+                >
+                  Original herunterladen
                 </Button>
               </div>
             </div>

@@ -1,332 +1,352 @@
+import { randomUUID } from "node:crypto";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 
-type Segment = readonly [number, number, number, number];
-
-type Glyph = Readonly<{
-  width: number;
-  segments: readonly Segment[];
-}>;
-
-type Point = {
-  x: number;
-  y: number;
-};
-
-const WATERMARK_GLYPHS: Record<string, Glyph> = {
-  V: {
-    width: 12,
-    segments: [
-      [0, 1, 6, 15],
-      [6, 15, 12, 1]
-    ]
-  },
-  O: {
-    width: 12,
-    segments: [
-      [2, 1, 10, 1],
-      [10, 1, 12, 3],
-      [12, 3, 12, 13],
-      [12, 13, 10, 15],
-      [10, 15, 2, 15],
-      [2, 15, 0, 13],
-      [0, 13, 0, 3],
-      [0, 3, 2, 1]
-    ]
-  },
-  R: {
-    width: 12,
-    segments: [
-      [0, 15, 0, 1],
-      [0, 1, 8, 1],
-      [8, 1, 12, 4],
-      [12, 4, 12, 7],
-      [12, 7, 8, 10],
-      [8, 10, 0, 10],
-      [7, 10, 12, 15]
-    ]
-  },
-  S: {
-    width: 12,
-    segments: [
-      [12, 2, 3, 2],
-      [3, 2, 0, 5],
-      [0, 5, 3, 8],
-      [3, 8, 9, 8],
-      [9, 8, 12, 11],
-      [12, 11, 9, 14],
-      [9, 14, 0, 14]
-    ]
-  },
-  C: {
-    width: 12,
-    segments: [
-      [12, 3, 10, 1],
-      [10, 1, 4, 1],
-      [4, 1, 0, 5],
-      [0, 5, 0, 11],
-      [0, 11, 4, 15],
-      [4, 15, 10, 15],
-      [10, 15, 12, 13]
-    ]
-  },
-  H: {
-    width: 12,
-    segments: [
-      [0, 1, 0, 15],
-      [12, 1, 12, 15],
-      [0, 8, 12, 8]
-    ]
-  },
-  A: {
-    width: 12,
-    segments: [
-      [0, 15, 6, 1],
-      [6, 1, 12, 15],
-      [2.5, 10, 9.5, 10]
-    ]
-  },
-  U: {
-    width: 12,
-    segments: [
-      [0, 1, 0, 11],
-      [0, 11, 3, 15],
-      [3, 15, 9, 15],
-      [9, 15, 12, 11],
-      [12, 11, 12, 1]
-    ]
-  }
-};
-
 const WATERMARK_TEXT = "VORSCHAU";
-const WATERMARK_GAP = 4.4;
-const GLYPH_HEIGHT = 16;
-const WATERMARK_ANGLE = (-31 * Math.PI) / 180;
-const PREVIEW_MAX_SIZE = 1080;
+const WATERMARK_ANGLE_DEGREES = -32;
+const PREVIEW_MAX_SIZE = 1200;
+const PREVIEW_QUALITY = 62;
+const PREVIEW_BLUR_SIGMA = 1.15;
+const THUMB_MAX_SIZE = 400;
+const THUMB_QUALITY = 78;
 
-function watermarkWordWidth() {
-  return WATERMARK_TEXT.split("").reduce((width, letter, index) => {
-    return width + WATERMARK_GLYPHS[letter].width + (index === WATERMARK_TEXT.length - 1 ? 0 : WATERMARK_GAP);
-  }, 0);
-}
+export type GeneratedImageVariant = {
+  width: number;
+  height: number;
+  fileSize: number;
+};
 
-const WATERMARK_WORD_WIDTH = watermarkWordWidth();
+export type GeneratedPhotoDerivatives = {
+  width: number;
+  height: number;
+  preview: GeneratedImageVariant;
+  thumb: GeneratedImageVariant;
+};
+
+export type GeneratePhotoDerivativeOptions = {
+  overwrite?: boolean;
+};
+
+type TempImageVariant = GeneratedImageVariant & {
+  tempPath: string;
+  finalPath: string;
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function blendPixel(
-  pixels: Buffer,
-  width: number,
-  height: number,
-  x: number,
-  y: number,
-  color: readonly [number, number, number],
-  alpha: number
-) {
-  const pixelX = Math.round(x);
-  const pixelY = Math.round(y);
-
-  if (pixelX < 0 || pixelY < 0 || pixelX >= width || pixelY >= height || alpha <= 0) {
-    return;
-  }
-
-  const sourceAlpha = clamp(alpha, 0, 1);
-  const index = (pixelY * width + pixelX) * 4;
-  const targetAlpha = pixels[index + 3] / 255;
-  const outputAlpha = sourceAlpha + targetAlpha * (1 - sourceAlpha);
-
-  if (outputAlpha <= 0) {
-    return;
-  }
-
-  pixels[index] = Math.round((color[0] * sourceAlpha + pixels[index] * targetAlpha * (1 - sourceAlpha)) / outputAlpha);
-  pixels[index + 1] = Math.round(
-    (color[1] * sourceAlpha + pixels[index + 1] * targetAlpha * (1 - sourceAlpha)) / outputAlpha
-  );
-  pixels[index + 2] = Math.round(
-    (color[2] * sourceAlpha + pixels[index + 2] * targetAlpha * (1 - sourceAlpha)) / outputAlpha
-  );
-  pixels[index + 3] = Math.round(outputAlpha * 255);
+function escapeXml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;");
 }
 
-function drawLine(
-  pixels: Buffer,
-  width: number,
-  height: number,
-  start: Point,
-  end: Point,
-  thickness: number,
-  color: readonly [number, number, number],
-  alpha: number
-) {
-  const radius = thickness / 2;
-  const minX = Math.max(0, Math.floor(Math.min(start.x, end.x) - radius - 1));
-  const maxX = Math.min(width - 1, Math.ceil(Math.max(start.x, end.x) + radius + 1));
-  const minY = Math.max(0, Math.floor(Math.min(start.y, end.y) - radius - 1));
-  const maxY = Math.min(height - 1, Math.ceil(Math.max(start.y, end.y) + radius + 1));
-  const deltaX = end.x - start.x;
-  const deltaY = end.y - start.y;
-  const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+function temporaryOutputPath(finalPath: string) {
+  const parsed = path.parse(finalPath);
+  return path.join(parsed.dir, `.${parsed.name}.${randomUUID()}.tmp${parsed.ext}`);
+}
 
-  if (lengthSquared === 0) {
+async function safeUnlink(filePath: string) {
+  try {
+    await fsp.unlink(filePath);
+  } catch {
+    // Best effort cleanup only.
+  }
+}
+
+async function assertTargetCanBeWritten(finalPath: string, overwrite: boolean) {
+  if (overwrite) {
     return;
   }
 
-  for (let pixelY = minY; pixelY <= maxY; pixelY += 1) {
-    for (let pixelX = minX; pixelX <= maxX; pixelX += 1) {
-      const centerX = pixelX + 0.5;
-      const centerY = pixelY + 0.5;
-      const segmentPosition = clamp(
-        ((centerX - start.x) * deltaX + (centerY - start.y) * deltaY) / lengthSquared,
-        0,
-        1
+  try {
+    await fsp.access(finalPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+
+  throw new Error(`Target file already exists: ${finalPath}`);
+}
+
+async function fileSize(filePath: string) {
+  const stat = await fsp.stat(filePath);
+  return stat.size;
+}
+
+async function moveTempVariant(variant: TempImageVariant, overwrite: boolean) {
+  await assertTargetCanBeWritten(variant.finalPath, overwrite);
+  await fsp.rename(variant.tempPath, variant.finalPath);
+}
+
+function createWatermarkText({
+  x,
+  y,
+  fontSize,
+  fillOpacity,
+  strokeOpacity,
+  strokeWidth,
+  shadowOffset
+}: {
+  x: number;
+  y: number;
+  fontSize: number;
+  fillOpacity: number;
+  strokeOpacity: number;
+  strokeWidth: number;
+  shadowOffset: number;
+}) {
+  const text = escapeXml(WATERMARK_TEXT);
+  const letterSpacing = Math.round(fontSize * 0.055);
+
+  return `
+    <text x="${x + shadowOffset}" y="${y + shadowOffset}" text-anchor="middle" dominant-baseline="middle"
+      font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="900"
+      letter-spacing="${letterSpacing}" fill="#111827" fill-opacity="${strokeOpacity * 0.8}"
+      stroke="#111827" stroke-opacity="${strokeOpacity}" stroke-width="${strokeWidth * 1.25}"
+      paint-order="stroke fill">${text}</text>
+    <text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle"
+      font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="900"
+      letter-spacing="${letterSpacing}" fill="#ffffff" fill-opacity="${fillOpacity}"
+      stroke="#111827" stroke-opacity="${strokeOpacity}" stroke-width="${strokeWidth}"
+      paint-order="stroke fill">${text}</text>`;
+}
+
+function createPreviewWatermarkSvg(width: number, height: number) {
+  const minSide = Math.min(width, height);
+  const fontSize = Math.round(clamp(minSide * 0.112, 58, 128));
+  const centerFontSize = Math.round(clamp(minSide * 0.22, 112, 260));
+  const tileX = Math.round(fontSize * 6.8);
+  const tileY = Math.round(fontSize * 2.15);
+  const diagonal = Math.ceil(Math.hypot(width, height));
+  const centerX = Math.round(width / 2);
+  const centerY = Math.round(height / 2);
+  const textElements: string[] = [];
+
+  for (let y = -diagonal; y <= height + diagonal; y += tileY) {
+    for (let x = -diagonal; x <= width + diagonal; x += tileX) {
+      textElements.push(
+        createWatermarkText({
+          x,
+          y,
+          fontSize,
+          fillOpacity: 0.42,
+          strokeOpacity: 0.5,
+          strokeWidth: Math.max(4, Math.round(fontSize * 0.085)),
+          shadowOffset: Math.max(2, Math.round(fontSize * 0.035))
+        })
       );
-      const nearestX = start.x + segmentPosition * deltaX;
-      const nearestY = start.y + segmentPosition * deltaY;
-      const distance = Math.hypot(centerX - nearestX, centerY - nearestY);
-
-      if (distance <= radius + 0.8) {
-        blendPixel(pixels, width, height, pixelX, pixelY, color, alpha * clamp(radius + 0.8 - distance, 0, 1));
-      }
-    }
-  }
-}
-
-function transformGlyphPoint(
-  x: number,
-  y: number,
-  offsetX: number,
-  centerX: number,
-  centerY: number,
-  scale: number
-) {
-  const localX = (offsetX + x - WATERMARK_WORD_WIDTH / 2) * scale;
-  const localY = (y - GLYPH_HEIGHT / 2) * scale;
-  const cos = Math.cos(WATERMARK_ANGLE);
-  const sin = Math.sin(WATERMARK_ANGLE);
-
-  return {
-    x: centerX + localX * cos - localY * sin,
-    y: centerY + localX * sin + localY * cos
-  };
-}
-
-function drawWatermarkWord(
-  pixels: Buffer,
-  width: number,
-  height: number,
-  centerX: number,
-  centerY: number,
-  fontSize: number,
-  opacity: number
-) {
-  const scale = fontSize / GLYPH_HEIGHT;
-  const strokeWidth = Math.max(4, fontSize * 0.105);
-  const shadowOffset = Math.max(1.6, fontSize * 0.022);
-  let offsetX = 0;
-  const segments: Array<{ start: Point; end: Point }> = [];
-
-  for (const letter of WATERMARK_TEXT) {
-    const glyph = WATERMARK_GLYPHS[letter];
-
-    for (const [x1, y1, x2, y2] of glyph.segments) {
-      segments.push({
-        start: transformGlyphPoint(x1, y1, offsetX, centerX, centerY, scale),
-        end: transformGlyphPoint(x2, y2, offsetX, centerX, centerY, scale)
-      });
-    }
-
-    offsetX += glyph.width + WATERMARK_GAP;
-  }
-
-  for (const { start, end } of segments) {
-    drawLine(
-      pixels,
-      width,
-      height,
-      { x: start.x + shadowOffset, y: start.y + shadowOffset },
-      { x: end.x + shadowOffset, y: end.y + shadowOffset },
-      strokeWidth * 1.35,
-      [0, 0, 0],
-      opacity * 0.48
-    );
-  }
-
-  for (const { start, end } of segments) {
-    drawLine(pixels, width, height, start, end, strokeWidth, [255, 255, 255], opacity);
-  }
-}
-
-function createPreviewWatermarkOverlay(width: number, height: number) {
-  const pixels = Buffer.alloc(width * height * 4);
-  const baseFontSize = Math.max(58, Math.round(Math.min(width, height) * 0.092));
-  const wordWidth = WATERMARK_WORD_WIDTH * (baseFontSize / GLYPH_HEIGHT);
-  const gapX = Math.round(wordWidth * 0.78);
-  const gapY = Math.round(baseFontSize * 1.45);
-
-  for (let y = -height; y <= height * 2; y += gapY) {
-    for (let x = -width; x <= width * 2; x += gapX) {
-      drawWatermarkWord(pixels, width, height, x, y, baseFontSize, 0.46);
     }
   }
 
-  drawWatermarkWord(pixels, width, height, width / 2, height / 2, Math.round(baseFontSize * 1.85), 0.68);
+  const centerText = createWatermarkText({
+    x: centerX,
+    y: centerY,
+    fontSize: centerFontSize,
+    fillOpacity: 0.62,
+    strokeOpacity: 0.72,
+    strokeWidth: Math.max(7, Math.round(centerFontSize * 0.075)),
+    shadowOffset: Math.max(4, Math.round(centerFontSize * 0.032))
+  });
 
-  return pixels;
+  return Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <rect width="100%" height="100%" fill="none"/>
+      <g transform="rotate(${WATERMARK_ANGLE_DEGREES} ${centerX} ${centerY})">
+        ${textElements.join("\n")}
+        ${centerText}
+      </g>
+    </svg>`
+  );
+}
+
+export async function readOriginalImageDimensions(originalAbsolutePath: string) {
+  const metadata = await sharp(originalAbsolutePath).metadata();
+  const width = metadata.width || 0;
+  const height = metadata.height || 0;
+  const orientation = metadata.orientation || 1;
+
+  if ([5, 6, 7, 8].includes(orientation)) {
+    return { width: height, height: width };
+  }
+
+  return { width, height };
+}
+
+async function renderWatermarkedPreviewToTemp(
+  originalAbsolutePath: string,
+  previewAbsolutePath: string
+): Promise<TempImageVariant> {
+  await fsp.mkdir(path.dirname(previewAbsolutePath), { recursive: true });
+  const tempPath = temporaryOutputPath(previewAbsolutePath);
+
+  try {
+    const resized = await sharp(originalAbsolutePath)
+      .rotate()
+      .resize({
+        width: PREVIEW_MAX_SIZE,
+        height: PREVIEW_MAX_SIZE,
+        fit: "inside",
+        withoutEnlargement: true
+      })
+      .blur(PREVIEW_BLUR_SIGMA)
+      .toColorspace("srgb")
+      .removeAlpha()
+      .png()
+      .toBuffer({ resolveWithObject: true });
+
+    const watermark = createPreviewWatermarkSvg(resized.info.width, resized.info.height);
+    const output = await sharp(resized.data)
+      .composite([{ input: watermark, top: 0, left: 0, blend: "over" }])
+      .webp({ quality: PREVIEW_QUALITY, effort: 5, smartSubsample: true })
+      .toFile(tempPath);
+
+    return {
+      tempPath,
+      finalPath: previewAbsolutePath,
+      width: output.width,
+      height: output.height,
+      fileSize: await fileSize(tempPath)
+    };
+  } catch (error) {
+    await safeUnlink(tempPath);
+    throw error;
+  }
+}
+
+async function renderThumbnailToTemp(
+  originalAbsolutePath: string,
+  thumbAbsolutePath: string
+): Promise<TempImageVariant> {
+  await fsp.mkdir(path.dirname(thumbAbsolutePath), { recursive: true });
+  const tempPath = temporaryOutputPath(thumbAbsolutePath);
+
+  try {
+    const output = await sharp(originalAbsolutePath)
+      .rotate()
+      .resize({
+        width: THUMB_MAX_SIZE,
+        height: THUMB_MAX_SIZE,
+        fit: "inside",
+        withoutEnlargement: true
+      })
+      .toColorspace("srgb")
+      .removeAlpha()
+      .webp({ quality: THUMB_QUALITY, effort: 4, smartSubsample: true })
+      .toFile(tempPath);
+
+    return {
+      tempPath,
+      finalPath: thumbAbsolutePath,
+      width: output.width,
+      height: output.height,
+      fileSize: await fileSize(tempPath)
+    };
+  } catch (error) {
+    await safeUnlink(tempPath);
+    throw error;
+  }
 }
 
 export async function createWatermarkedPreview(
   originalAbsolutePath: string,
-  previewAbsolutePath: string
-) {
-  await fsp.mkdir(path.dirname(previewAbsolutePath), { recursive: true });
+  previewAbsolutePath: string,
+  options: GeneratePhotoDerivativeOptions = {}
+): Promise<GeneratedImageVariant> {
+  const overwrite = options.overwrite ?? false;
+  await assertTargetCanBeWritten(previewAbsolutePath, overwrite);
+  const preview = await renderWatermarkedPreviewToTemp(originalAbsolutePath, previewAbsolutePath);
 
-  const resized = await sharp(originalAbsolutePath)
-    .rotate()
-    .resize({
-      width: PREVIEW_MAX_SIZE,
-      height: PREVIEW_MAX_SIZE,
-      fit: "inside",
-      withoutEnlargement: true
-    })
-    .toColorspace("srgb")
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  const watermark = createPreviewWatermarkOverlay(resized.info.width, resized.info.height);
-
-  await sharp(resized.data, {
-    raw: {
-      width: resized.info.width,
-      height: resized.info.height,
-      channels: resized.info.channels
-    }
-  })
-    .composite([
-      {
-        input: watermark,
-        raw: { width: resized.info.width, height: resized.info.height, channels: 4 },
-        top: 0,
-        left: 0
-      }
-    ])
-    .webp({ quality: 52, effort: 5 })
-    .toFile(previewAbsolutePath);
+  try {
+    await moveTempVariant(preview, overwrite);
+    return {
+      width: preview.width,
+      height: preview.height,
+      fileSize: preview.fileSize
+    };
+  } catch (error) {
+    await safeUnlink(preview.tempPath);
+    throw error;
+  }
 }
 
-export async function generatePreviewAndThumb(
+export async function createThumbnail(
+  originalAbsolutePath: string,
+  thumbAbsolutePath: string,
+  options: GeneratePhotoDerivativeOptions = {}
+): Promise<GeneratedImageVariant> {
+  const overwrite = options.overwrite ?? false;
+  await assertTargetCanBeWritten(thumbAbsolutePath, overwrite);
+  const thumb = await renderThumbnailToTemp(originalAbsolutePath, thumbAbsolutePath);
+
+  try {
+    await moveTempVariant(thumb, overwrite);
+    return {
+      width: thumb.width,
+      height: thumb.height,
+      fileSize: thumb.fileSize
+    };
+  } catch (error) {
+    await safeUnlink(thumb.tempPath);
+    throw error;
+  }
+}
+
+export async function generatePhotoDerivatives(
   originalAbsolutePath: string,
   previewAbsolutePath: string,
-  thumbAbsolutePath: string
-) {
-  await createWatermarkedPreview(originalAbsolutePath, previewAbsolutePath);
+  thumbAbsolutePath: string,
+  options: GeneratePhotoDerivativeOptions = {}
+): Promise<GeneratedPhotoDerivatives> {
+  const overwrite = options.overwrite ?? false;
+  await Promise.all([
+    assertTargetCanBeWritten(previewAbsolutePath, overwrite),
+    assertTargetCanBeWritten(thumbAbsolutePath, overwrite)
+  ]);
 
-  await sharp(originalAbsolutePath)
-    .rotate()
-    .resize({ width: 480, withoutEnlargement: true })
-    .webp({ quality: 75 })
-    .toFile(thumbAbsolutePath);
+  const finalPaths = [previewAbsolutePath, thumbAbsolutePath];
+  const tempVariants: TempImageVariant[] = [];
+
+  try {
+    // Derivatives are rendered to temp files first; final paths appear only after sharp succeeded.
+    const preview = await renderWatermarkedPreviewToTemp(originalAbsolutePath, previewAbsolutePath);
+    tempVariants.push(preview);
+
+    const thumb = await renderThumbnailToTemp(originalAbsolutePath, thumbAbsolutePath);
+    tempVariants.push(thumb);
+
+    await moveTempVariant(preview, overwrite);
+    await moveTempVariant(thumb, overwrite);
+
+    const dimensions = await readOriginalImageDimensions(originalAbsolutePath);
+
+    return {
+      width: dimensions.width || preview.width,
+      height: dimensions.height || preview.height,
+      preview: {
+        width: preview.width,
+        height: preview.height,
+        fileSize: preview.fileSize
+      },
+      thumb: {
+        width: thumb.width,
+        height: thumb.height,
+        fileSize: thumb.fileSize
+      }
+    };
+  } catch (error) {
+    await Promise.all(tempVariants.map((variant) => safeUnlink(variant.tempPath)));
+
+    if (!overwrite) {
+      await Promise.all(finalPaths.map((finalPath) => safeUnlink(finalPath)));
+    }
+
+    throw error;
+  }
 }

@@ -10,6 +10,18 @@ import { Loading } from "../components/Loading";
 import { AdminData, Photo, PhotoType, PhotoVisibility } from "../types/domain";
 import { compactId, labelForPhotoType } from "../utils/format";
 
+function formatBytes(value?: number) {
+  if (!value) {
+    return "-";
+  }
+
+  if (value < 1024 * 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function AdminPhotosPage() {
   const { getIdToken } = useAuth();
   const [data, setData] = useState<AdminData | null>(null);
@@ -113,6 +125,7 @@ function PhotoEditor({
   const metadataStatus = photo.metadataStatus;
   const hasMissingFiles = storageStatus ? !storageStatus.complete : false;
   const hasMissingMetadata = metadataStatus ? !metadataStatus.complete : false;
+  const hasProcessingError = photo.processingStatus === "error";
   const childNames = photo.childIds
     .map((childId) => data.children.find((child) => child.id === childId))
     .map((child) => child?.displayName || child?.pseudonym || "")
@@ -201,10 +214,15 @@ function PhotoEditor({
           <div>
             <h3>{photo.originalFilename || `Foto ${compactId(photo.id)}`}</h3>
             <p>{childNames.join(", ") || "Keine direkte Kindzuordnung"}</p>
-            <p>{labelForPhotoType(photo.type)} · {compactId(photo.id)}</p>
+            <p>{labelForPhotoType(photo.type)} - {compactId(photo.id)}</p>
           </div>
         </div>
         <div className="status-pills">
+          {hasProcessingError ? (
+            <span className="pill warning">
+              <AlertTriangle size={14} /> Verarbeitung fehlgeschlagen
+            </span>
+          ) : null}
           {hasMissingFiles ? (
             <span className="pill warning">
               <AlertTriangle size={14} /> Datei fehlt
@@ -224,8 +242,13 @@ function PhotoEditor({
               <span>Original: {storageStatus.original ? "vorhanden" : "fehlt"}</span>
               <span>Preview: {storageStatus.preview ? "vorhanden" : "fehlt"}</span>
               <span>Thumb: {storageStatus.thumb ? "vorhanden" : "fehlt"}</span>
+              <span>Originalgroesse: {formatBytes(photo.fileSizeOriginal || photo.originalSize)}</span>
+              <span>Previewgroesse: {formatBytes(photo.fileSizePreview)}</span>
+              <span>Thumbgroesse: {formatBytes(photo.fileSizeThumb)}</span>
             </>
           ) : null}
+          {photo.width && photo.height ? <span>Pixel: {photo.width} x {photo.height}</span> : null}
+          {photo.processingStatus ? <span>Status: {photo.processingStatus}</span> : null}
           {metadataStatus ? (
             <>
               <span>Schule: {metadataStatus.organization ? "vorhanden" : "fehlt"}</span>
@@ -235,6 +258,7 @@ function PhotoEditor({
           ) : null}
         </div>
       ) : null}
+      {photo.processingError ? <ErrorState message={photo.processingError} /> : null}
       <div className="grid two">
         <div className="form-row">
           <label>Typ</label>

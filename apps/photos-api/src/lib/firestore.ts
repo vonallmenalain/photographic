@@ -1,6 +1,8 @@
 import { adminDb } from "./firebaseAdmin";
 import { AuthContext } from "./auth";
-import { GuardianLinkRecord, PhotoRecord } from "../types/domain";
+import { GuardianLinkRecord, OrderRecord, PhotoRecord } from "../types/domain";
+
+const PAID_ORDER_STATUSES = new Set(["paid", "completed", "fulfilled"]);
 
 export function serializeFirestore(value: unknown): unknown {
   if (value === null || value === undefined) {
@@ -86,4 +88,25 @@ export function canAccessPhoto(
   }
 
   return false;
+}
+
+export async function hasPaidOriginalAccess(auth: AuthContext, photo: PhotoRecord) {
+  if (auth.role === "admin") {
+    return true;
+  }
+
+  const snapshot = await adminDb()
+    .collection("orders")
+    .where("emailLower", "==", auth.emailLower)
+    .get();
+
+  return snapshot.docs.some((doc) => {
+    const order = doc.data() as OrderRecord;
+
+    return (
+      order.jobId === photo.jobId &&
+      PAID_ORDER_STATUSES.has(order.status) &&
+      order.items.some((item) => item.photoId === (photo.id || photo.photoId))
+    );
+  });
 }

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { env } from "../config/env";
 import { AppError } from "./response";
 
@@ -42,9 +43,9 @@ export function photoRelativePaths(orgId: string, jobId: string, photoId: string
   const dir = path.posix.join(`org_${orgId}`, `job_${jobId}`, `ph_${photoId}`);
   return {
     dir,
-    originalPath: path.posix.join(dir, `original.${originalExt}`),
-    previewPath: path.posix.join(dir, "preview.webp"),
-    thumbPath: path.posix.join(dir, "thumb.webp")
+    originalPath: path.posix.join(dir, "original", `original.${originalExt}`),
+    previewPath: path.posix.join(dir, "previews", "preview.webp"),
+    thumbPath: path.posix.join(dir, "thumbs", "thumb.webp")
   };
 }
 
@@ -65,9 +66,9 @@ export function resolveInsidePhotoRoot(relativePath: string) {
 }
 
 export type PhotoFilePaths = {
-  originalPath: string;
-  previewPath: string;
-  thumbPath: string;
+  originalPath?: string | null;
+  previewPath?: string | null;
+  thumbPath?: string | null;
 };
 
 export type PhotoStorageStatus = {
@@ -77,7 +78,11 @@ export type PhotoStorageStatus = {
   complete: boolean;
 };
 
-export async function relativeFileExists(relativePath: string) {
+export async function relativeFileExists(relativePath?: string | null) {
+  if (!relativePath) {
+    return false;
+  }
+
   try {
     const absolutePath = resolveInsidePhotoRoot(relativePath);
     await fsp.access(absolutePath, fs.constants.R_OK);
@@ -102,7 +107,11 @@ export async function getPhotoStorageStatus(paths: PhotoFilePaths): Promise<Phot
   };
 }
 
-async function deleteRelativeFileIfExists(relativePath: string) {
+async function deleteRelativeFileIfExists(relativePath?: string | null) {
+  if (!relativePath) {
+    return false;
+  }
+
   try {
     const absolutePath = resolveInsidePhotoRoot(relativePath);
     await fsp.unlink(absolutePath);
@@ -118,11 +127,25 @@ export async function deletePhotoFiles(paths: PhotoFilePaths) {
     deleteRelativeFileIfExists(paths.previewPath),
     deleteRelativeFileIfExists(paths.thumbPath)
   ]);
-  const dir = path.posix.dirname(paths.originalPath);
+  const cleanupDirs = [
+    paths.originalPath ? path.posix.dirname(paths.originalPath) : "",
+    paths.previewPath ? path.posix.dirname(paths.previewPath) : "",
+    paths.thumbPath ? path.posix.dirname(paths.thumbPath) : ""
+  ].filter(Boolean);
 
-  if (dir && dir !== ".") {
+  for (const dir of cleanupDirs) {
     try {
       await fsp.rmdir(resolveInsidePhotoRoot(dir));
+    } catch {
+      // Directory cleanup is best-effort; non-empty or missing folders are fine.
+    }
+  }
+
+  const firstPath = paths.originalPath || paths.previewPath || paths.thumbPath;
+  const photoDir = firstPath ? path.posix.dirname(path.posix.dirname(firstPath)) : "";
+  if (photoDir && photoDir !== ".") {
+    try {
+      await fsp.rmdir(resolveInsidePhotoRoot(photoDir));
     } catch {
       // Directory cleanup is best-effort; non-empty or missing folders are fine.
     }
@@ -138,11 +161,46 @@ export async function deletePhotoFiles(paths: PhotoFilePaths) {
 export async function writeBufferToRelativePath(relativePath: string, buffer: Buffer) {
   const absolutePath = resolveInsidePhotoRoot(relativePath);
   await fsp.mkdir(path.dirname(absolutePath), { recursive: true });
-  await fsp.writeFile(absolutePath, buffer, { flag: "wx" });
+  const parsed = path.parse(absolutePath);
+  const tempPath = path.join(parsed.dir, `.${parsed.name}.${randomUUID()}.tmp${parsed.ext}`);
+
+  try {
+    await fsp.writeFile(tempPath, buffer, { flag: "wx" });
+    try {
+      await fsp.access(absolutePath);
+      throw new AppError(409, "FILE_ALREADY_EXISTS", "Die Bilddatei existiert bereits.");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+    await fsp.rename(tempPath, absolutePath);
+  } catch (error) {
+    try {
+      await fsp.unlink(tempPath);
+    } catch {
+      // Best effort cleanup only.
+    }
+    throw error;
+  }
   return absolutePath;
 }
 
-export async function ensureReadableFile(relativePath: string) {
+export async function getRelativeFileSize(relativePath?: string | null) {
+  if (!relativePath) {
+    return 0;
+  }
+
+  const absolutePath = resolveInsidePhotoRoot(relativePath);
+  const stat = await fsp.stat(absolutePath);
+  return stat.size;
+}
+
+export async function ensureReadableFile(relativePath?: string | null) {
+  if (!relativePath) {
+    throw new AppError(404, "FILE_NOT_FOUND", "Die Bilddatei wurde nicht gefunden.");
+  }
+
   const absolutePath = resolveInsidePhotoRoot(relativePath);
   try {
     await fsp.access(absolutePath, fs.constants.R_OK);

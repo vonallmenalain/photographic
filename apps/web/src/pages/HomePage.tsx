@@ -32,7 +32,7 @@ export function HomePage() {
         </Card>
         <Card>
           <h3>Lokales Archiv</h3>
-          <p>Originaldateien bleiben auf dem QNAP und sind im MVP nicht downloadbar.</p>
+          <p>Originaldateien bleiben auf dem QNAP und werden erst nach Berechtigungs- und Kaufpruefung gestreamt.</p>
         </Card>
       </div>
     </>

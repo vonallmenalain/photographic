@@ -1,5 +1,6 @@
 import multer from "multer";
 import { Router } from "express";
+import { createHash } from "node:crypto";
 import { nanoid } from "nanoid";
 import { env } from "../config/env";
 import { getAuthContext } from "../lib/auth";
@@ -7,7 +8,7 @@ import { writeAuditLog } from "../lib/audit";
 import { normalizeEmail } from "../lib/admin";
 import { adminDb, serverTimestamp } from "../lib/firebaseAdmin";
 import { listCollection } from "../lib/firestore";
-import { generatePreviewAndThumb } from "../lib/imageProcessing";
+import { generatePhotoDerivatives } from "../lib/imageProcessing";
 import { buildPhotoReferenceSets, getPhotoAvailability } from "../lib/photoAvailability";
 import { randomId } from "../lib/paths";
 import { importRosterRows, parseRosterRowsFromExcel } from "../lib/rosterImport";
@@ -16,6 +17,7 @@ import {
   allowedImageMimes,
   deletePhotoFiles,
   extensionForMime,
+  getRelativeFileSize,
   photoRelativePaths,
   resolveInsidePhotoRoot,
   writeBufferToRelativePath
@@ -67,6 +69,14 @@ const importUpload = multer({
     callback(null, true);
   }
 });
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function sha256(buffer: Buffer) {
+  return createHash("sha256").update(buffer).digest("hex");
+}
 
 adminRouter.get(
   "/data",
@@ -305,42 +315,111 @@ adminRouter.post(
     const photoId = nanoid(18);
     const originalExt = extensionForMime(req.file.mimetype);
     const paths = photoRelativePaths(fields.orgId, fields.jobId, photoId, originalExt);
+    const checksumSha256 = sha256(req.file.buffer);
+    let originalAbsolutePath: string | null = null;
 
-    const originalAbsolutePath = await writeBufferToRelativePath(paths.originalPath, req.file.buffer);
-    const previewAbsolutePath = resolveInsidePhotoRoot(paths.previewPath);
-    const thumbAbsolutePath = resolveInsidePhotoRoot(paths.thumbPath);
-    await generatePreviewAndThumb(originalAbsolutePath, previewAbsolutePath, thumbAbsolutePath);
+    try {
+      originalAbsolutePath = await writeBufferToRelativePath(paths.originalPath, req.file.buffer);
+      const previewAbsolutePath = resolveInsidePhotoRoot(paths.previewPath);
+      const thumbAbsolutePath = resolveInsidePhotoRoot(paths.thumbPath);
+      const derivatives = await generatePhotoDerivatives(
+        originalAbsolutePath,
+        previewAbsolutePath,
+        thumbAbsolutePath
+      );
+      const fileSizeOriginal = await getRelativeFileSize(paths.originalPath);
 
-    const metadata: PhotoRecord = {
-      orgId: fields.orgId,
-      jobId: fields.jobId,
-      classId: fields.classId,
-      childIds,
-      type: fields.type,
-      visibility: fields.visibility,
-      originalPath: paths.originalPath,
-      previewPath: paths.previewPath,
-      thumbPath: paths.thumbPath,
-      originalFilename: req.file.originalname,
-      originalMimeType: req.file.mimetype,
-      originalSize: req.file.size,
-      createdAt: serverTimestamp(),
-      createdByUid: auth.uid,
-      updatedAt: serverTimestamp()
-    };
+      const metadata: PhotoRecord = {
+        photoId,
+        albumId: fields.jobId,
+        schoolId: fields.orgId,
+        orgId: fields.orgId,
+        jobId: fields.jobId,
+        classId: fields.classId,
+        childIds,
+        type: fields.type,
+        visibility: fields.visibility,
+        // Persistent file variants: original is private; thumb and preview are streamed by protected API routes.
+        originalPath: paths.originalPath,
+        previewPath: paths.previewPath,
+        thumbPath: paths.thumbPath,
+        originalFilename: req.file.originalname,
+        originalMimeType: req.file.mimetype,
+        originalSize: req.file.size,
+        width: derivatives.width,
+        height: derivatives.height,
+        fileSizeOriginal,
+        fileSizePreview: derivatives.preview.fileSize,
+        fileSizeThumb: derivatives.thumb.fileSize,
+        processingStatus: "ready",
+        processingError: null,
+        checksumSha256,
+        uploadedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        createdByUid: auth.uid,
+        updatedAt: serverTimestamp()
+      };
 
-    await adminDb().collection("photos").doc(photoId).set(metadata);
-    await writeAuditLog(auth, "admin.upload.photo", "photo", photoId, {
-      orgId: fields.orgId,
-      jobId: fields.jobId,
-      classId: fields.classId,
-      type: fields.type,
-      visibility: fields.visibility,
-      childIds
-    });
+      await adminDb().collection("photos").doc(photoId).set(metadata);
+      await writeAuditLog(auth, "admin.upload.photo", "photo", photoId, {
+        orgId: fields.orgId,
+        jobId: fields.jobId,
+        classId: fields.classId,
+        type: fields.type,
+        visibility: fields.visibility,
+        childIds,
+        processingStatus: "ready"
+      });
 
-    const { originalPath, previewPath, thumbPath, ...safeMetadata } = metadata;
-    sendOk(res, { id: photoId, ...safeMetadata }, 201);
+      const { originalPath, previewPath, thumbPath, ...safeMetadata } = metadata;
+      sendOk(res, { id: photoId, ...safeMetadata }, 201);
+    } catch (error) {
+      const message = errorMessage(error);
+      console.error(`[photo-processing-error] ${photoId}: ${message}`);
+
+      if (originalAbsolutePath) {
+        await adminDb().collection("photos").doc(photoId).set({
+          photoId,
+          albumId: fields.jobId,
+          schoolId: fields.orgId,
+          orgId: fields.orgId,
+          jobId: fields.jobId,
+          classId: fields.classId,
+          childIds,
+          type: fields.type,
+          visibility: fields.visibility,
+          originalPath: paths.originalPath,
+          previewPath: null,
+          thumbPath: null,
+          originalFilename: req.file.originalname,
+          originalMimeType: req.file.mimetype,
+          originalSize: req.file.size,
+          fileSizeOriginal: await getRelativeFileSize(paths.originalPath).catch(() => req.file?.size || 0),
+          fileSizePreview: 0,
+          fileSizeThumb: 0,
+          processingStatus: "error",
+          processingError: message,
+          checksumSha256,
+          uploadedAt: serverTimestamp(),
+          createdAt: serverTimestamp(),
+          createdByUid: auth.uid,
+          updatedAt: serverTimestamp()
+        });
+
+        await writeAuditLog(auth, "admin.upload.photoFailed", "photo", photoId, {
+          orgId: fields.orgId,
+          jobId: fields.jobId,
+          classId: fields.classId,
+          processingError: message
+        });
+      }
+
+      throw new AppError(
+        500,
+        "PHOTO_PROCESSING_FAILED",
+        "Das Foto wurde nicht vollstaendig verarbeitet. Bitte pruefe die Admin-Ansicht und versuche die Derivate neu zu erzeugen."
+      );
+    }
   })
 );
 

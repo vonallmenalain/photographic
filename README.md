@@ -140,13 +140,42 @@ VITE_PHOTOS_API_BASE_URL=https://api.fotos.alae.app
 
 ## Preview-Dateien neu generieren
 
-Bestehende Preview-Dateien koennen aus den unveraenderten Originaldateien neu erzeugt werden:
+Bestehende Derivate koennen aus den unveraenderten Originaldateien neu erzeugt werden:
 
 ```bash
 npm run regenerate:previews
 ```
 
-Das Script liest die `photos`-Metadaten aus Firestore, verwendet die vorhandenen `originalPath`- und `previewPath`-Felder und schreibt nur die jeweilige `preview.webp` neu. Originaldateien, Thumbnails und Firestore-Daten werden nicht veraendert. Fehler bei einzelnen Bildern werden geloggt; danach laeuft das Script mit dem naechsten Bild weiter.
+Das Script liest die `photos`-Metadaten aus Firestore, prueft `originalPath`, `previewPath` und `thumbPath`, erzeugt fehlende Preview-/Thumbnail-Dateien neu und aktualisiert Dateigroessen, Bildmasse und `processingStatus`. Vorhandene Previews werden nur kontrolliert ueberschrieben:
+
+```bash
+npm run regenerate:previews -- --overwrite
+npm run regenerate:previews -- --limit=20
+```
+
+Fehler bei einzelnen Bildern werden geloggt und im jeweiligen Firestore-Dokument als `processingStatus: "error"` mit `processingError` gespeichert; danach laeuft das Script mit dem naechsten Bild weiter.
+
+## Bild-Pipeline
+
+Jeder neue Upload erzeugt drei lokale Varianten unter `PHOTO_ROOT`:
+
+```text
+org_abc/job_def/ph_xyz/original/original.jpg
+org_abc/job_def/ph_xyz/thumbs/thumb.webp
+org_abc/job_def/ph_xyz/previews/preview.webp
+```
+
+Das Original bleibt privat und wird nie als Pfad an Eltern ausgeliefert. Thumbnail und Preview werden serverseitig mit `sharp` erzeugt. Die Preview wird auf maximal 1200 px Kantenlaenge reduziert, leicht weichgezeichnet, als WebP mit reduzierter Qualitaet gespeichert und erhaelt ein eingebranntes, diagonal gekacheltes Wasserzeichen `VORSCHAU` mit hellem Text und dunklem Stroke/Schatten.
+
+Manuelle Checks:
+
+```bash
+npm run build:api
+npm run build:web
+npm run regenerate:previews -- --limit=1
+```
+
+Nach einem Upload muessen genau Original, Thumbnail und Preview existieren. `GET /api/photos/:photoId/thumb` und `GET /api/photos/:photoId/preview` duerfen nur authentifiziert funktionieren. `GET /api/photos/:photoId/original` liefert fuer Eltern vor bezahlter Bestellung `402 ORIGINAL_NOT_PAID` und streamt erst nach bezahlter Order beziehungsweise fuer Admins.
 
 ## Sicherheitscheckliste
 
@@ -156,6 +185,8 @@ Das Script liest die `photos`-Metadaten aus Firestore, verwendet die vorhandenen
 - `PHOTO_ROOT` privat halten.
 - Firebase ID Token bei jedem API-Request pruefen.
 - Firestore-Rechte pruefen, bevor Bilder gestreamt werden.
+- Originaldateien nie statisch ausliefern und nie als Pfad/URL an das Frontend senden.
+- Previews nur als eingebrannte, serverseitig entwertete Dateien ausliefern.
 - Keine echten Kinderfotos in fruehen Tests verwenden.
 - Alle hochgeladenen oder geteilten Test-Secrets vor Produktion rotieren.
 - Backups von `/share/FotosSchuleApp` pflegen.
@@ -167,7 +198,7 @@ Das Script liest die `photos`-Metadaten aus Firestore, verwendet die vorhandenen
 - Kein echter Mailversand an ganze Klassen.
 - Keine Print-Fulfillment-Integration.
 - Kein produktionsreifer Rechts-/Einwilligungsworkflow.
-- Keine Freigabe von bezahlten Original-Downloads.
+- Original-Download ist serverseitig abgesichert, echte Zahlungsmarkierung muss durch Stripe/Webhook noch gesetzt werden.
 - Keine Background Job Queue.
 - NAS-Uptime und Internet-Upload begrenzen die Verfuegbarkeit.
 
@@ -176,7 +207,7 @@ Das Script liest die `photos`-Metadaten aus Firestore, verwendet die vorhandenen
 Firestore speichert nur Metadaten und Berechtigungen. Lokale Dateipfade enthalten keine Kinder-, Eltern-, Schul- oder Klassennamen. Die API erzeugt zufaellige IDs und speichert relative Pfade wie:
 
 ```text
-org_abc/job_def/ph_xyz/preview.webp
+org_abc/job_def/ph_xyz/previews/preview.webp
 ```
 
-Originale werden im MVP nicht ausgeliefert. `GET /api/photos/:photoId/original` bleibt gesperrt, bis Zahlung und Order-Pruefung implementiert sind.
+Originale werden nur ueber `GET /api/photos/:photoId/original` gestreamt. Die Route prueft Authentifizierung, Fotozugriff und eine bezahlte Order mit passendem `photoId`; vor dem Kauf wird niemals das Original ausgeliefert.

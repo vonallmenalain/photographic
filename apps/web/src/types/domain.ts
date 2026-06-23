@@ -2,6 +2,7 @@ export type UserRole = "admin" | "guardian";
 export type OrganizationType = "school" | "kindergarten";
 export type PhotoType = "portrait" | "sibling" | "class" | "classMirror" | "event";
 export type PhotoVisibility = "child" | "class" | "job";
+export type PhotoProcessingStatus = "ready" | "error";
 
 export type ApiEnvelope<T> =
   | { ok: true; data: T }
@@ -72,6 +73,15 @@ export type Photo = {
   originalFilename?: string;
   originalMimeType?: string;
   originalSize?: number;
+  width?: number;
+  height?: number;
+  fileSizeOriginal?: number;
+  fileSizePreview?: number;
+  fileSizeThumb?: number;
+  processingStatus?: PhotoProcessingStatus;
+  processingError?: string | null;
+  checksumSha256?: string;
+  uploadedAt?: string;
   createdAt?: string;
   updatedAt?: string;
   storageStatus?: {
