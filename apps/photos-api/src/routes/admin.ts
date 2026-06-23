@@ -7,7 +7,7 @@ import { getAuthContext } from "../lib/auth";
 import { writeAuditLog } from "../lib/audit";
 import { normalizeEmail } from "../lib/admin";
 import { adminDb, serverTimestamp } from "../lib/firebaseAdmin";
-import { listCollection } from "../lib/firestore";
+import { listCollection, listPhotos } from "../lib/firestore";
 import { generatePhotoDerivatives } from "../lib/imageProcessing";
 import { buildPhotoReferenceSets, getPhotoAvailability } from "../lib/photoAvailability";
 import { randomId } from "../lib/paths";
@@ -16,6 +16,7 @@ import { asyncHandler, AppError, routeParam, sendOk } from "../lib/response";
 import {
   allowedImageMimes,
   deletePhotoFiles,
+  ensurePhotoRootWritable,
   extensionForMime,
   getRelativeFileSize,
   photoRelativePaths,
@@ -34,7 +35,7 @@ import {
   updatePhotoSchema,
   uploadPhotoFieldsSchema
 } from "../lib/validators";
-import { PhotoRecord } from "../types/domain";
+import { PhotoRecord, PhotoVisibility } from "../types/domain";
 
 export const adminRouter = Router();
 
@@ -78,6 +79,119 @@ function sha256(buffer: Buffer) {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
+type UploadPhotoFields = {
+  orgId: string;
+  jobId: string;
+  classId: string;
+  visibility: PhotoVisibility;
+};
+
+type ReferenceRecord = {
+  orgId?: string;
+  jobId?: string;
+  classId?: string;
+};
+
+async function requireReference<T extends ReferenceRecord>(
+  collectionName: string,
+  id: string,
+  label: string
+) {
+  const snapshot = await adminDb().collection(collectionName).doc(id).get();
+
+  if (!snapshot.exists) {
+    throw new AppError(400, "INVALID_PHOTO_REFERENCES", `${label} wurde nicht gefunden.`);
+  }
+
+  return snapshot.data() as T;
+}
+
+async function validateUploadReferences(fields: UploadPhotoFields, childIds: string[]) {
+  const uniqueChildIds = [...new Set(childIds)];
+
+  if (fields.visibility === "child" && uniqueChildIds.length === 0) {
+    throw new AppError(
+      400,
+      "INVALID_PHOTO_REFERENCES",
+      "Fuer ein Kind-Foto muss mindestens ein Kind ausgewaehlt sein."
+    );
+  }
+
+  const [job, schoolClass] = await Promise.all([
+    requireReference<ReferenceRecord>("jobs", fields.jobId, "Der Auftrag"),
+    requireReference<ReferenceRecord>("classes", fields.classId, "Die Klasse"),
+    requireReference<ReferenceRecord>("organizations", fields.orgId, "Die Organisation")
+  ]).then(([jobRecord, classRecord]) => [jobRecord, classRecord]);
+
+  if (job.orgId !== fields.orgId) {
+    throw new AppError(
+      400,
+      "INVALID_PHOTO_REFERENCES",
+      "Der Auftrag gehoert nicht zur ausgewaehlten Organisation."
+    );
+  }
+
+  if (schoolClass.orgId !== fields.orgId || schoolClass.jobId !== fields.jobId) {
+    throw new AppError(
+      400,
+      "INVALID_PHOTO_REFERENCES",
+      "Die Klasse gehoert nicht zur ausgewaehlten Organisation und zum Auftrag."
+    );
+  }
+
+  if (uniqueChildIds.length > 0) {
+    const childSnapshots = await Promise.all(
+      uniqueChildIds.map((childId) => adminDb().collection("children").doc(childId).get())
+    );
+
+    childSnapshots.forEach((snapshot, index) => {
+      if (!snapshot.exists) {
+        throw new AppError(400, "INVALID_PHOTO_REFERENCES", "Mindestens ein Kind wurde nicht gefunden.");
+      }
+
+      const child = snapshot.data() as ReferenceRecord;
+      if (
+        child.orgId !== fields.orgId ||
+        child.jobId !== fields.jobId ||
+        child.classId !== fields.classId
+      ) {
+        throw new AppError(
+          400,
+          "INVALID_PHOTO_REFERENCES",
+          `Kind ${uniqueChildIds[index]} gehoert nicht zur ausgewaehlten Klasse.`
+        );
+      }
+    });
+  }
+
+  return uniqueChildIds;
+}
+
+async function cleanupUploadedFiles(paths: {
+  originalPath?: string | null;
+  previewPath?: string | null;
+  thumbPath?: string | null;
+}) {
+  try {
+    await deletePhotoFiles(paths);
+  } catch (cleanupError) {
+    console.error("[photo-upload-cleanup-failed]", errorMessage(cleanupError));
+  }
+}
+
+function photoProcessingError(error: unknown) {
+  if (error instanceof AppError) {
+    return error;
+  }
+
+  return new AppError(
+    400,
+    "PHOTO_PROCESSING_FAILED",
+    "Das Bild konnte nicht verarbeitet werden. Bitte pruefe Dateityp und Bilddatei.",
+    { cause: error }
+  );
+}
+
 adminRouter.get(
   "/data",
   asyncHandler(async (_req, res) => {
@@ -87,7 +201,7 @@ adminRouter.get(
       listCollection("classes"),
       listCollection("children"),
       listCollection("guardianLinks"),
-      listCollection<PhotoRecord>("photos")
+      listPhotos()
     ]);
     const references = buildPhotoReferenceSets({ organizations, jobs, classes, children });
     const photosWithAvailability = await Promise.all(
@@ -311,115 +425,89 @@ adminRouter.post(
     }
 
     const fields = uploadPhotoFieldsSchema.parse(req.body);
-    const childIds = parseChildIds(req.body.childIds);
+    const childIds = await validateUploadReferences(fields, parseChildIds(req.body.childIds));
     const photoId = nanoid(18);
     const originalExt = extensionForMime(req.file.mimetype);
     const paths = photoRelativePaths(fields.orgId, fields.jobId, photoId, originalExt);
     const checksumSha256 = sha256(req.file.buffer);
-    let originalAbsolutePath: string | null = null;
+    await ensurePhotoRootWritable();
+
+    const originalAbsolutePath = await writeBufferToRelativePath(paths.originalPath, req.file.buffer);
+    const previewAbsolutePath = resolveInsidePhotoRoot(paths.previewPath);
+    const thumbAbsolutePath = resolveInsidePhotoRoot(paths.thumbPath);
+
+    let derivatives: Awaited<ReturnType<typeof generatePhotoDerivatives>>;
+    let fileSizeOriginal = 0;
 
     try {
-      originalAbsolutePath = await writeBufferToRelativePath(paths.originalPath, req.file.buffer);
-      const previewAbsolutePath = resolveInsidePhotoRoot(paths.previewPath);
-      const thumbAbsolutePath = resolveInsidePhotoRoot(paths.thumbPath);
-      const derivatives = await generatePhotoDerivatives(
+      derivatives = await generatePhotoDerivatives(
         originalAbsolutePath,
         previewAbsolutePath,
         thumbAbsolutePath
       );
-      const fileSizeOriginal = await getRelativeFileSize(paths.originalPath);
-
-      const metadata: PhotoRecord = {
-        photoId,
-        albumId: fields.jobId,
-        schoolId: fields.orgId,
-        orgId: fields.orgId,
-        jobId: fields.jobId,
-        classId: fields.classId,
-        childIds,
-        type: fields.type,
-        visibility: fields.visibility,
-        // Persistent file variants: original is private; thumb and preview are streamed by protected API routes.
-        originalPath: paths.originalPath,
-        previewPath: paths.previewPath,
-        thumbPath: paths.thumbPath,
-        originalFilename: req.file.originalname,
-        originalMimeType: req.file.mimetype,
-        originalSize: req.file.size,
-        width: derivatives.width,
-        height: derivatives.height,
-        fileSizeOriginal,
-        fileSizePreview: derivatives.preview.fileSize,
-        fileSizeThumb: derivatives.thumb.fileSize,
-        processingStatus: "ready",
-        processingError: null,
-        checksumSha256,
-        uploadedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-        createdByUid: auth.uid,
-        updatedAt: serverTimestamp()
-      };
-
-      await adminDb().collection("photos").doc(photoId).set(metadata);
-      await writeAuditLog(auth, "admin.upload.photo", "photo", photoId, {
-        orgId: fields.orgId,
-        jobId: fields.jobId,
-        classId: fields.classId,
-        type: fields.type,
-        visibility: fields.visibility,
-        childIds,
-        processingStatus: "ready"
-      });
-
-      const { originalPath, previewPath, thumbPath, ...safeMetadata } = metadata;
-      sendOk(res, { id: photoId, ...safeMetadata }, 201);
+      fileSizeOriginal = await getRelativeFileSize(paths.originalPath);
     } catch (error) {
-      const message = errorMessage(error);
-      console.error(`[photo-processing-error] ${photoId}: ${message}`);
+      console.error(`[photo-processing-error] ${photoId}: ${errorMessage(error)}`);
+      await cleanupUploadedFiles(paths);
+      throw photoProcessingError(error);
+    }
 
-      if (originalAbsolutePath) {
-        await adminDb().collection("photos").doc(photoId).set({
-          photoId,
-          albumId: fields.jobId,
-          schoolId: fields.orgId,
-          orgId: fields.orgId,
-          jobId: fields.jobId,
-          classId: fields.classId,
-          childIds,
-          type: fields.type,
-          visibility: fields.visibility,
-          originalPath: paths.originalPath,
-          previewPath: null,
-          thumbPath: null,
-          originalFilename: req.file.originalname,
-          originalMimeType: req.file.mimetype,
-          originalSize: req.file.size,
-          fileSizeOriginal: await getRelativeFileSize(paths.originalPath).catch(() => req.file?.size || 0),
-          fileSizePreview: 0,
-          fileSizeThumb: 0,
-          processingStatus: "error",
-          processingError: message,
-          checksumSha256,
-          uploadedAt: serverTimestamp(),
-          createdAt: serverTimestamp(),
-          createdByUid: auth.uid,
-          updatedAt: serverTimestamp()
-        });
+    const metadata: PhotoRecord = {
+      photoId,
+      albumId: fields.jobId,
+      schoolId: fields.orgId,
+      orgId: fields.orgId,
+      jobId: fields.jobId,
+      classId: fields.classId,
+      childIds,
+      type: fields.type,
+      visibility: fields.visibility,
+      // Persistent file variants: original is private; thumb and preview are streamed by protected API routes.
+      originalPath: paths.originalPath,
+      previewPath: paths.previewPath,
+      thumbPath: paths.thumbPath,
+      originalFilename: req.file.originalname,
+      originalMimeType: req.file.mimetype,
+      originalSize: req.file.size,
+      width: derivatives.width,
+      height: derivatives.height,
+      fileSizeOriginal,
+      fileSizePreview: derivatives.preview.fileSize,
+      fileSizeThumb: derivatives.thumb.fileSize,
+      processingStatus: "ready",
+      processingError: null,
+      checksumSha256,
+      uploadedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      createdByUid: auth.uid,
+      updatedAt: serverTimestamp()
+    };
 
-        await writeAuditLog(auth, "admin.upload.photoFailed", "photo", photoId, {
-          orgId: fields.orgId,
-          jobId: fields.jobId,
-          classId: fields.classId,
-          processingError: message
-        });
-      }
-
+    try {
+      await adminDb().collection("photos").doc(photoId).set(metadata);
+    } catch (error) {
+      console.error(`[photo-firestore-write-error] ${photoId}: ${errorMessage(error)}`);
+      await cleanupUploadedFiles(paths);
       throw new AppError(
-        500,
-        "PHOTO_PROCESSING_FAILED",
-        "Das Foto wurde nicht vollstaendig verarbeitet. Bitte pruefe die Admin-Ansicht und versuche die Derivate neu zu erzeugen."
+        503,
+        "FIRESTORE_WRITE_FAILED",
+        "Das Foto wurde verarbeitet, aber die Metadaten konnten nicht gespeichert werden. Lokale Dateien wurden bereinigt.",
+        { cause: error }
       );
     }
+
+    await writeAuditLog(auth, "admin.upload.photo", "photo", photoId, {
+      orgId: fields.orgId,
+      jobId: fields.jobId,
+      classId: fields.classId,
+      type: fields.type,
+      visibility: fields.visibility,
+      childIds,
+      processingStatus: "ready"
+    });
+
+    const { originalPath, previewPath, thumbPath, ...safeMetadata } = metadata;
+    sendOk(res, { id: photoId, ...safeMetadata }, 201);
   })
 );
 
@@ -457,7 +545,7 @@ adminRouter.post(
       listCollection("jobs"),
       listCollection("classes"),
       listCollection("children"),
-      listCollection<PhotoRecord>("photos")
+      listPhotos()
     ]);
     const references = buildPhotoReferenceSets({ organizations, jobs, classes, children });
     const deletedPhotoIds: string[] = [];
@@ -505,7 +593,7 @@ adminRouter.delete(
       deletedFiles
     });
 
-    sendOk(res, { id: photoId, deletedFiles });
+    sendOk(res, { id: photoId, ...deletedFiles });
   })
 );
 

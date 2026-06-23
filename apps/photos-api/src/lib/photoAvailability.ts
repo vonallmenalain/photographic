@@ -5,6 +5,21 @@ type RecordWithId = {
   id?: string;
 };
 
+type JobReference = RecordWithId & {
+  orgId?: unknown;
+};
+
+type ClassReference = RecordWithId & {
+  orgId?: unknown;
+  jobId?: unknown;
+};
+
+type ChildReference = RecordWithId & {
+  orgId?: unknown;
+  jobId?: unknown;
+  classId?: unknown;
+};
+
 export type PhotoMetadataStatus = {
   organization: boolean;
   job: boolean;
@@ -24,6 +39,9 @@ export type PhotoReferenceSets = {
   jobIds: Set<string>;
   classIds: Set<string>;
   childIds: Set<string>;
+  jobsById: Map<string, JobReference>;
+  classesById: Map<string, ClassReference>;
+  childrenById: Map<string, ChildReference>;
 };
 
 export function buildPhotoReferenceSets({
@@ -33,15 +51,28 @@ export function buildPhotoReferenceSets({
   children
 }: {
   organizations: RecordWithId[];
-  jobs: RecordWithId[];
-  classes: RecordWithId[];
-  children: RecordWithId[];
+  jobs: JobReference[];
+  classes: ClassReference[];
+  children: ChildReference[];
 }): PhotoReferenceSets {
+  const jobsById = new Map(
+    jobs.filter((item) => item.id).map((item) => [item.id as string, item])
+  );
+  const classesById = new Map(
+    classes.filter((item) => item.id).map((item) => [item.id as string, item])
+  );
+  const childrenById = new Map(
+    children.filter((item) => item.id).map((item) => [item.id as string, item])
+  );
+
   return {
     organizationIds: new Set(organizations.map((item) => item.id).filter(Boolean) as string[]),
-    jobIds: new Set(jobs.map((item) => item.id).filter(Boolean) as string[]),
-    classIds: new Set(classes.map((item) => item.id).filter(Boolean) as string[]),
-    childIds: new Set(children.map((item) => item.id).filter(Boolean) as string[])
+    jobIds: new Set(jobsById.keys()),
+    classIds: new Set(classesById.keys()),
+    childIds: new Set(childrenById.keys()),
+    jobsById,
+    classesById,
+    childrenById
   };
 }
 
@@ -50,12 +81,26 @@ export function getPhotoMetadataStatus(
   references: PhotoReferenceSets
 ): PhotoMetadataStatus {
   const organization = references.organizationIds.has(photo.orgId);
-  const job = references.jobIds.has(photo.jobId);
-  const schoolClass = references.classIds.has(photo.classId);
+  const jobRecord = references.jobsById.get(photo.jobId);
+  const classRecord = references.classesById.get(photo.classId);
+  const childIds = Array.isArray(photo.childIds) ? photo.childIds : [];
+  const job = Boolean(jobRecord && jobRecord.orgId === photo.orgId);
+  const schoolClass = Boolean(
+    classRecord && classRecord.orgId === photo.orgId && classRecord.jobId === photo.jobId
+  );
+  const allChildReferencesConsistent = childIds.every((childId) => {
+    const child = references.childrenById.get(childId);
+    return (
+      child &&
+      child.orgId === photo.orgId &&
+      child.jobId === photo.jobId &&
+      child.classId === photo.classId
+    );
+  });
   const childReferences =
-    photo.visibility !== "child" ||
-    photo.childIds.length === 0 ||
-    photo.childIds.some((childId) => references.childIds.has(childId));
+    photo.visibility === "child"
+      ? childIds.length > 0 && allChildReferencesConsistent
+      : allChildReferencesConsistent;
 
   return {
     organization,

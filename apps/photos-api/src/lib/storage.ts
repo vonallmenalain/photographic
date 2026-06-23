@@ -78,6 +78,51 @@ export type PhotoStorageStatus = {
   complete: boolean;
 };
 
+export type DeletedPhotoFiles = {
+  originalDeleted: boolean;
+  previewDeleted: boolean;
+  thumbDeleted: boolean;
+  deletedFiles: string[];
+  missingFiles: string[];
+  warnings: string[];
+};
+
+type PhotoFileKind = "original" | "preview" | "thumb";
+
+function errnoCode(error: unknown) {
+  return String((error as NodeJS.ErrnoException).code || "");
+}
+
+function storageMutationError(error: unknown, message: string) {
+  const code = errnoCode(error);
+  if (code === "ENOSPC") {
+    return new AppError(507, "PHOTO_STORAGE_FULL", "Auf dem Foto-Speicher ist kein Platz mehr frei.", {
+      cause: error
+    });
+  }
+
+  if (["EACCES", "EPERM", "EROFS"].includes(code)) {
+    return new AppError(500, "PHOTO_STORAGE_PERMISSION_DENIED", `${message} (${code}).`, {
+      cause: error
+    });
+  }
+
+  return new AppError(500, "PHOTO_STORAGE_ERROR", code ? `${message} (${code}).` : message, {
+    cause: error
+  });
+}
+
+export async function ensurePhotoRootWritable() {
+  const photoRoot = path.resolve(env.PHOTO_ROOT);
+
+  try {
+    await fsp.mkdir(photoRoot, { recursive: true });
+    await fsp.access(photoRoot, fs.constants.W_OK);
+  } catch (error) {
+    throw storageMutationError(error, "Der Foto-Speicher ist nicht beschreibbar");
+  }
+}
+
 export async function relativeFileExists(relativePath?: string | null) {
   if (!relativePath) {
     return false;
@@ -107,26 +152,40 @@ export async function getPhotoStorageStatus(paths: PhotoFilePaths): Promise<Phot
   };
 }
 
-async function deleteRelativeFileIfExists(relativePath?: string | null) {
+async function deleteRelativeFileIfExists(kind: PhotoFileKind, relativePath?: string | null) {
   if (!relativePath) {
-    return false;
+    return { kind, deleted: false, missing: false };
   }
 
   try {
     const absolutePath = resolveInsidePhotoRoot(relativePath);
     await fsp.unlink(absolutePath);
-    return true;
-  } catch {
-    return false;
+    return { kind, deleted: true, missing: false };
+  } catch (error) {
+    if (errnoCode(error) === "ENOENT") {
+      return { kind, deleted: false, missing: true };
+    }
+
+    if (error instanceof AppError) {
+      throw error;
+    }
+
+    throw storageMutationError(
+      error,
+      `Die ${kind}-Datei konnte nicht geloescht werden. Das Firestore-Dokument wurde nicht veraendert`
+    );
   }
 }
 
 export async function deletePhotoFiles(paths: PhotoFilePaths) {
-  const [originalDeleted, previewDeleted, thumbDeleted] = await Promise.all([
-    deleteRelativeFileIfExists(paths.originalPath),
-    deleteRelativeFileIfExists(paths.previewPath),
-    deleteRelativeFileIfExists(paths.thumbPath)
+  const entries = await Promise.all([
+    deleteRelativeFileIfExists("original", paths.originalPath),
+    deleteRelativeFileIfExists("preview", paths.previewPath),
+    deleteRelativeFileIfExists("thumb", paths.thumbPath)
   ]);
+  const originalDeleted = entries.find((entry) => entry.kind === "original")?.deleted ?? false;
+  const previewDeleted = entries.find((entry) => entry.kind === "preview")?.deleted ?? false;
+  const thumbDeleted = entries.find((entry) => entry.kind === "thumb")?.deleted ?? false;
   const cleanupDirs = [
     paths.originalPath ? path.posix.dirname(paths.originalPath) : "",
     paths.previewPath ? path.posix.dirname(paths.previewPath) : "",
@@ -154,8 +213,13 @@ export async function deletePhotoFiles(paths: PhotoFilePaths) {
   return {
     originalDeleted,
     previewDeleted,
-    thumbDeleted
-  };
+    thumbDeleted,
+    deletedFiles: entries.filter((entry) => entry.deleted).map((entry) => entry.kind),
+    missingFiles: entries.filter((entry) => entry.missing).map((entry) => entry.kind),
+    warnings: entries
+      .filter((entry) => entry.missing)
+      .map((entry) => `${entry.kind} fehlte bereits im Speicher.`)
+  } satisfies DeletedPhotoFiles;
 }
 
 export async function writeBufferToRelativePath(relativePath: string, buffer: Buffer) {

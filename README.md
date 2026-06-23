@@ -9,7 +9,7 @@ Photographic ist ein MVP fuer eine sichere Kindergarten- und Schulfoto-Plattform
 - Die Web-App sendet jedes API-Request mit `Authorization: Bearer <Firebase ID token>`.
 - Firestore speichert Metadaten, Berechtigungen, Warenkorb-/Order-Vorstufen und Audit Logs.
 - Der Backend-Service `photos-api` laeuft als Docker-Container auf dem QNAP NAS.
-- Cloudflare Tunnel exponiert ausschliesslich `photos-api`, zum Beispiel `api.fotos.alae.app`.
+- Cloudflare Tunnel exponiert ausschliesslich `photos-api` unter `api.alae.app`.
 - Die Bilddateien bleiben lokal auf dem QNAP, zum Beispiel unter `/share/FotosSchuleApp`.
 
 ## Kein Cloudflare R2
@@ -31,6 +31,7 @@ VITE_FIREBASE_PROJECT_ID=
 VITE_FIREBASE_APP_ID=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_PHOTOS_API_BASE_URL=http://localhost:8787
+# Produktion: VITE_PHOTOS_API_BASE_URL=https://api.alae.app
 ```
 
 QNAP Backend, `apps/photos-api`:
@@ -126,7 +127,7 @@ VITE_FIREBASE_AUTH_DOMAIN=
 VITE_FIREBASE_PROJECT_ID=
 VITE_FIREBASE_APP_ID=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_PHOTOS_API_BASE_URL=https://api.fotos.alae.app
+VITE_PHOTOS_API_BASE_URL=https://api.alae.app
 ```
 
 ## QNAP Deployment
@@ -135,8 +136,12 @@ VITE_PHOTOS_API_BASE_URL=https://api.fotos.alae.app
 2. `docker-compose.example.yml` als Vorlage verwenden.
 3. Auf dem QNAP eine private `.env` mit Backend-Secrets erstellen.
 4. `photos-api` starten.
-5. Cloudflare Tunnel Hostname `api.fotos.alae.app` auf `http://photos-api:8787` routen.
-6. QNAP Admin-Oberflaechen, SMB, WebDAV, File Station und Photo Station niemals oeffentlich exponieren.
+5. Cloudflare Tunnel Hostname `api.alae.app` auf `http://photos-api:8787` routen.
+6. `APP_BASE_URL=https://fotos.alae.app` setzen, damit Login-Links auf das Frontend zeigen.
+7. `CORS_ORIGINS` mindestens mit `https://fotos.alae.app` setzen.
+8. QNAP Admin-Oberflaechen, SMB, WebDAV, File Station und Photo Station niemals oeffentlich exponieren.
+
+Der Docker-Kontext ist aktuell `./apps/photos-api`. Dort liegt keine eigene `package-lock.json`; der Container installiert deshalb die API-Abhaengigkeiten aus `apps/photos-api/package.json`, baut mit Dev-Dependencies und entfernt sie danach mit `npm prune --omit=dev`. Fuer einen voll lockfile-reproduzierbaren Containerbuild sollte der Docker-Kontext in einer spaeteren Iteration auf das Monorepo-Root mit Root-`package-lock.json` umgestellt werden.
 
 ## Preview-Dateien neu generieren
 

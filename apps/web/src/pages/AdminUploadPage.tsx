@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { UploadCloud } from "lucide-react";
 import { apiGet, apiUploadFormData } from "../api/photosApi";
 import { useAuth } from "../auth/useAuth";
@@ -7,8 +7,6 @@ import { Card } from "../components/Card";
 import { ErrorState } from "../components/ErrorState";
 import { Loading } from "../components/Loading";
 import { AdminData, Job, Organization, PhotoType, PhotoVisibility, SchoolClass } from "../types/domain";
-
-const legacyIdPattern = /^[A-Za-z0-9_-]{6,80}$/;
 
 type ClassChoice = {
   organization: Organization;
@@ -21,6 +19,9 @@ export function AdminUploadPage() {
   const [data, setData] = useState<AdminData | null>(null);
   const [error, setError] = useState("");
   const [progressMessage, setProgressMessage] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const progressTimers = useRef<number[]>([]);
   const [form, setForm] = useState({
     orgId: "",
     jobId: "",
@@ -35,19 +36,28 @@ export function AdminUploadPage() {
     void apiGet<AdminData>("/api/admin/data", getIdToken).then(setData).catch((loadError: Error) => setError(loadError.message));
   }, [getIdToken]);
 
-  const availableOrganizations = data?.organizations.filter((organization) => legacyIdPattern.test(organization.id)) ?? [];
-  const availableJobs = data?.jobs.filter((job) => legacyIdPattern.test(job.id) && (!form.orgId || job.orgId === form.orgId)) ?? [];
+  useEffect(() => {
+    return () => {
+      progressTimers.current.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, []);
+
+  function clearProgressTimers() {
+    progressTimers.current.forEach((timer) => window.clearTimeout(timer));
+    progressTimers.current = [];
+  }
+
+  const availableOrganizations = data?.organizations ?? [];
+  const availableJobs = data?.jobs.filter((job) => !form.orgId || job.orgId === form.orgId) ?? [];
   const availableClasses =
     data?.classes.filter(
       (schoolClass) =>
-        legacyIdPattern.test(schoolClass.id) &&
         (!form.orgId || schoolClass.orgId === form.orgId) &&
         (!form.jobId || schoolClass.jobId === form.jobId)
     ) ?? [];
   const availableChildren =
     data?.children.filter(
       (child) =>
-        legacyIdPattern.test(child.id) &&
         (!form.orgId || child.orgId === form.orgId) &&
         (!form.jobId || child.jobId === form.jobId) &&
         (!form.classId || child.classId === form.classId)
@@ -58,14 +68,9 @@ export function AdminUploadPage() {
     }
 
     return data.classes
-      .filter((schoolClass) => legacyIdPattern.test(schoolClass.id))
       .map((schoolClass) => {
-        const organization = data.organizations.find(
-          (entry) => entry.id === schoolClass.orgId && legacyIdPattern.test(entry.id)
-        );
-        const job = data.jobs.find(
-          (entry) => entry.id === schoolClass.jobId && legacyIdPattern.test(entry.id)
-        );
+        const organization = data.organizations.find((entry) => entry.id === schoolClass.orgId);
+        const job = data.jobs.find((entry) => entry.id === schoolClass.jobId);
         if (!organization || !job) {
           return null;
         }
@@ -93,23 +98,22 @@ export function AdminUploadPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (isUploading) {
+      return;
+    }
+
     if (!form.file) {
       setError("Bitte waehle eine Bilddatei aus.");
       return;
     }
 
-    if (!legacyIdPattern.test(form.orgId) || !legacyIdPattern.test(form.jobId) || !legacyIdPattern.test(form.classId)) {
-      setError("Bitte waehle Stammdaten aus, die ueber die aktuelle Stammdaten-Erfassung oder den Excel-Import angelegt wurden.");
+    if (!form.orgId || !form.jobId || !form.classId) {
+      setError("Bitte waehle Organisation, Auftrag und Klasse aus.");
       return;
     }
 
     if (form.visibility === "child" && form.childIds.length === 0) {
       setError("Bitte waehle fuer ein Portrait mindestens ein Kind aus.");
-      return;
-    }
-
-    if (!form.childIds.every((childId) => legacyIdPattern.test(childId))) {
-      setError("Bitte waehle Kinder aus, die ueber die aktuelle Stammdaten-Erfassung oder den Excel-Import angelegt wurden.");
       return;
     }
 
@@ -124,16 +128,26 @@ export function AdminUploadPage() {
     body.append("file", form.file);
 
     setError("");
+    setIsUploading(true);
+    clearProgressTimers();
     setProgressMessage("Datei wird an das lokale Foto-Backend uebertragen...");
     try {
-      window.setTimeout(() => setProgressMessage("Vorschau und Thumbnail werden erzeugt..."), 350);
+      progressTimers.current.push(
+        window.setTimeout(() => setProgressMessage("Vorschau und Thumbnail werden erzeugt..."), 350)
+      );
       await apiUploadFormData("/api/admin/photos/upload", body, getIdToken);
-      setProgressMessage("Metadaten werden gespeichert...");
-      window.setTimeout(() => setProgressMessage("Foto gespeichert."), 250);
+      clearProgressTimers();
+      setProgressMessage("Foto gespeichert.");
       setForm({ ...form, file: null });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     } catch (uploadError) {
+      clearProgressTimers();
       setProgressMessage("");
       setError(uploadError instanceof Error ? uploadError.message : "Das Foto konnte nicht gespeichert werden.");
+    } finally {
+      setIsUploading(false);
     }
   }
 
@@ -233,13 +247,17 @@ export function AdminUploadPage() {
           <div className="form-row">
             <label>Bilddatei</label>
             <input
+              ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/png,image/webp,image/tiff"
               required
+              disabled={isUploading}
               onChange={(event) => setForm({ ...form, file: event.target.files?.[0] ?? null })}
             />
           </div>
-          <Button icon={<UploadCloud size={18} />}>Foto hochladen</Button>
+          <Button icon={<UploadCloud size={18} />} disabled={isUploading}>
+            {isUploading ? "Upload laeuft..." : "Foto hochladen"}
+          </Button>
         </form>
       </Card>
     </div>

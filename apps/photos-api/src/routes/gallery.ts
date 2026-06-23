@@ -2,7 +2,7 @@ import { Router } from "express";
 import { getAuthContext } from "../lib/auth";
 import { writeAuditLog } from "../lib/audit";
 import { adminDb } from "../lib/firebaseAdmin";
-import { canAccessPhoto, getActiveGuardianLinks, listCollection } from "../lib/firestore";
+import { canAccessPhoto, getActiveGuardianLinks, listCollection, listPhotos, normalizePhotoRecord } from "../lib/firestore";
 import { buildPhotoReferenceSets, filterDisplayablePhotos } from "../lib/photoAvailability";
 import { asyncHandler, sendOk } from "../lib/response";
 import { ChildRecord, PhotoRecord } from "../types/domain";
@@ -29,7 +29,7 @@ galleryRouter.get(
     );
 
     if (auth.role === "admin") {
-      photos = (await listCollection<PhotoRecord>("photos")) as Array<PhotoRecord & { id: string }>;
+      photos = (await listPhotos()) as Array<PhotoRecord & { id: string }>;
       const allCount = photos.length;
       photos = await filterDisplayablePhotos(photos, references);
       await writeAuditLog(auth, "guardian.list.gallery", "gallery", auth.uid, {
@@ -54,7 +54,12 @@ galleryRouter.get(
         jobIds.map((jobId) => adminDb().collection("photos").where("jobId", "==", jobId).get())
       );
       const allPhotos = snapshots.flatMap((snapshot) =>
-        snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as PhotoRecord) }))
+        snapshot.docs.map(
+          (doc) =>
+            normalizePhotoRecord({ id: doc.id, ...(doc.data() as PhotoRecord) }) as PhotoRecord & {
+              id: string;
+            }
+        )
       );
 
       photos = allPhotos.filter((photo) => canAccessPhoto(auth, photo, guardianLinks));

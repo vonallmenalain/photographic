@@ -8,13 +8,22 @@ export async function writeAuditLog(
   targetId: string,
   metadata: Record<string, unknown> = {}
 ) {
-  await adminDb().collection("auditLogs").add({
-    actorUid: actor.uid,
-    actorEmail: actor.email,
-    action,
-    targetType,
-    targetId,
-    metadata,
-    createdAt: serverTimestamp()
-  });
+  try {
+    await adminDb().collection("auditLogs").add({
+      actorUid: actor.uid,
+      actorEmail: actor.email,
+      action,
+      targetType,
+      targetId,
+      metadata,
+      createdAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error("[audit-log-failed]", {
+      action,
+      targetType,
+      targetId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
 }

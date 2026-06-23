@@ -116,10 +116,14 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
       const nextThumbs: Record<string, string> = {};
       await Promise.all(
         gallery.photos.map(async (photo) => {
-          const blob = await fetchAuthorizedBlob(`/api/photos/${photo.photoId}/thumb`, getIdToken);
-          const url = URL.createObjectURL(blob);
-          createdUrls.push(url);
-          nextThumbs[photo.photoId] = url;
+          try {
+            const blob = await fetchAuthorizedBlob(`/api/photos/${photo.photoId}/thumb`, getIdToken);
+            const url = URL.createObjectURL(blob);
+            createdUrls.push(url);
+            nextThumbs[photo.photoId] = url;
+          } catch (thumbError) {
+            console.warn("[thumbnail-load-failed]", photo.photoId, thumbError);
+          }
         })
       );
       if (active) {
@@ -129,7 +133,7 @@ export function GalleryPage({ adminView = false }: { adminView?: boolean }) {
       }
     };
 
-    loadThumbs().catch((thumbError: Error) => setError(thumbError.message));
+    void loadThumbs();
 
     return () => {
       active = false;

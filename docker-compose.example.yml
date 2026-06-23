@@ -1,6 +1,6 @@
 # Example only. Create a private .env file on the QNAP and never commit it.
-# Cloudflare Tunnel should route api.fotos.alae.app to http://photos-api:8787.
-# Netlify frontend should use VITE_PHOTOS_API_BASE_URL=https://api.fotos.alae.app.
+# Cloudflare Tunnel should route api.alae.app to http://photos-api:8787.
+# Netlify frontend should use VITE_PHOTOS_API_BASE_URL=https://api.alae.app.
 
 services:
   photos-api:

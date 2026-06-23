@@ -9,12 +9,21 @@ const API_BASE_URL = (
 export class ApiError extends Error {
   code: string;
   status: number;
+  requestId?: string;
+  userMessage: string;
 
-  constructor(message: string, code: string, status: number) {
-    super(message);
+  constructor(message: string, code: string, status: number, requestId?: string) {
+    const details = [`Code: ${code}`];
+    if (requestId) {
+      details.push(`Request-ID: ${requestId}`);
+    }
+
+    super(`${message} (${details.join(", ")})`);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
+    this.requestId = requestId;
+    this.userMessage = message;
   }
 }
 
@@ -30,16 +39,32 @@ async function authHeaders(getIdToken?: TokenProvider): Promise<Record<string, s
   return { Authorization: `Bearer ${token}` };
 }
 
+async function readApiEnvelope<T>(response: Response): Promise<ApiEnvelope<T> | null> {
+  const text = await response.text().catch(() => "");
+  if (!text.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as ApiEnvelope<T>;
+  } catch {
+    return null;
+  }
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
-  const payload = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
+  const payload = await readApiEnvelope<T>(response);
 
   if (!response.ok || !payload?.ok) {
+    const requestId =
+      response.headers.get("x-request-id") ||
+      (payload && !payload.ok ? payload.error.requestId : undefined);
     const message =
       payload && !payload.ok
         ? payload.error.message
         : "Die Anfrage konnte nicht verarbeitet werden.";
     const code = payload && !payload.ok ? payload.error.code : "HTTP_ERROR";
-    throw new ApiError(message, code, response.status);
+    throw new ApiError(message, code, response.status, requestId || undefined);
   }
 
   return payload.data;
@@ -106,13 +131,16 @@ export async function fetchAuthorizedBlob(path: string, getIdToken: TokenProvide
   });
 
   if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as ApiEnvelope<unknown> | null;
+    const payload = await readApiEnvelope<unknown>(response);
+    const requestId =
+      response.headers.get("x-request-id") ||
+      (payload && !payload.ok ? payload.error.requestId : undefined);
     const message =
       payload && !payload.ok
         ? payload.error.message
         : "Das geschuetzte Bild konnte nicht geladen werden.";
     const code = payload && !payload.ok ? payload.error.code : "IMAGE_FETCH_FAILED";
-    throw new ApiError(message, code, response.status);
+    throw new ApiError(message, code, response.status, requestId || undefined);
   }
 
   return response.blob();

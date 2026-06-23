@@ -53,7 +53,11 @@ export function AdminPhotosPage() {
       setMessage(`${result.deletedCount} verwaiste Fotoeintraege entfernt.`);
       await refresh();
     } catch (cleanupError) {
-      if (cleanupError instanceof ApiError && cleanupError.status === 404) {
+      if (
+        cleanupError instanceof ApiError &&
+        cleanupError.status === 404 &&
+        cleanupError.code === "NOT_FOUND"
+      ) {
         setMessage("Diese Bereinigung ist auf der laufenden API noch nicht verfuegbar.");
         return;
       }
@@ -195,8 +199,18 @@ function PhotoEditor({
       setMessage("Foto geloescht.");
       await onSaved();
     } catch (deleteError) {
-      if (deleteError instanceof ApiError && deleteError.status === 404) {
+      if (
+        deleteError instanceof ApiError &&
+        deleteError.status === 404 &&
+        deleteError.code === "NOT_FOUND"
+      ) {
         setMessage("Diese Loeschfunktion ist auf der laufenden API noch nicht verfuegbar.");
+        return;
+      }
+
+      if (deleteError instanceof ApiError && deleteError.code === "PHOTO_NOT_FOUND") {
+        setError("Das Foto wurde bereits geloescht oder ist nicht mehr vorhanden.");
+        await onSaved();
         return;
       }
 

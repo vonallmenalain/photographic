@@ -6,7 +6,7 @@ export type PhotoProcessingStatus = "ready" | "error";
 
 export type ApiEnvelope<T> =
   | { ok: true; data: T }
-  | { ok: false; error: { code: string; message: string } };
+  | { ok: false; error: { code: string; message: string; requestId?: string } };
 
 export type MeResponse = {
   uid: string;

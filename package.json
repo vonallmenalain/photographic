@@ -15,7 +15,8 @@
     "build": "npm run build:api && npm run build:web",
     "build:web": "npm --workspace apps/web run build",
     "build:api": "npm --workspace apps/photos-api run build",
-    "lint": "npm --workspace apps/web run lint && npm --workspace apps/photos-api run lint"
+    "lint": "npm --workspace apps/web run lint && npm --workspace apps/photos-api run lint",
+    "test": "npm --workspace apps/photos-api run test && npm --workspace apps/web run test"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
