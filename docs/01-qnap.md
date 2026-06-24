@@ -16,29 +16,36 @@ Richte zuerst Firebase ein: **[8. Firebase](08-firebase.md)**.
 ## 1.2 Ordner (Volume) für die App anlegen
 
 1. Öffne **File Station**.
-2. Lege auf einer Freigabe einen Ordner an, z. B. `Photos/foto-app`.
+2. Lege auf einer Freigabe einen Ordner an, z. B. `photographic/foto-app`.
 3. Darin wird die App später automatisch anlegen:
    - `storage/originals/` – Originaldateien (geschützt)
    - `storage/admin/`, `storage/thumbs/`, `storage/previews/` – generierte Varianten
 
    (Eine lokale Datenbankdatei gibt es nicht mehr – die Daten liegen in Firestore.)
 
-Den vollständigen Pfad merken, z. B. `/share/Photos/foto-app`
-(unter manchen QNAPs `/share/CACHEDEV1_DATA/Photos/foto-app`).
+Den vollständigen Pfad merken. In dieser Anleitung wird durchgehend der Pfad
+`/share/CACHEDEV1_DATA/photographic/foto-app` verwendet (so wie der bereits
+angelegte Ordner). Auf manchen QNAPs fehlt das `CACHEDEV1_DATA` und der Pfad
+lautet nur `/share/photographic/foto-app` – beide zeigen auf denselben Ordner.
+Passe die folgenden Befehle an deinen tatsächlichen Pfad an.
 
 ## 1.3 Projekt auf das QNAP bringen
 
 **Variante A – per Git (empfohlen, wenn Git auf dem QNAP verfügbar ist):**
 
 ```bash
-cd /share/Photos
+cd /share/CACHEDEV1_DATA/photographic
 git clone <DEINE_REPO_URL> foto-app-code
 cd foto-app-code
 ```
 
 **Variante B – per File Station:** Lade dieses Projekt als ZIP herunter,
 entpacke es und kopiere den Ordner über File Station auf das QNAP, z. B. nach
-`/share/Photos/foto-app-code`.
+`/share/CACHEDEV1_DATA/photographic/foto-app-code`.
+
+> Hinweis: `foto-app` (deine Fotos / das Volume) und `foto-app-code` (der
+> Programmcode mit `docker-compose.yml`) sind **zwei getrennte Ordner**
+> nebeneinander unter `/share/CACHEDEV1_DATA/photographic/`.
 
 ## 1.4 Konfiguration (.env) anlegen
 
@@ -80,7 +87,7 @@ woanders liegen sollen:
 
 ```yaml
     volumes:
-      - /share/Photos/foto-app:/data
+      - /share/CACHEDEV1_DATA/photographic/foto-app:/data
 ```
 
 ## 1.5 Container bauen & starten
@@ -88,7 +95,7 @@ woanders liegen sollen:
 ### Variante A: SSH (am einfachsten)
 
 ```bash
-cd /share/Photos/foto-app-code
+cd /share/CACHEDEV1_DATA/photographic/foto-app-code
 docker compose up -d --build backend
 # Logs ansehen:
 docker compose logs -f backend
@@ -147,7 +154,7 @@ docker compose up -d backend
 ## 1.8 Updates einspielen
 
 ```bash
-cd /share/Photos/foto-app-code
+cd /share/CACHEDEV1_DATA/photographic/foto-app-code
 git pull            # oder neue Dateien per File Station kopieren
 docker compose up -d --build backend
 ```
