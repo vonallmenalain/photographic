@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { getDb } from '../db';
+import { COL, col, getById, firstOf, updateById } from '../db';
 import { asyncHandler, ApiError } from '../middleware/errorHandler';
 import { verifyFileToken } from '../lib/auth';
 import { requireParent } from '../middleware/parentAuth';
@@ -38,10 +38,7 @@ router.get(
     if (payload.v !== 'thumb' && payload.v !== 'preview') {
       throw new ApiError(403, 'Zugriff nicht möglich.');
     }
-    const db = getDb();
-    const photo = db
-      .prepare('SELECT storage_key, ext FROM photos WHERE id = ?')
-      .get(payload.pid) as { storage_key: string; ext: string } | undefined;
+    const photo = await getById<{ storage_key: string; ext: string }>(COL.photos, payload.pid);
     if (!photo) throw new ApiError(404, 'Datei nicht gefunden.');
     sendFileSafe(res, variantPath(payload.v as Variant, photo.storage_key), 'image/jpeg');
   }),
@@ -55,24 +52,12 @@ router.get(
   '/download/:token',
   requireParent,
   asyncHandler(async (req, res) => {
-    const db = getDb();
-    const grant = db
-      .prepare(
-        `SELECT dg.id, dg.photo_id, dg.email_id, dg.expires_at, ph.storage_key, ph.ext, ph.original_filename
-         FROM download_grants dg JOIN photos ph ON ph.id = dg.photo_id
-         WHERE dg.token = ?`,
-      )
-      .get(req.params.token) as
-      | {
-          id: string;
-          photo_id: string;
-          email_id: string;
-          expires_at: string | null;
-          storage_key: string;
-          ext: string;
-          original_filename: string;
-        }
-      | undefined;
+    const grant = await firstOf<{
+      photo_id: string;
+      email_id: string;
+      expires_at: string | null;
+      downloads: number;
+    }>(col(COL.downloadGrants).where('token', '==', req.params.token));
 
     if (!grant || grant.email_id !== req.parent!.emailId) {
       throw new ApiError(403, 'Download nicht möglich.');
@@ -80,9 +65,15 @@ router.get(
     if (grant.expires_at && new Date(grant.expires_at).getTime() < Date.now()) {
       throw new ApiError(410, 'Dieser Download-Link ist abgelaufen.');
     }
-    db.prepare('UPDATE download_grants SET downloads = downloads + 1 WHERE id = ?').run(grant.id);
-    const filePath = variantPath('original', grant.storage_key, grant.ext);
-    const safeName = path.basename(grant.original_filename) || `foto.${grant.ext}`;
+    const photo = await getById<{ storage_key: string; ext: string; original_filename: string }>(
+      COL.photos,
+      grant.photo_id,
+    );
+    if (!photo) throw new ApiError(404, 'Datei nicht gefunden.');
+
+    await updateById(COL.downloadGrants, grant.id, { downloads: (grant.downloads ?? 0) + 1 });
+    const filePath = variantPath('original', photo.storage_key, photo.ext);
+    const safeName = path.basename(photo.original_filename) || `foto.${photo.ext}`;
     sendFileSafe(res, filePath, 'application/octet-stream', safeName);
   }),
 );

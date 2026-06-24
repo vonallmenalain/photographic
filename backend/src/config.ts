@@ -50,9 +50,33 @@ export const config = {
     .filter(Boolean),
 
   // Storage: this directory is expected to live on the QNAP volume that is
-  // mounted into the container (see docker-compose.yml).
+  // mounted into the container (see docker-compose.yml). Photo originals and the
+  // generated (watermarked) variants live here; only metadata goes to Firestore.
   storageDir: path.resolve(optional('STORAGE_DIR', path.join(process.cwd(), 'data', 'storage'))),
-  dbPath: path.resolve(optional('DB_PATH', path.join(process.cwd(), 'data', 'app.db'))),
+
+  // ------------------------------------------------------------------------
+  // Firebase / Firestore. The whole datastore now lives in Cloud Firestore and
+  // parent e-mail verification runs through Firebase Authentication.
+  //
+  // The backend uses the Firebase Admin SDK and therefore needs a service
+  // account (NOT the public web config). Provide it via one of:
+  //   - FIREBASE_SERVICE_ACCOUNT       : the service-account JSON as a string
+  //   - FIREBASE_SERVICE_ACCOUNT_PATH  : path to the service-account JSON file
+  //   - GOOGLE_APPLICATION_CREDENTIALS : standard ADC path (auto-detected)
+  // For local development you can instead point at the Firebase Emulator Suite
+  // by setting FIRESTORE_EMULATOR_HOST and FIREBASE_AUTH_EMULATOR_HOST.
+  // ------------------------------------------------------------------------
+  firebase: {
+    projectId: optional('FIREBASE_PROJECT_ID', 'photographic-7ba68'),
+    serviceAccountJson: optional('FIREBASE_SERVICE_ACCOUNT'),
+    serviceAccountPath:
+      optional('FIREBASE_SERVICE_ACCOUNT_PATH') || optional('GOOGLE_APPLICATION_CREDENTIALS'),
+    storageBucket: optional('FIREBASE_STORAGE_BUCKET', 'photographic-7ba68.firebasestorage.app'),
+    firestoreEmulatorHost: optional('FIRESTORE_EMULATOR_HOST'),
+    authEmulatorHost: optional('FIREBASE_AUTH_EMULATOR_HOST'),
+    // When true (default), parents may verify via Firebase Authentication.
+    parentAuthEnabled: bool('FIREBASE_PARENT_AUTH', true),
+  },
 
   // Secrets used to sign tokens. MUST be set in production.
   jwtSecret: required('JWT_SECRET', isProd ? undefined : 'dev-insecure-jwt-secret-change-me'),

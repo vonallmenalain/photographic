@@ -2,7 +2,7 @@ import { Router, raw } from 'express';
 import { config } from '../config';
 import { getStripe } from '../services/payments';
 import { markOrderPaid, getOrderForEmail } from '../services/orders';
-import { getDb } from '../db';
+import { COL, getById } from '../db';
 import { sendConfirmationEmail } from './parent';
 
 const router = Router();
@@ -32,15 +32,13 @@ router.post('/stripe', raw({ type: 'application/json' }), async (req, res) => {
     const session = event.data.object as { id: string; metadata?: { orderId?: string } };
     const orderId = session.metadata?.orderId;
     if (orderId) {
-      markOrderPaid(orderId, 'stripe', session.id);
+      await markOrderPaid(orderId, 'stripe', session.id);
       try {
-        const db = getDb();
-        const row = db
-          .prepare('SELECT e.email, e.id FROM orders o JOIN parent_emails e ON e.id = o.email_id WHERE o.id = ?')
-          .get(orderId) as { email: string; id: string } | undefined;
-        if (row) {
-          const order = getOrderForEmail(row.id, orderId);
-          if (order) await sendConfirmationEmail(row.email, order);
+        const order = await getById<{ email_id: string }>(COL.orders, orderId);
+        if (order) {
+          const parentEmail = await getById<{ email: string }>(COL.parentEmails, order.email_id);
+          const detail = await getOrderForEmail(order.email_id, orderId);
+          if (parentEmail && detail) await sendConfirmationEmail(parentEmail.email, detail);
         }
       } catch {
         /* non fatal */

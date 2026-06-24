@@ -1,4 +1,15 @@
-import { getDb } from '../db';
+import {
+  COL,
+  col,
+  getById,
+  firstOf,
+  runQuery,
+  setById,
+  updateById,
+  deleteById,
+  deleteWhere,
+  nowIso,
+} from '../db';
 import { newId, randomToken } from '../lib/ids';
 import { ApiError } from '../middleware/errorHandler';
 import { canEmailSeePhoto } from './access';
@@ -15,134 +26,194 @@ export interface CartLine {
   ext: string;
 }
 
-function getOrCreateCart(emailId: string): string {
-  const db = getDb();
-  const existing = db
-    .prepare("SELECT id FROM orders WHERE email_id = ? AND status = 'cart' LIMIT 1")
-    .get(emailId) as { id: string } | undefined;
+interface OrderDoc {
+  email_id: string;
+  status: string;
+  currency: string;
+  total_cents: number;
+  payment_provider?: string;
+  payment_ref?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface OrderItemDoc {
+  order_id: string;
+  photo_id: string;
+  product_id: string;
+  qty: number;
+  unit_price_cents: number;
+  product_name: string;
+  created_at: string;
+}
+
+interface ProductDoc {
+  name: string;
+  type: string;
+  price_cents: number;
+  active: number;
+}
+
+interface PhotoLite {
+  storage_key: string;
+  ext: string;
+}
+
+async function getOrCreateCart(emailId: string): Promise<string> {
+  const existing = await firstOf<OrderDoc>(
+    col(COL.orders).where('email_id', '==', emailId).where('status', '==', 'cart'),
+  );
   if (existing) return existing.id;
   const id = newId('ord');
-  db.prepare("INSERT INTO orders (id, email_id, status) VALUES (?, ?, 'cart')").run(id, emailId);
+  await setById(COL.orders, id, {
+    email_id: emailId,
+    status: 'cart',
+    currency: 'eur',
+    total_cents: 0,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  });
   return id;
 }
 
-export function getCart(emailId: string): { id: string; items: CartLine[]; total_cents: number; currency: string } {
-  const db = getDb();
-  const cartId = getOrCreateCart(emailId);
-  const items = db
-    .prepare(
-      `SELECT oi.id, oi.photo_id, oi.product_id, oi.product_name, oi.qty, oi.unit_price_cents,
-              p.type AS product_type, ph.storage_key, ph.ext
-       FROM order_items oi
-       JOIN products p ON p.id = oi.product_id
-       JOIN photos ph ON ph.id = oi.photo_id
-       WHERE oi.order_id = ?`,
-    )
-    .all(cartId) as CartLine[];
-  const total = items.reduce((sum, i) => sum + i.unit_price_cents * i.qty, 0);
-  const currency = (db.prepare('SELECT currency FROM orders WHERE id = ?').get(cartId) as { currency: string }).currency;
-  return { id: cartId, items, total_cents: total, currency };
+async function itemsForOrder(orderId: string) {
+  return runQuery<OrderItemDoc>(col(COL.orderItems).where('order_id', '==', orderId));
 }
 
-export function addToCart(emailId: string, photoId: string, productId: string, qty = 1): void {
-  const db = getDb();
-  if (!canEmailSeePhoto(emailId, photoId)) {
+export async function getCart(
+  emailId: string,
+): Promise<{ id: string; items: CartLine[]; total_cents: number; currency: string }> {
+  const cartId = await getOrCreateCart(emailId);
+  const rawItems = await itemsForOrder(cartId);
+
+  const items: CartLine[] = [];
+  for (const oi of rawItems) {
+    const [product, photo] = await Promise.all([
+      getById<ProductDoc>(COL.products, oi.product_id),
+      getById<PhotoLite>(COL.photos, oi.photo_id),
+    ]);
+    items.push({
+      id: oi.id,
+      photo_id: oi.photo_id,
+      product_id: oi.product_id,
+      product_name: oi.product_name,
+      product_type: product?.type ?? 'digital',
+      qty: oi.qty,
+      unit_price_cents: oi.unit_price_cents,
+      storage_key: photo?.storage_key ?? '',
+      ext: photo?.ext ?? 'jpg',
+    });
+  }
+
+  const total = items.reduce((sum, i) => sum + i.unit_price_cents * i.qty, 0);
+  const order = await getById<OrderDoc>(COL.orders, cartId);
+  return { id: cartId, items, total_cents: total, currency: order?.currency ?? 'eur' };
+}
+
+export async function addToCart(
+  emailId: string,
+  photoId: string,
+  productId: string,
+  qty = 1,
+): Promise<void> {
+  if (!(await canEmailSeePhoto(emailId, photoId))) {
     // Do not reveal whether the photo exists.
     throw new ApiError(403, 'Dieses Foto ist für dich nicht verfügbar.');
   }
-  const product = db
-    .prepare('SELECT id, name, price_cents FROM products WHERE id = ? AND active = 1')
-    .get(productId) as { id: string; name: string; price_cents: number } | undefined;
-  if (!product) throw new ApiError(400, 'Dieses Produkt ist nicht verfügbar.');
-
-  const cartId = getOrCreateCart(emailId);
-  const existing = db
-    .prepare('SELECT id, qty FROM order_items WHERE order_id = ? AND photo_id = ? AND product_id = ?')
-    .get(cartId, photoId, productId) as { id: string; qty: number } | undefined;
-  if (existing) {
-    db.prepare('UPDATE order_items SET qty = qty + ? WHERE id = ?').run(qty, existing.id);
-  } else {
-    db.prepare(
-      `INSERT INTO order_items (id, order_id, photo_id, product_id, qty, unit_price_cents, product_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(newId('oi'), cartId, photoId, productId, qty, product.price_cents, product.name);
+  const product = await getById<ProductDoc>(COL.products, productId);
+  if (!product || product.active !== 1) {
+    throw new ApiError(400, 'Dieses Produkt ist nicht verfügbar.');
   }
-  recalcTotal(cartId);
-}
 
-export function removeFromCart(emailId: string, itemId: string): void {
-  const db = getDb();
-  const cartId = getOrCreateCart(emailId);
-  db.prepare('DELETE FROM order_items WHERE id = ? AND order_id = ?').run(itemId, cartId);
-  recalcTotal(cartId);
-}
-
-export function clearCart(emailId: string): void {
-  const db = getDb();
-  const cartId = getOrCreateCart(emailId);
-  db.prepare('DELETE FROM order_items WHERE order_id = ?').run(cartId);
-  recalcTotal(cartId);
-}
-
-function recalcTotal(orderId: string): void {
-  const db = getDb();
-  const row = db
-    .prepare('SELECT COALESCE(SUM(unit_price_cents * qty),0) AS t FROM order_items WHERE order_id = ?')
-    .get(orderId) as { t: number };
-  db.prepare("UPDATE orders SET total_cents = ?, updated_at = datetime('now') WHERE id = ?").run(
-    row.t,
-    orderId,
+  const cartId = await getOrCreateCart(emailId);
+  const existing = await firstOf<OrderItemDoc>(
+    col(COL.orderItems)
+      .where('order_id', '==', cartId)
+      .where('photo_id', '==', photoId)
+      .where('product_id', '==', productId),
   );
+  if (existing) {
+    await updateById(COL.orderItems, existing.id, { qty: existing.qty + qty });
+  } else {
+    await setById(COL.orderItems, newId('oi'), {
+      order_id: cartId,
+      photo_id: photoId,
+      product_id: productId,
+      qty,
+      unit_price_cents: product.price_cents,
+      product_name: product.name,
+      created_at: nowIso(),
+    });
+  }
+  await recalcTotal(cartId);
+}
+
+export async function removeFromCart(emailId: string, itemId: string): Promise<void> {
+  const cartId = await getOrCreateCart(emailId);
+  const item = await getById<OrderItemDoc>(COL.orderItems, itemId);
+  if (item && item.order_id === cartId) {
+    await deleteById(COL.orderItems, itemId);
+  }
+  await recalcTotal(cartId);
+}
+
+export async function clearCart(emailId: string): Promise<void> {
+  const cartId = await getOrCreateCart(emailId);
+  await deleteWhere(col(COL.orderItems).where('order_id', '==', cartId));
+  await recalcTotal(cartId);
+}
+
+async function recalcTotal(orderId: string): Promise<void> {
+  const items = await itemsForOrder(orderId);
+  const total = items.reduce((sum, i) => sum + i.unit_price_cents * i.qty, 0);
+  await updateById(COL.orders, orderId, { total_cents: total, updated_at: nowIso() });
 }
 
 /** Transitions the cart into a real order ready for payment. */
-export function beginCheckout(emailId: string): { orderId: string; total_cents: number; currency: string } {
-  const db = getDb();
-  const cart = getCart(emailId);
+export async function beginCheckout(
+  emailId: string,
+): Promise<{ orderId: string; total_cents: number; currency: string }> {
+  const cart = await getCart(emailId);
   if (cart.items.length === 0) throw new ApiError(400, 'Dein Warenkorb ist leer.');
-  db.prepare("UPDATE orders SET status = 'checkout_started', updated_at = datetime('now') WHERE id = ?").run(
-    cart.id,
-  );
+  await updateById(COL.orders, cart.id, { status: 'checkout_started', updated_at: nowIso() });
   return { orderId: cart.id, total_cents: cart.total_cents, currency: cart.currency };
 }
 
 /** Marks an order paid and creates download grants for digital items. */
-export function markOrderPaid(orderId: string, provider: string, ref: string): void {
-  const db = getDb();
-  const order = db.prepare('SELECT id, email_id, status FROM orders WHERE id = ?').get(orderId) as
-    | { id: string; email_id: string; status: string }
-    | undefined;
+export async function markOrderPaid(orderId: string, provider: string, ref: string): Promise<void> {
+  const order = await getById<OrderDoc>(COL.orders, orderId);
   if (!order) return;
   if (order.status === 'paid' || order.status === 'completed' || order.status === 'fulfilled') return;
 
-  const tx = db.transaction(() => {
-    db.prepare(
-      "UPDATE orders SET status = 'paid', payment_provider = ?, payment_ref = ?, updated_at = datetime('now') WHERE id = ?",
-    ).run(provider, ref, orderId);
-
-    const items = db
-      .prepare(
-        `SELECT oi.photo_id, p.type FROM order_items oi
-         JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?`,
-      )
-      .all(orderId) as { photo_id: string; type: string }[];
-
-    for (const item of items) {
-      if (item.type !== 'digital') continue;
-      const exists = db
-        .prepare('SELECT 1 FROM download_grants WHERE order_id = ? AND photo_id = ?')
-        .get(orderId, item.photo_id);
-      if (exists) continue;
-      db.prepare(
-        `INSERT INTO download_grants (id, order_id, email_id, photo_id, token)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).run(newId('dg'), orderId, order.email_id, item.photo_id, randomToken(24));
-    }
-    db.prepare("UPDATE orders SET status = 'completed', updated_at = datetime('now') WHERE id = ?").run(
-      orderId,
-    );
+  await updateById(COL.orders, orderId, {
+    status: 'paid',
+    payment_provider: provider,
+    payment_ref: ref,
+    updated_at: nowIso(),
   });
-  tx();
+
+  const items = await itemsForOrder(orderId);
+  for (const item of items) {
+    const product = await getById<ProductDoc>(COL.products, item.product_id);
+    if (!product || product.type !== 'digital') continue;
+    const grant = await firstOf(
+      col(COL.downloadGrants)
+        .where('order_id', '==', orderId)
+        .where('photo_id', '==', item.photo_id),
+    );
+    if (grant) continue;
+    await setById(COL.downloadGrants, newId('dg'), {
+      order_id: orderId,
+      email_id: order.email_id,
+      photo_id: item.photo_id,
+      token: randomToken(24),
+      downloads: 0,
+      expires_at: null,
+      created_at: nowIso(),
+    });
+  }
+
+  await updateById(COL.orders, orderId, { status: 'completed', updated_at: nowIso() });
 }
 
 export interface OrderDetail {
@@ -163,32 +234,56 @@ export interface OrderDetail {
   }[];
 }
 
-export function getOrderForEmail(emailId: string, orderId: string): OrderDetail | null {
-  const db = getDb();
-  const order = db
-    .prepare('SELECT id, status, currency, total_cents, created_at FROM orders WHERE id = ? AND email_id = ?')
-    .get(orderId, emailId) as Omit<OrderDetail, 'items'> | undefined;
-  if (!order) return null;
-  const items = db
-    .prepare(
-      `SELECT oi.photo_id, oi.product_name, p.type AS product_type, oi.qty, oi.unit_price_cents,
-              ph.storage_key, ph.ext,
-              (SELECT token FROM download_grants dg WHERE dg.order_id = oi.order_id AND dg.photo_id = oi.photo_id LIMIT 1) AS download_token
-       FROM order_items oi
-       JOIN products p ON p.id = oi.product_id
-       JOIN photos ph ON ph.id = oi.photo_id
-       WHERE oi.order_id = ?`,
-    )
-    .all(orderId) as OrderDetail['items'];
-  return { ...order, items };
+export async function getOrderForEmail(emailId: string, orderId: string): Promise<OrderDetail | null> {
+  const order = await getById<OrderDoc>(COL.orders, orderId);
+  if (!order || order.email_id !== emailId) return null;
+
+  const rawItems = await itemsForOrder(orderId);
+  const items: OrderDetail['items'] = [];
+  for (const oi of rawItems) {
+    const [product, photo, grant] = await Promise.all([
+      getById<ProductDoc>(COL.products, oi.product_id),
+      getById<PhotoLite>(COL.photos, oi.photo_id),
+      firstOf<{ token: string }>(
+        col(COL.downloadGrants)
+          .where('order_id', '==', orderId)
+          .where('photo_id', '==', oi.photo_id),
+      ),
+    ]);
+    items.push({
+      photo_id: oi.photo_id,
+      product_name: oi.product_name,
+      product_type: product?.type ?? 'digital',
+      qty: oi.qty,
+      unit_price_cents: oi.unit_price_cents,
+      storage_key: photo?.storage_key ?? '',
+      ext: photo?.ext ?? 'jpg',
+      download_token: grant?.token ?? null,
+    });
+  }
+
+  return {
+    id: order.id,
+    status: order.status,
+    currency: order.currency,
+    total_cents: order.total_cents,
+    created_at: order.created_at,
+    items,
+  };
 }
 
-export function listOrdersForEmail(emailId: string): { id: string; status: string; total_cents: number; currency: string; created_at: string }[] {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT id, status, total_cents, currency, created_at FROM orders
-       WHERE email_id = ? AND status != 'cart' ORDER BY created_at DESC`,
-    )
-    .all(emailId) as { id: string; status: string; total_cents: number; currency: string; created_at: string }[];
+export async function listOrdersForEmail(
+  emailId: string,
+): Promise<{ id: string; status: string; total_cents: number; currency: string; created_at: string }[]> {
+  const orders = await runQuery<OrderDoc>(col(COL.orders).where('email_id', '==', emailId));
+  return orders
+    .filter((o) => o.status !== 'cart')
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .map((o) => ({
+      id: o.id,
+      status: o.status,
+      total_cents: o.total_cents,
+      currency: o.currency,
+      created_at: o.created_at,
+    }));
 }

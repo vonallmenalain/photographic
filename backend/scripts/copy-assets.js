@@ -1,11 +1,10 @@
-// Copies non-TS assets (SQL schema, fonts) into the dist folder after tsc.
+// Copies non-TS assets into the dist folder after tsc.
+// (The datastore is Cloud Firestore now, so there is no SQL schema to copy.)
 const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const copies = [
-  ['src/db/schema.sql', 'dist/db/schema.sql'],
-];
+const copies = [];
 
 for (const [from, to] of copies) {
   const src = path.join(root, from);
