@@ -383,6 +383,42 @@ router.get(
   }),
 );
 
+// Admin-only clean full-resolution view (auth required via cookie/bearer).
+// Serves the untouched original so admins can inspect a photo enlarged. Falls
+// back to the (clean) admin variant when the original is unavailable.
+const ORIGINAL_MIME: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  avif: 'image/avif',
+  tiff: 'image/tiff',
+  tif: 'image/tiff',
+  bmp: 'image/bmp',
+};
+router.get(
+  '/photos/:id/original',
+  asyncHandler(async (req, res) => {
+    const photo = await getById<{ storage_key: string; ext: string }>(COL.photos, req.params.id);
+    if (!photo) throw new ApiError(404, 'Foto nicht gefunden.');
+    const fs = await import('fs');
+    const originalPath = variantPath('original', photo.storage_key, photo.ext);
+    if (fs.existsSync(originalPath)) {
+      const ext = (photo.ext || 'jpg').toLowerCase();
+      res.setHeader('Content-Type', ORIGINAL_MIME[ext] ?? 'application/octet-stream');
+      res.setHeader('Cache-Control', 'private, max-age=60');
+      fs.createReadStream(originalPath).pipe(res);
+      return;
+    }
+    const adminPath = variantPath('admin', photo.storage_key);
+    if (!fs.existsSync(adminPath)) throw new ApiError(404, 'Originaldatei nicht verfügbar.');
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=60');
+    fs.createReadStream(adminPath).pipe(res);
+  }),
+);
+
 router.patch(
   '/photos/:id',
   asyncHandler(async (req, res) => {
