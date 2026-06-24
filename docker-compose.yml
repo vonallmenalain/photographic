@@ -1,0 +1,45 @@
+# ============================================================================
+# Läuft auf dem QNAP (Container Station -> "Create Application" mit dieser Datei,
+# oder via SSH:  docker compose up -d --build).
+#
+#   - "backend"     = die API + Bildverarbeitung; speichert Fotos & DB unter ./data
+#   - "cloudflared" = optionaler Cloudflare-Tunnel, der die API sicher ins
+#                     Internet bringt (ohne Portfreigabe am Router).
+#
+# Kopiere .env.example -> .env und trage deine Werte ein.
+# ============================================================================
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: photo-app-backend:latest
+    container_name: photo-app-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      STORAGE_DIR: /data/storage
+      DB_PATH: /data/app.db
+    volumes:
+      # WICHTIG: Linker Pfad = Ordner auf deinem QNAP (Fotos + Datenbank).
+      # Passe ihn an deine Freigabe an, z. B. /share/Photos/foto-app
+      - ./data:/data
+    ports:
+      # Nur nötig, wenn du OHNE Cloudflare-Tunnel direkt zugreifen willst.
+      - "4000:4000"
+
+  # ---------------------------------------------------------------------------
+  # Optionaler Cloudflare Tunnel. Aktivieren mit:  docker compose --profile tunnel up -d
+  # Trage dein Tunnel-Token in .env als CLOUDFLARE_TUNNEL_TOKEN ein.
+  # ---------------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: photo-app-tunnel
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - backend
