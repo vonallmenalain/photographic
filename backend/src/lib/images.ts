@@ -184,6 +184,26 @@ export function fileExists(p: string): boolean {
   return fs.existsSync(p);
 }
 
+/**
+ * Walks up from a (now deleted) file and removes parent directories as long as
+ * they are empty, stopping at the storage root. Photos are stored under a
+ * per-event sub-folder (`<variant>/<eventId>/<photoId>.<ext>`); without this the
+ * empty `<eventId>` folders would pile up after every photo/event deletion.
+ */
+async function removeEmptyParents(filePath: string) {
+  const root = path.resolve(config.storageDir);
+  let dir = path.dirname(path.resolve(filePath));
+  // Only ever clean up *inside* the storage root, and never the root itself.
+  while (dir !== root && dir.startsWith(root + path.sep)) {
+    try {
+      await fsp.rmdir(dir); // succeeds only when the directory is empty
+    } catch {
+      break; // not empty (or already gone) -> nothing more to clean up
+    }
+    dir = path.dirname(dir);
+  }
+}
+
 export async function deleteAllVariants(storageKey: string, ext: string) {
   const targets: string[] = [
     variantPath('original', storageKey, ext),
@@ -198,6 +218,28 @@ export async function deleteAllVariants(storageKey: string, ext: string) {
       } catch {
         /* ignore missing */
       }
+      await removeEmptyParents(t);
+    }),
+  );
+}
+
+/**
+ * Removes every stored variant directory for a whole event. Used when an event
+ * is deleted so no empty (or stray) `<variant>/<eventId>` folders remain behind,
+ * even if some files were not tracked individually.
+ */
+export async function deleteEventStorage(eventId: string) {
+  if (!eventId) return;
+  await Promise.all(
+    (Object.keys(SUBDIR) as Variant[]).map(async (variant) => {
+      const dir = path.join(config.storageDir, SUBDIR[variant], eventId);
+      try {
+        await fsp.rm(dir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+      // Drop the now-empty variant sub-folder too if this was the last event.
+      await removeEmptyParents(dir);
     }),
   );
 }

@@ -13,21 +13,23 @@ Richte zuerst Firebase ein: **[8. Firebase](08-firebase.md)**.
 - Optional, aber empfohlen: SSH-Zugang zum QNAP (Systemsteuerung → Telnet/SSH →
   „SSH-Dienst aktivieren“).
 
-## 1.2 Ordner (Volume) für die App anlegen
+## 1.2 Ordner (Volume) für die Fotos
 
-1. Öffne **File Station**.
-2. Lege auf einer Freigabe einen Ordner an, z. B. `photographic/foto-app`.
-3. Darin wird die App später automatisch anlegen:
-   - `storage/originals/` – Originaldateien (geschützt)
-   - `storage/admin/`, `storage/thumbs/`, `storage/previews/` – generierte Varianten
+Standardmäßig speichert die App ihre Fotos im Unterordner `data` **direkt im
+Projektordner** (`foto-app-code/data`) – siehe `docker-compose.yml` (`./data:/data`).
+Du musst also normalerweise **keinen** separaten Foto-Ordner anlegen; der `data`-
+Ordner entsteht beim ersten Start automatisch. Darin legt die App an:
 
-   (Eine lokale Datenbankdatei gibt es nicht mehr – die Daten liegen in Firestore.)
+- `storage/originals/` – Originaldateien (geschützt)
+- `storage/admin/`, `storage/thumbs/`, `storage/previews/` – generierte Varianten
 
-Den vollständigen Pfad merken. In dieser Anleitung wird durchgehend der Pfad
-`/share/CACHEDEV1_DATA/photographic/foto-app` verwendet (so wie der bereits
-angelegte Ordner). Auf manchen QNAPs fehlt das `CACHEDEV1_DATA` und der Pfad
-lautet nur `/share/photographic/foto-app` – beide zeigen auf denselben Ordner.
-Passe die folgenden Befehle an deinen tatsächlichen Pfad an.
+(Eine lokale Datenbankdatei gibt es nicht mehr – die Daten liegen in Firestore.)
+
+> **Brauche ich einen separaten `foto-app`-Ordner?** Nein. Der ist nur nötig,
+> wenn du die Fotos bewusst **außerhalb** des Projektordners ablegen willst (z. B.
+> auf einer anderen Freigabe). Dann passt du den Volume-Pfad an (siehe 1.4). Mit
+> der Standard-Einstellung liegen alle Fotos unter `foto-app-code/data` und ein
+> zusätzlicher `foto-app`-Ordner wird nicht verwendet.
 
 ## 1.3 Projekt auf das QNAP bringen
 
@@ -43,9 +45,10 @@ cd foto-app-code
 entpacke es und kopiere den Ordner über File Station auf das QNAP, z. B. nach
 `/share/CACHEDEV1_DATA/photographic/foto-app-code`.
 
-> Hinweis: `foto-app` (deine Fotos / das Volume) und `foto-app-code` (der
-> Programmcode mit `docker-compose.yml`) sind **zwei getrennte Ordner**
-> nebeneinander unter `/share/CACHEDEV1_DATA/photographic/`.
+> Hinweis: In der Standard-Einstellung liegen die Fotos im Unterordner `data`
+> **innerhalb** von `foto-app-code` (`foto-app-code/data`). Ein separater
+> `foto-app`-Ordner daneben ist nur nötig, wenn du den Volume-Pfad in
+> `docker-compose.yml` bewusst dorthin umbiegst (siehe 1.4).
 
 ## 1.4 Konfiguration (.env) anlegen
 
@@ -81,9 +84,10 @@ COOKIE_DOMAIN=.alae.app
 > Secrets erzeugen (auf einem Mac/Linux/QNAP-SSH):
 > `openssl rand -base64 48`
 
-**Volume-Pfad anpassen:** In `docker-compose.yml` zeigt das Volume standardmäßig
-auf `./data`. Ändere den linken Pfad auf deinen QNAP-Ordner, falls die Fotos
-woanders liegen sollen:
+**Volume-Pfad anpassen (optional):** In `docker-compose.yml` zeigt das Volume
+standardmäßig auf `./data`, d. h. die Fotos landen in `foto-app-code/data`. Das
+ist für die meisten Setups ausreichend. **Nur** wenn die Fotos woanders liegen
+sollen (z. B. auf einer anderen Freigabe), änderst du den linken Pfad:
 
 ```yaml
     volumes:
