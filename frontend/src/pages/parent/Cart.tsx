@@ -108,8 +108,9 @@ export default function Cart() {
                   <div style={{ flex: 1 }}>
                     <strong>{item.productName}</strong>
                     <div className="muted" style={{ fontSize: '0.85rem' }}>
-                      {item.productType === 'digital' ? 'Digitaler Download' : 'Druck'} · Menge{' '}
-                      {item.qty}
+                      {item.productType === 'digital'
+                        ? 'Digitaler Download'
+                        : `Druck · Menge ${item.qty}`}
                     </div>
                   </div>
                   <div style={{ fontWeight: 600 }}>

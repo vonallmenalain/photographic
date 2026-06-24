@@ -130,7 +130,7 @@ export const config = {
   stripe: {
     secretKey: optional('STRIPE_SECRET_KEY'),
     webhookSecret: optional('STRIPE_WEBHOOK_SECRET'),
-    currency: optional('CURRENCY', 'eur'),
+    currency: optional('CURRENCY', 'chf'),
     enabled: !!optional('STRIPE_SECRET_KEY'),
   },
 

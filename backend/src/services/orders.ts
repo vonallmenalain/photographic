@@ -68,7 +68,7 @@ async function getOrCreateCart(emailId: string): Promise<string> {
   await setById(COL.orders, id, {
     email_id: emailId,
     status: 'cart',
-    currency: 'eur',
+    currency: 'chf',
     total_cents: 0,
     created_at: nowIso(),
     updated_at: nowIso(),
@@ -107,7 +107,7 @@ export async function getCart(
 
   const total = items.reduce((sum, i) => sum + i.unit_price_cents * i.qty, 0);
   const order = await getById<OrderDoc>(COL.orders, cartId);
-  return { id: cartId, items, total_cents: total, currency: order?.currency ?? 'eur' };
+  return { id: cartId, items, total_cents: total, currency: order?.currency ?? 'chf' };
 }
 
 export async function addToCart(
