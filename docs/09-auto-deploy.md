@@ -30,6 +30,12 @@ Ab jetzt läuft das automatisch:
 > (siehe [docs/03-netlify.md](03-netlify.md)). Diese Anleitung betrifft nur das
 > **Backend** auf dem QNAP.
 
+> **Reihenfolge ist wichtig!** Das Registry-Image entsteht **erst beim ersten
+> Merge nach `main`**. Vorher gibt es nichts zu pullen. Arbeite die Schritte
+> daher genau in dieser Reihenfolge ab:
+> **1) PR mergen → 2) Action grün → 3) Paket öffentlich → 4) QNAP umstellen.**
+> Ziehst du das Image vorher, bekommst du `pull access denied` – das ist normal.
+
 > **Begriff „neuer PR“:** Ein Pull Request allein verändert deinen Live-Betrieb
 > **nicht**. Erst wenn der PR nach `main` **gemerged** wird, baut Actions ein
 > neues `:latest`-Image und das QNAP aktualisiert sich. Für reine PRs (noch nicht
@@ -109,21 +115,62 @@ statt lokal zu bauen:
 > Heißt dein GitHub-Owner anders als `vonallmenalain`, setze in der `.env`:
 > `BACKEND_IMAGE=ghcr.io/<dein-owner>/photographic-backend:latest`
 
-Hol dir den aktuellen Code-Stand (mit der neuen Compose-Datei) aufs QNAP und
-starte das Backend einmalig neu – ab jetzt wird **gepullt statt gebaut**:
+Damit der QNAP pullt statt baut, muss **einmalig** die neue `docker-compose.yml`
+(und `docker-compose.build.yml`) dorthin. Auf dem QNAP ist **kein `git`**
+installiert – nutze daher eine der folgenden Varianten.
+
+### Variante 1 – per `curl`/`wget` (kein git nötig, empfohlen)
+
+Das Repository ist öffentlich, du kannst die Dateien also direkt von GitHub
+laden (Dateien aus dem Branch `main`):
 
 ```bash
 cd /share/CACHEDEV1_DATA/photographic/foto-app-code
-git pull                       # oder neue Dateien per File Station kopieren
+BASE=https://raw.githubusercontent.com/vonallmenalain/photographic/main
+# Sicherheitskopie der alten Datei:
+cp docker-compose.yml docker-compose.yml.bak
+# Neue Compose-Dateien holen:
+curl -fsSL "$BASE/docker-compose.yml"       -o docker-compose.yml
+curl -fsSL "$BASE/docker-compose.build.yml" -o docker-compose.build.yml
+```
+
+> Hat das QNAP kein `curl`, geht auch `wget -O docker-compose.yml "$BASE/docker-compose.yml"`.
+
+### Variante 2 – per File Station
+
+Lade `docker-compose.yml` (und `docker-compose.build.yml`) aus dem GitHub-Repo
+herunter und kopiere sie per File Station nach
+`/share/CACHEDEV1_DATA/photographic/foto-app-code` (vorhandene Datei ersetzen).
+
+### Variante 3 – bestehende Datei direkt bearbeiten
+
+Öffne die alte `docker-compose.yml` im File-Station-Texteditor und ersetze beim
+`backend`-Dienst die Zeilen `build:`/`image: photo-app-backend:latest` durch:
+
+```yaml
+    image: ${BACKEND_IMAGE:-ghcr.io/vonallmenalain/photographic-backend:latest}
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+```
+
+(Für Watchtower zusätzlich den `watchtower`-Dienst aus der neuen Datei kopieren.)
+
+### Dann: Image ziehen und starten
+
+```bash
+cd /share/CACHEDEV1_DATA/photographic/foto-app-code
 docker compose pull backend    # zieht das fertige Image aus GHCR
 docker compose up -d backend
 docker compose logs -f backend
 ```
 
-> Diesen `git pull` brauchst du nur **einmal** für die Umstellung. Künftige
-> **Code-Updates** kommen über das Image automatisch (Schritt 4) – du musst den
-> Quellcode auf dem QNAP nicht mehr aktualisieren. Nur wenn sich die
-> `docker-compose.yml` oder `.env` selbst ändert, holst du sie erneut.
+> Das machst du nur **einmal** für die Umstellung. Künftige **Code-Updates**
+> kommen über das Image automatisch (Schritt 4) – du musst den Quellcode auf dem
+> QNAP nie wieder anfassen. Nur wenn sich die `docker-compose.yml` oder `.env`
+> selbst ändert, holst du sie erneut (Variante 1).
+
+> **`git` doch installieren?** Optional über das QNAP-Paket **Entware**
+> (`opkg install git git-http`). Nötig ist das aber nicht – Variante 1 reicht.
 
 ---
 
@@ -197,10 +244,26 @@ Dann `docker compose up -d backend`. Zum Reaktivieren der Auto-Updates wieder au
 | Symptom | Ursache / Lösung |
 |---|---|
 | Action `denied: permission_denied` beim Push | **Settings → Actions → General → Workflow permissions → Read and write** aktivieren. |
-| QNAP `pull access denied` / `unauthorized` | Image privat → Variante B (Schritt 2): `docker login ghcr.io` bzw. `watchtower-config.json` einhängen, oder Image öffentlich machen. |
+| QNAP `pull access denied` für `photo-app-backend` | Es läuft noch die **alte** `docker-compose.yml` (z. B. weil `git pull` mangels git nichts tat). Neue Compose-Datei holen (Schritt 3, Variante 1). |
+| QNAP `pull access denied` / `unauthorized` für das GHCR-Image | Image noch nicht gebaut (PR noch nicht gemergt) **oder** privat → Image öffentlich machen bzw. `docker login ghcr.io` (Schritt 2, Variante B). |
+| `WARN ... variable is not set. Defaulting to a blank string` | Harmlos: dein `ADMIN_PASSWORD_HASH` in der `.env` enthält `$`-Zeichen, die Compose als Variablen liest. Der Hash wird trotzdem korrekt an den Container übergeben. Zum Stummschalten siehe Hinweis unten. |
+| `git: command not found` | Auf dem QNAP ist kein git installiert. Nutze Schritt 3, Variante 1 (`curl`/`wget`) – git wird nicht benötigt. |
 | Watchtower aktualisiert nichts | Läuft der Container? `docker compose ps`. Trägt das Backend das Label `...watchtower.enable=true`? Stimmt der Image-Tag (`:latest`)? |
 | Image-Name falsch | Owner heißt anders → `BACKEND_IMAGE` in `.env` setzen (Owner muss klein geschrieben sein). |
 | Update soll sofort kommen | `WATCHTOWER_POLL_INTERVAL` verkleinern **oder** manuell `docker compose pull && up -d backend`. |
+
+### Hinweis: die `$`-Warnungen sind harmlos
+
+Compose liest die `.env` auch für die Variablen-Ersetzung. Ein bcrypt-Hash wie
+`ADMIN_PASSWORD_HASH=$2a$10$…` enthält `$`, weshalb Compose `WARN ... variable is
+not set`-Meldungen ausgibt. **Du kannst sie ignorieren** – der Hash wird über
+`env_file` wörtlich (und damit korrekt) an den Container übergeben; der Login
+funktioniert.
+
+> **Bitte den Hash NICHT mit `$$` „escapen“.** Da dieselbe `.env` zugleich als
+> `env_file` dient und dort die Werte **wörtlich** übernommen werden, würde ein
+> verdoppeltes `$$` im Container landen und den Hash zerstören. Lass den Hash
+> also unverändert und ignoriere die Warnung.
 
 ➡️ Zurück zur Übersicht: **[README](../README.md)** · Betrieb &
 Troubleshooting: **[6. Betrieb](06-betrieb.md)**.

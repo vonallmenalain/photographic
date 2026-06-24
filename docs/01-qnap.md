@@ -177,9 +177,15 @@ docker compose up -d backend
 
 ```bash
 cd /share/CACHEDEV1_DATA/photographic/foto-app-code
-git pull
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build backend
 ```
+
+> **Kein `git` auf dem QNAP?** Das ist normal. Den Quellcode brauchst du dort gar
+> nicht mehr – im Normalbetrieb wird nur das fertige Image gezogen. Musst du
+> einmalig die `docker-compose.yml` aktualisieren, hol sie ohne git per `curl`
+> (das Repo ist öffentlich):
+> `curl -fsSL https://raw.githubusercontent.com/vonallmenalain/photographic/main/docker-compose.yml -o docker-compose.yml`
+> Details: **[9. Automatisches Deployment](09-auto-deploy.md)**.
 
 Die Daten in Firestore bleiben unverändert erhalten (liegen in der Cloud, nicht
 im Container). Die Fotos im `/data`-Volume bleiben ebenfalls erhalten.
