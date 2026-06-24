@@ -2,7 +2,15 @@ import { useEffect, useState } from 'react';
 import { fetchAdminImage } from '../api/client';
 
 /** Loads an admin-only (bearer-protected) thumbnail and shows it as an object URL. */
-export function AdminThumb({ photoId, size = 120 }: { photoId: string; size?: number }) {
+export function AdminThumb({
+  photoId,
+  size = 120,
+  onClick,
+}: {
+  photoId: string;
+  size?: number;
+  onClick?: () => void;
+}) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -25,8 +33,24 @@ export function AdminThumb({ photoId, size = 120 }: { photoId: string; size?: nu
     };
   }, [photoId]);
 
+  const clickable = !!onClick;
+
   return (
     <div
+      onClick={onClick}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      title={clickable ? 'Zum Vergrößern klicken' : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick?.();
+              }
+            }
+          : undefined
+      }
       style={{
         width: size,
         height: size,
@@ -36,6 +60,7 @@ export function AdminThumb({ photoId, size = 120 }: { photoId: string; size?: nu
         display: 'grid',
         placeItems: 'center',
         flexShrink: 0,
+        cursor: clickable ? 'zoom-in' : undefined,
       }}
     >
       {url ? (

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { api, ApiError } from '../../api/client';
+import { api, ApiError, fetchAdminImage } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
 
@@ -45,6 +45,7 @@ export default function EventDetail() {
   const [uploadMsg, setUploadMsg] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const [emailModalPhoto, setEmailModalPhoto] = useState<Photo | null>(null);
+  const [zoomPhoto, setZoomPhoto] = useState<Photo | null>(null);
 
   const load = async () => {
     try {
@@ -244,7 +245,7 @@ export default function EventDetail() {
                   borderRadius: 12,
                 }}
               >
-                <AdminThumb photoId={p.id} />
+                <AdminThumb photoId={p.id} onClick={() => setZoomPhoto(p)} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <StatusBadge status={p.status} />
@@ -346,6 +347,67 @@ export default function EventDetail() {
       {emailModalPhoto && (
         <PhotoEmailModal photo={emailModalPhoto} onClose={() => setEmailModalPhoto(null)} />
       )}
+
+      {zoomPhoto && <AdminPhotoLightbox photo={zoomPhoto} onClose={() => setZoomPhoto(null)} />}
+    </div>
+  );
+}
+
+/** Full-resolution, watermark-free preview of a single photo for admins. */
+function AdminPhotoLightbox({ photo, onClose }: { photo: Photo; onClose: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let revoked: string | null = null;
+    let active = true;
+    fetchAdminImage(`/api/admin/photos/${photo.id}/original`)
+      .then((u) => {
+        if (active) {
+          setUrl(u);
+          revoked = u;
+        } else {
+          URL.revokeObjectURL(u);
+        }
+      })
+      .catch(() => active && setFailed(true));
+    return () => {
+      active = false;
+      if (revoked) URL.revokeObjectURL(revoked);
+    };
+  }, [photo.id]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="lightbox" onClick={onClose}>
+      <div className="inner" onClick={(e) => e.stopPropagation()}>
+        <button className="close" onClick={onClose} aria-label="Schließen">
+          ×
+        </button>
+        {failed ? (
+          <Alert kind="error">Originaldatei konnte nicht geladen werden.</Alert>
+        ) : url ? (
+          <img src={url} alt={photo.original_filename} style={{ pointerEvents: 'auto' }} />
+        ) : (
+          <div style={{ display: 'grid', placeItems: 'center', minWidth: 220, minHeight: 160 }}>
+            <span className="spinner" />
+          </div>
+        )}
+        <div
+          className="muted center"
+          style={{ marginTop: 10, fontSize: '0.82rem', color: '#e2e8f0' }}
+        >
+          {photo.original_filename}
+          {photo.width ? ` · ${photo.width}×${photo.height}` : ''}
+        </div>
+      </div>
     </div>
   );
 }
