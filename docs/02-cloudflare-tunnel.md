@@ -38,7 +38,7 @@ CLOUDFLARE_TUNNEL_TOKEN=eyJ....    # der Token aus Schritt 2.2
 Starte den Tunnel-Container (das Profil `tunnel` aktiviert den `cloudflared`-Dienst):
 
 ```bash
-cd /share/Photos/foto-app-code
+cd /share/CACHEDEV1_DATA/photographic/foto-app-code
 docker compose --profile tunnel up -d
 docker compose logs -f cloudflared    # sollte "Registered tunnel connection" zeigen
 ```

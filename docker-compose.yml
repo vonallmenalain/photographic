@@ -30,7 +30,7 @@ services:
       FIREBASE_SERVICE_ACCOUNT_PATH: /run/secrets/firebase-service-account.json
     volumes:
       # WICHTIG: Linker Pfad = Ordner auf deinem QNAP (nur noch die Fotos).
-      # Passe ihn an deine Freigabe an, z. B. /share/Photos/foto-app
+      # Passe ihn an deine Freigabe an, z. B. /share/CACHEDEV1_DATA/photographic/foto-app
       - ./data:/data
       # Service-Account-JSON read-only in den Container einhängen.
       - ./firebase-service-account.json:/run/secrets/firebase-service-account.json:ro

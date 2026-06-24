@@ -193,8 +193,11 @@ In dieser Reihenfolge durcharbeiten:
 
 - Setze **eigene, lange** `JWT_SECRET` und `FILE_TOKEN_SECRET` (z. B. `openssl rand -base64 48`).
 - Verwende ein **starkes Admin-Passwort** (als bcrypt-Hash, siehe Docs).
-- `COOKIE_SECURE=true` und `COOKIE_SAMESITE=none` sind nötig, weil Frontend
-  (Netlify) und API (Cloudflare) auf verschiedenen Domains liegen → erfordert HTTPS (beides erfüllt).
+- `COOKIE_SECURE=true` ist immer nötig (erfordert HTTPS, ist erfüllt). Liegen
+  Frontend (`fotos.alae.app`) und API (`api.alae.app`) unter derselben
+  Hauptdomain `alae.app`, sind sie „same-site“ → `COOKIE_SAMESITE=lax` +
+  `COOKIE_DOMAIN=.alae.app`. Nur wenn die API auf einer anderen Domain liegt,
+  brauchst du `COOKIE_SAMESITE=none` (und `COOKIE_DOMAIN` leer).
 - Halte die **Firebase-Service-Account-JSON geheim** (nie ins Git!) und belasse
   die **Firestore-Regeln gesperrt** (`firestore.rules`) – aller Zugriff läuft
   über das Backend (Admin SDK).
