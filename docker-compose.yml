@@ -1,22 +1,35 @@
 # ============================================================================
 # Läuft auf dem QNAP (Container Station -> "Create Application" mit dieser Datei,
-# oder via SSH:  docker compose up -d --build).
+# oder via SSH:  docker compose pull && docker compose up -d).
 #
-#   - "backend"     = die API + Bildverarbeitung. Fotos liegen unter ./data,
+#   - "backend"     = die API + Bildverarbeitung. Standardmäßig wird ein fertig
+#                     gebautes Image aus der GHCR gezogen (GitHub Actions baut es
+#                     bei jedem Merge nach main). Fotos liegen unter ./data,
 #                     alle Metadaten/Nutzerdaten in Cloud Firestore.
+#   - "watchtower"  = optionale Auto-Updates: zieht neue Images automatisch.
+#                     Aktivieren mit:  docker compose --profile autoupdate up -d
 #   - "cloudflared" = optionaler Cloudflare-Tunnel, der die API sicher ins
 #                     Internet bringt (ohne Portfreigabe am Router).
 #
 # Kopiere .env.example -> .env und trage deine Werte ein.
+# Automatisches Deployment Schritt für Schritt: docs/09-auto-deploy.md
 # ============================================================================
 
 services:
   backend:
-    build:
-      context: ./backend
-    image: photo-app-backend:latest
+    # Standard: fertig gebautes Image aus der GitHub Container Registry (GHCR).
+    # Es wird von GitHub Actions bei jedem Merge nach main automatisch gebaut
+    # (siehe .github/workflows/build-backend-image.yml). Das QNAP muss nichts
+    # mehr selbst bauen – einfach `docker compose pull` bzw. Watchtower (s. u.).
+    #
+    # Lieber lokal bauen statt pullen? Siehe docker-compose.build.yml und
+    # docs/09-auto-deploy.md.
+    image: ${BACKEND_IMAGE:-ghcr.io/vonallmenalain/photographic-backend:latest}
     container_name: photo-app-backend
     restart: unless-stopped
+    # Watchtower aktualisiert nur Container mit diesem Label automatisch.
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     env_file:
       - .env
     environment:
@@ -37,6 +50,32 @@ services:
     ports:
       # Nur nötig, wenn du OHNE Cloudflare-Tunnel direkt zugreifen willst.
       - "4000:4000"
+
+  # ---------------------------------------------------------------------------
+  # Optionale Auto-Updates: Watchtower prüft regelmäßig, ob in der GHCR ein
+  # neueres Backend-Image liegt, zieht es und startet den Container automatisch
+  # neu. So landet jeder Merge nach main ohne manuelles Kopieren auf dem QNAP.
+  # Aktivieren mit:  docker compose --profile autoupdate up -d
+  # Details (auch für private Images): docs/09-auto-deploy.md.
+  # ---------------------------------------------------------------------------
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: photo-app-watchtower
+    restart: unless-stopped
+    profiles: ["autoupdate"]
+    environment:
+      # Nur Container mit Label com.centurylinklabs.watchtower.enable=true updaten.
+      WATCHTOWER_LABEL_ENABLE: "true"
+      # Alte (ersetzte) Images nach dem Update entfernen.
+      WATCHTOWER_CLEANUP: "true"
+      # Wie oft (Sekunden) nach neuen Images gesucht wird. Standard: 5 Minuten.
+      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-300}
+    volumes:
+      # Watchtower steuert Docker über diesen Socket.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Nur nötig bei PRIVATEM GHCR-Image (Login-Daten für den Pull).
+      # Anleitung zum Erzeugen dieser Datei: docs/09-auto-deploy.md.
+      # - ./watchtower-config.json:/config.json:ro
 
   # ---------------------------------------------------------------------------
   # Optionaler Cloudflare Tunnel. Aktivieren mit:  docker compose --profile tunnel up -d

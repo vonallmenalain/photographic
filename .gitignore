@@ -13,6 +13,9 @@ data/
 # Firebase: never commit service-account credentials or emulator artifacts
 **/serviceAccount*.json
 **/firebase-service-account*.json
+
+# Watchtower registry credentials (only created when using a PRIVATE GHCR image)
+watchtower-config.json
 .firebase/
 firebase-debug.log
 firestore-debug.log

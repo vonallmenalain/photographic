@@ -1,0 +1,72 @@
+# ============================================================================
+# Baut das Backend-Docker-Image automatisch und schiebt es in die GitHub
+# Container Registry (GHCR). Damit muss niemand mehr eine ZIP herunterladen und
+# auf das QNAP kopieren – das QNAP zieht das fertige Image (siehe
+# docs/09-auto-deploy.md, "Watchtower").
+#
+#   - Pull Request  -> Image wird nur GEBAUT (Test, ob der Build durchläuft).
+#   - Merge/Push    -> Image wird gebaut UND nach GHCR gepusht:
+#     auf den Branch    * ghcr.io/<owner>/photographic-backend:latest   (nur main)
+#                       * ghcr.io/<owner>/photographic-backend:sha-<commit>
+# ============================================================================
+name: Build & Push Backend Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/build-backend-image.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/build-backend-image.yml"
+  workflow_dispatch: {}
+
+env:
+  REGISTRY: ghcr.io
+  # Ergibt z. B. ghcr.io/vonallmenalain/photographic-backend
+  IMAGE_NAME: ${{ github.repository }}-backend
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Bei Pull Requests NICHT pushen -> kein Login nötig.
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # GHCR verlangt Kleinbuchstaben im Image-Namen.
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          # Nur bei Push/Merge wirklich hochladen, bei PRs nur bauen.
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

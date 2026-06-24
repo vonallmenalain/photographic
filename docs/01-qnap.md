@@ -96,10 +96,17 @@ woanders liegen sollen:
 
 ```bash
 cd /share/CACHEDEV1_DATA/photographic/foto-app-code
-docker compose up -d --build backend
+docker compose pull backend          # fertiges Image aus GHCR holen
+docker compose up -d backend
 # Logs ansehen:
 docker compose logs -f backend
 ```
+
+> Standardmäßig wird das **fertig gebaute Image** aus der GitHub Container
+> Registry verwendet (von GitHub Actions automatisch gebaut). Willst du stattdessen
+> direkt auf dem QNAP bauen, nutze das Override:
+> `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build backend`.
+> Für vollautomatische Updates siehe **[9. Automatisches Deployment](09-auto-deploy.md)**.
 
 Beim ersten Start legt die App Standardprodukte und (aus `ADMIN_PASSWORD`)
 den Admin-Benutzer in Firestore an. In den Logs solltest du sehen:
@@ -153,10 +160,25 @@ docker compose up -d backend
 
 ## 1.8 Updates einspielen
 
+**Empfohlen – automatisch (kein ZIP/Kopieren mehr):** Richte das automatische
+Deployment ein. Dann baut GitHub Actions bei jedem Merge nach `main` das Image
+und Watchtower aktualisiert das Backend auf dem QNAP von selbst. Schritt für
+Schritt: **[9. Automatisches Deployment](09-auto-deploy.md)**.
+
+**Manuell (fertiges Image aus GHCR ziehen):**
+
 ```bash
 cd /share/CACHEDEV1_DATA/photographic/foto-app-code
-git pull            # oder neue Dateien per File Station kopieren
-docker compose up -d --build backend
+docker compose pull backend          # neues Image aus der Registry holen
+docker compose up -d backend
+```
+
+**Manuell + lokal bauen (nur falls nötig, z. B. eigener Test-Stand):**
+
+```bash
+cd /share/CACHEDEV1_DATA/photographic/foto-app-code
+git pull
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build backend
 ```
 
 Die Daten in Firestore bleiben unverändert erhalten (liegen in der Cloud, nicht
