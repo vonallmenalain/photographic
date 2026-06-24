@@ -25,7 +25,13 @@ import { signAdminToken } from '../lib/auth';
 import { setAuthCookie, clearAuthCookie } from '../lib/cookies';
 import { newId } from '../lib/ids';
 import { emailSchema, parse, normalizeEmail } from '../lib/validation';
-import { processOriginal, reprocessFromOriginal, deleteAllVariants, variantPath } from '../lib/images';
+import {
+  processOriginal,
+  reprocessFromOriginal,
+  deleteAllVariants,
+  deleteEventStorage,
+  variantPath,
+} from '../lib/images';
 import { requestVerification } from '../services/verification';
 import { EVENT_STATUSES, archiveExpiredEvents, retentionExpiry } from '../services/events';
 
@@ -250,6 +256,9 @@ router.delete(
     const children = await runQuery(col(COL.children).where('event_id', '==', req.params.id));
     await Promise.all(photos.map((p) => deletePhotoCascade(p.id)));
     await Promise.all(children.map((c) => deleteChildCascade(c.id)));
+    // Remove the event's storage sub-folders entirely so no empty (or stray)
+    // `<variant>/<eventId>` directories remain behind on the volume.
+    await deleteEventStorage(req.params.id);
     await deleteById(COL.events, req.params.id);
     await audit('event.delete', req.params.id);
     res.json({ ok: true });
