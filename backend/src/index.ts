@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import fs from 'fs';
 import { config } from './config';
 import { migrate } from './db/migrate';
+import { archiveExpiredEvents } from './services/events';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import parentRoutes from './routes/parent';
 import adminRoutes from './routes/admin';
@@ -48,6 +49,15 @@ async function main() {
   // Ensure storage directories exist on the (QNAP) volume.
   fs.mkdirSync(config.storageDir, { recursive: true });
   await migrate();
+
+  // Auto-archive expired galleries: once on startup and then periodically.
+  const runArchiveSweep = () =>
+    archiveExpiredEvents().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('[archive] sweep failed', err);
+    });
+  await runArchiveSweep();
+  setInterval(runArchiveSweep, 6 * 60 * 60 * 1000).unref();
 
   const app = buildApp();
   app.listen(config.port, () => {

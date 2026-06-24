@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
@@ -27,17 +27,15 @@ interface Photo {
   height: number | null;
 }
 
-const EVENT_STATUSES = [
-  'draft',
-  'in_progress',
-  'ready',
-  'published',
-  'archived',
-  'disabled',
+const EVENT_STATUS_OPTIONS = [
+  { value: 'draft', label: 'Entwurf' },
+  { value: 'published', label: 'Veröffentlicht' },
+  { value: 'archived', label: 'Archiviert' },
 ] as const;
 
 export default function EventDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [event, setEvent] = useState<EventObj | null>(null);
   const [children, setChildren] = useState<Child[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -98,6 +96,21 @@ export default function EventDetail() {
     load();
   };
 
+  const deleteEvent = async () => {
+    if (
+      !confirm(
+        'Dieses Event wirklich löschen? Alle Fotos, Kinder und Zuordnungen dieses Events werden unwiderruflich entfernt.',
+      )
+    )
+      return;
+    try {
+      await api(`/api/admin/events/${id}`, { method: 'DELETE', admin: true });
+      navigate('/admin/events');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Event konnte nicht gelöscht werden.');
+    }
+  };
+
   const patchPhoto = async (photoId: string, data: Record<string, unknown>) => {
     await api(`/api/admin/photos/${photoId}`, { method: 'PATCH', admin: true, body: data });
     load();
@@ -148,14 +161,18 @@ export default function EventDetail() {
               onChange={(e) => patchEvent({ status: e.target.value })}
               style={{ width: 240 }}
             >
-              {EVENT_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
+              {EVENT_STATUS_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
                 </option>
               ))}
+              {!EVENT_STATUS_OPTIONS.some((s) => s.value === event.status) && (
+                <option value={event.status}>{event.status}</option>
+              )}
             </select>
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8 }}>
-              Erst bei Status „published“ sind freigegebene Fotos für berechtigte Eltern sichtbar.
+              Erst bei Status „Veröffentlicht“ sind freigegebene Fotos für berechtigte Eltern
+              sichtbar. „Archiviert“ wird nach Ablauf der Aufbewahrungsfrist automatisch gesetzt.
             </p>
           </div>
           <div className="muted" style={{ textAlign: 'right' }}>
@@ -308,6 +325,22 @@ export default function EventDetail() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Danger zone */}
+      <div className="card mb" style={{ marginTop: 16, borderColor: 'var(--danger, #e5484d)' }}>
+        <div className="row between">
+          <div>
+            <h2 style={{ marginBottom: 4 }}>Event löschen</h2>
+            <p className="muted" style={{ fontSize: '0.82rem', margin: 0 }}>
+              Entfernt das Event samt aller Fotos, Kinder und Zuordnungen. Dies kann nicht rückgängig
+              gemacht werden.
+            </p>
+          </div>
+          <button className="btn danger" onClick={deleteEvent}>
+            Event löschen
+          </button>
+        </div>
       </div>
 
       {emailModalPhoto && (
