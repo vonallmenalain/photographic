@@ -28,7 +28,7 @@ async function ensureDefaultProducts(): Promise<void> {
       sort_order: 0,
     },
     {
-      name: 'Abzug 13×18 cm',
+      name: 'Druck 13×18 cm',
       description: 'Gedrucktes Foto auf Fotopapier, Format 13×18 cm.',
       type: 'print',
       price_cents: 600,

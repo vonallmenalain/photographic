@@ -124,15 +124,28 @@ function Lightbox({
   onClose: () => void;
 }) {
   const [productId, setProductId] = useState(products[0]?.id ?? '');
+  const [qty, setQty] = useState(1);
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const [error, setError] = useState('');
+
+  const selectedProduct = products.find((p) => p.id === productId);
+  const isPrint = selectedProduct?.type === 'print';
+
+  const handleProductChange = (id: string) => {
+    setProductId(id);
+    setQty(1);
+    setAdded(false);
+  };
 
   const addToCart = async () => {
     setError('');
     setAdding(true);
     try {
-      await api('/api/parent/cart', { method: 'POST', body: { photoId: photo.id, productId } });
+      await api('/api/parent/cart', {
+        method: 'POST',
+        body: { photoId: photo.id, productId, qty: isPrint ? qty : 1 },
+      });
       setAdded(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Konnte nicht hinzugefügt werden.');
@@ -156,7 +169,7 @@ function Lightbox({
         <div className="lb-actions" style={{ flexDirection: 'column', alignItems: 'stretch', maxWidth: 420, margin: '14px auto 0' }}>
           {error && <Alert kind="error">{error}</Alert>}
           <div className="field" style={{ marginBottom: 10 }}>
-            <select value={productId} onChange={(e) => setProductId(e.target.value)}>
+            <select value={productId} onChange={(e) => handleProductChange(e.target.value)}>
               {products.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} – {formatPrice(p.price_cents, p.currency)}
@@ -164,6 +177,24 @@ function Lightbox({
               ))}
             </select>
           </div>
+          {isPrint && (
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label htmlFor="lb-qty" style={{ display: 'block', marginBottom: 4, fontSize: '0.9rem' }}>
+                Menge
+              </label>
+              <select
+                id="lb-qty"
+                value={qty}
+                onChange={(e) => setQty(Number(e.target.value))}
+              >
+                {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {added ? (
             <div style={{ display: 'flex', gap: 10 }}>
               <Link to="/warenkorb" className="btn block">

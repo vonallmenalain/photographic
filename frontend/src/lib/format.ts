@@ -1,4 +1,4 @@
-export function formatPrice(cents: number, currency = 'eur'): string {
+export function formatPrice(cents: number, currency = 'chf'): string {
   return new Intl.NumberFormat('de-DE', {
     style: 'currency',
     currency: currency.toUpperCase(),
