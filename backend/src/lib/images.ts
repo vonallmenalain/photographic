@@ -34,9 +34,13 @@ function escapeXml(s: string): string {
  */
 function watermarkSvg(width: number, height: number, text: string): Buffer {
   const safe = escapeXml(text);
-  const fontSize = Math.max(16, Math.round(width / 22));
-  const stepX = fontSize * 11;
-  const stepY = fontSize * 6;
+  // Roughly double the previous size so the watermark is clearly legible.
+  const fontSize = Math.max(32, Math.round(width / 11));
+  // Estimate the rendered text width and add a gap so tiled repetitions of the
+  // word sit next to each other instead of overlapping.
+  const approxTextWidth = fontSize * 0.62 * text.length;
+  const stepX = approxTextWidth + fontSize * 1.6;
+  const stepY = fontSize * 3.5;
   // Use font families that are actually installed in the runtime image
   // (see backend/Dockerfile). librsvg only renders text when it can resolve a
   // font; "Liberation Sans"/"DejaVu Sans" are the metric-compatible packages we

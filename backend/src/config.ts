@@ -123,7 +123,7 @@ export const config = {
     previewMax: int('IMG_PREVIEW_MAX', 1100),
     previewQuality: int('IMG_PREVIEW_QUALITY', 62),
     thumbQuality: int('IMG_THUMB_QUALITY', 58),
-    watermarkText: optional('IMG_WATERMARK_TEXT', 'VORSCHAU · GESCHÜTZT'),
+    watermarkText: optional('IMG_WATERMARK_TEXT', 'Vorschau'),
   },
 
   // Stripe (optional). If not configured, checkout uses a manual/test flow.
