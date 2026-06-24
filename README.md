@@ -7,10 +7,14 @@ keine erratbaren Galerien, Originale niemals frei zugänglich.
 > Kernlogik: **E-Mail bestätigen → zugeordnete Fotos sehen → geschützte
 > Wasserzeichen-Previews beurteilen → kaufen → Original/Bestellung erhalten.**
 
-Diese App wurde **komplett neu** gebaut (kein bestehender Code übernommen) und
-setzt das gelieferte Konzept um. Was du noch selbst einrichten musst (QNAP,
-Cloudflare Tunnel, Netlify, SMTP, optional Stripe), ist Schritt für Schritt in
-[`docs/`](docs/) beschrieben.
+Daten & Login laufen über **Firebase**: Alle Informationen (Nutzer/E-Mails,
+Events, Foto-Metadaten, Bestellungen, Meldungen) liegen in **Cloud Firestore**,
+die Eltern-Anmeldung in **Firebase Authentication** (passwortloser E-Mail-Link).
+Nur die Foto-Originale + Wasserzeichen-Varianten bleiben auf dem QNAP-Volume,
+damit Originale geschützt sind. Einrichtung: [`docs/08-firebase.md`](docs/08-firebase.md).
+
+Was du noch selbst einrichten musst (Firebase, QNAP, Cloudflare Tunnel, Netlify,
+optional SMTP/Stripe), ist Schritt für Schritt in [`docs/`](docs/) beschrieben.
 
 ---
 
@@ -32,8 +36,14 @@ Cloudflare Tunnel, Netlify, SMTP, optional Stripe), ist Schritt für Schritt in
                                                         │  QNAP (Docker)            │
                                                         │  Backend-API + Bild-       │
                                                         │  verarbeitung (sharp)      │
-                                                        │  SQLite-DB + Fotos auf      │
-                                                        │  dem QNAP-Volume           │
+                                                        │  Fotos auf dem QNAP-Volume │
+                                                        └─────────────┬─────────────┘
+                                                                      │ Admin SDK
+                                                                      ▼
+                                                        ┌───────────────────────────┐
+                                                        │  Firebase                  │
+                                                        │  Firestore (Datenbank)     │
+                                                        │  Authentication (E-Mail)   │
                                                         └───────────────────────────┘
 ```
 
@@ -41,10 +51,12 @@ Cloudflare Tunnel, Netlify, SMTP, optional Stripe), ist Schritt für Schritt in
   Eltern- **und** den strikt getrennten Adminbereich (`/admin`).
 - **Backend** (`backend/`): Node + Express + TypeScript, läuft als **Docker-
   Container auf dem QNAP**. Verarbeitet Uploads, erzeugt Bildvarianten
-  (Thumbnail + Wasserzeichen-Preview), verwaltet Datenbank und Zugriffe.
-- **Speicherung**: Alle Originale **und** die SQLite-Datenbank liegen auf einem
-  QNAP-Volume – du behältst die volle Kontrolle, nichts liegt bei einem
-  beliebigen externen Anbieter.
+  (Thumbnail + Wasserzeichen-Preview), spricht via **Firebase Admin SDK** mit
+  Firestore/Authentication und steuert alle Zugriffe.
+- **Datenbank & Login**: **Cloud Firestore** speichert alle Daten, **Firebase
+  Authentication** verifiziert Eltern-E-Mails (passwortloser E-Mail-Link).
+- **Speicherung der Fotos**: Originale + Varianten liegen auf einem QNAP-Volume –
+  Originale verlassen den Server nur nach Kauf über zeitlich begrenzte Grants.
 - **Cloudflare Tunnel**: Verbindet das Netlify-Frontend sicher mit der QNAP-API,
   **ohne** Portfreigabe am Router.
 
@@ -80,34 +92,46 @@ Details zur fachlichen Logik: [`docs/07-konzept-abgleich.md`](docs/07-konzept-ab
 
 ## 3. Schnellstart (lokal zum Ausprobieren)
 
-Voraussetzung: Node.js 20+ (getestet mit 22).
+Voraussetzung: Node.js 20+ (getestet mit 22) und für die Emulatoren Java 11+.
 
 ```bash
-# 1) Backend
-cd backend
-cp .env.example .env            # für lokal reichen die Defaults
-npm install
-ADMIN_PASSWORD=test1234 npm run dev   # startet API auf http://localhost:4000
+# 1) Firebase-Emulatoren (Firestore + Auth) – kein echtes Konto nötig
+npx firebase-tools emulators:start --only firestore,auth --project photographic-7ba68
 
-# 2) Frontend (neues Terminal)
+# 2) Backend (neues Terminal) gegen die Emulatoren
+cd backend
+cp .env.example .env
+npm install
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 \
+FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+FIREBASE_PROJECT_ID=photographic-7ba68 \
+ADMIN_PASSWORD=test1234 npm run dev          # API auf http://localhost:4000
+
+# 3) Frontend (neues Terminal)
 cd frontend
 cp .env.example .env            # VITE_API_BASE_URL=http://localhost:4000 eintragen
 npm install
 npm run dev                     # startet App auf http://localhost:5173
 ```
 
+> Ohne Emulatoren kannst du das Backend auch direkt gegen dein echtes Firebase-
+> Projekt laufen lassen – dann brauchst du einen Service-Account, siehe
+> [`docs/08-firebase.md`](docs/08-firebase.md).
+
 - Eltern-App: <http://localhost:5173>
 - Adminbereich: <http://localhost:5173/admin> (Login: `admin` / `test1234`)
 
-**E-Mail im lokalen Modus:** Ohne SMTP werden Codes/Links in die **Backend-
-Konsole** geschrieben – dort den 6-stelligen Code kopieren.
+**E-Mail im lokalen Modus:** Mit den Emulatoren erscheint der Firebase-
+Anmeldelink in der **Auth-Emulator-UI** (`http://127.0.0.1:4001/auth`). Ist die
+Firebase-Anmeldung deaktiviert, schreibt das Backend den 6-stelligen Code in die
+**Backend-Konsole**.
 
 Typischer erster Durchlauf:
 1. Admin-Login → **Event** anlegen → **Fotos** hochladen.
 2. **Kind** anlegen, Foto dem Kind zuordnen, Foto **veröffentlichen**.
 3. Event-Status auf **„published“** setzen.
 4. Unter **E-Mail-Adressen** eine Eltern-Adresse anlegen, mit dem Kind verknüpfen.
-5. Eltern-App: Adresse eingeben → Code aus der Konsole → Galerie sehen → kaufen.
+5. Eltern-App: Adresse eingeben → Anmeldelink öffnen (Auth-Emulator-UI) → Galerie sehen → kaufen.
 
 ---
 
@@ -115,12 +139,13 @@ Typischer erster Durchlauf:
 
 In dieser Reihenfolge durcharbeiten:
 
-1. **[QNAP einrichten](docs/01-qnap.md)** – Docker/Container Station, Volume, Backend bauen & starten, Admin anlegen.
-2. **[Cloudflare Tunnel](docs/02-cloudflare-tunnel.md)** – API sicher unter `api.deinedomain.de` erreichbar machen.
-3. **[Netlify](docs/03-netlify.md)** – Frontend deployen, `VITE_API_BASE_URL` setzen.
-4. **[E-Mail / SMTP](docs/04-email-smtp.md)** – Versand von Codes/Links/Bestätigungen.
-5. **[Stripe (optional)](docs/05-stripe.md)** – echte Bezahlung; ohne Stripe gibt es einen manuellen Bestellabschluss.
-6. **[Betrieb, Admin, Backups, Aufbewahrung](docs/06-betrieb.md)**.
+1. **[Firebase](docs/08-firebase.md)** – Firestore-Regeln, Authentication (E-Mail-Link) und Service-Account einrichten.
+2. **[QNAP einrichten](docs/01-qnap.md)** – Docker/Container Station, Volume, Service-Account, Backend bauen & starten, Admin anlegen.
+3. **[Cloudflare Tunnel](docs/02-cloudflare-tunnel.md)** – API sicher unter `api.deinedomain.de` erreichbar machen.
+4. **[Netlify](docs/03-netlify.md)** – Frontend deployen, `VITE_API_BASE_URL` + `VITE_FIREBASE_*` setzen.
+5. **[E-Mail / SMTP](docs/04-email-smtp.md)** – nur für den optionalen Code-Fallback & Bestellbestätigungen.
+6. **[Stripe (optional)](docs/05-stripe.md)** – echte Bezahlung; ohne Stripe gibt es einen manuellen Bestellabschluss.
+7. **[Betrieb, Admin, Backups, Aufbewahrung](docs/06-betrieb.md)**.
 
 > **Wichtig zur Reihenfolge:** Du brauchst die Netlify-URL für `PUBLIC_APP_URL`
 > (Backend) und die Cloudflare-API-URL für `VITE_API_BASE_URL` (Netlify). Lege
@@ -136,9 +161,9 @@ In dieser Reihenfolge durcharbeiten:
 │   ├── src/
 │   │   ├── routes/          # parent, admin, files, webhook
 │   │   ├── services/        # access, orders, verification, payments
-│   │   ├── lib/             # images (sharp), email, auth, ids, cookies
+│   │   ├── lib/             # images (sharp), email, auth, ids, cookies, firebase
 │   │   ├── middleware/      # auth, rate-limit, errors
-│   │   └── db/              # schema.sql, migrate, connection
+│   │   └── db/              # Firestore-Datenzugriff + Seed/Migrate
 │   ├── Dockerfile
 │   └── .env.example
 ├── frontend/                # React/Vite SPA (Netlify)
@@ -146,6 +171,8 @@ In dieser Reihenfolge durcharbeiten:
 │   ├── src/pages/admin/     # Admin: Events, Emails, Orders, Reports, ...
 │   └── netlify.toml
 ├── docs/                    # Detaillierte Einrichtungs-Anleitungen
+├── firestore.rules          # Firestore-Sicherheitsregeln (Client-Zugriff gesperrt)
+├── firebase.json            # Firestore/Emulator-Konfiguration
 ├── docker-compose.yml       # Backend (+ optional Cloudflare Tunnel)
 └── .env.example             # Compose-/Backend-Konfiguration
 ```
@@ -158,7 +185,11 @@ In dieser Reihenfolge durcharbeiten:
 - Verwende ein **starkes Admin-Passwort** (als bcrypt-Hash, siehe Docs).
 - `COOKIE_SECURE=true` und `COOKIE_SAMESITE=none` sind nötig, weil Frontend
   (Netlify) und API (Cloudflare) auf verschiedenen Domains liegen → erfordert HTTPS (beides erfüllt).
-- Lege regelmäßige **Backups** des QNAP-Volumes an (`data/` enthält DB + Fotos).
+- Halte die **Firebase-Service-Account-JSON geheim** (nie ins Git!) und belasse
+  die **Firestore-Regeln gesperrt** (`firestore.rules`) – aller Zugriff läuft
+  über das Backend (Admin SDK).
+- Lege regelmäßige **Backups** an: QNAP-Volume (`data/` = Fotos) **und**
+  Firestore (Export, siehe [`docs/08-firebase.md`](docs/08-firebase.md)).
 - Originale verlassen den Server nur über zeitlich begrenzte Download-Grants
   nach erfolgtem Kauf.
 
