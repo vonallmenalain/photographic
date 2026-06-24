@@ -5,6 +5,7 @@ import fs from 'fs';
 import { config } from './config';
 import { migrate } from './db/migrate';
 import { archiveExpiredEvents } from './services/events';
+import { checkWatermarkRendering } from './lib/images';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import parentRoutes from './routes/parent';
 import adminRoutes from './routes/admin';
@@ -59,6 +60,8 @@ async function main() {
   await runArchiveSweep();
   setInterval(runArchiveSweep, 6 * 60 * 60 * 1000).unref();
 
+  const watermarkOk = await checkWatermarkRendering();
+
   const app = buildApp();
   app.listen(config.port, () => {
     const emulator = config.firebase.firestoreEmulatorHost || config.firebase.authEmulatorHost;
@@ -70,6 +73,7 @@ async function main() {
     console.log(`[server] parent auth : ${config.firebase.parentAuthEnabled ? 'Firebase + code fallback' : 'code only'}`);
     console.log(`[server] stripe      : ${config.stripe.enabled ? 'enabled' : 'manual/test mode'}`);
     console.log(`[server] mail        : ${config.mail.devLogOnly ? 'DEV LOG ONLY' : config.mail.host}`);
+    console.log(`[server] watermark   : ${watermarkOk ? 'OK (fonts available)' : 'BROKEN — no fonts, previews NOT watermarked!'}`);
   });
 }
 
