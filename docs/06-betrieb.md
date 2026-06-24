@@ -75,9 +75,10 @@ docker compose ps                        # Status
 
 | Symptom | Ursache / Lösung |
 |---|---|
-| Admin-Login: „Failed to fetch“ | `VITE_API_BASE_URL` falsch oder API nicht über HTTPS erreichbar. `curl https://api.deinedomain.de/health` testen. |
-| CORS-Fehler im Browser | `PUBLIC_APP_URL` im Backend muss exakt der Netlify-URL entsprechen (inkl. https, ohne Slash am Ende). Mehrere via `EXTRA_CORS_ORIGINS`. |
-| Eltern bleiben nicht eingeloggt | Cookies werden über zwei Domains blockiert. `COOKIE_SECURE=true`, `COOKIE_SAMESITE=none`; ggf. gemeinsame Domain + `COOKIE_DOMAIN=.deinedomain.de` (siehe Netlify-Doku). |
+| Admin-Login: „Failed to fetch“ | `VITE_API_BASE_URL` falsch oder API nicht über HTTPS erreichbar. `curl https://api.alae.app/health` testen. |
+| CORS-Fehler im Browser | `PUBLIC_APP_URL` muss exakt `https://fotos.alae.app` sein (inkl. https, ohne Slash am Ende); die rohe Netlify-URL gehört in `EXTRA_CORS_ORIGINS`. |
+| Eltern bleiben nicht eingeloggt | Cookies blockiert. Mit API auf `api.alae.app`: `COOKIE_SECURE=true`, `COOKIE_SAMESITE=lax`, `COOKIE_DOMAIN=.alae.app`. Liegt die API auf anderer Domain: `COOKIE_SAMESITE=none`, `COOKIE_DOMAIN` leer. |
+| Firebase-Login `auth/unauthorized-continue-uri` | App-Domain fehlt in Firebase → **Authentication → Settings → Authorized domains**: `fotos.alae.app` und `creartphotographic.netlify.app` eintragen. |
 | Keine E-Mail kommt an | SMTP-Daten prüfen; im Log steht `mail: DEV LOG ONLY`, wenn `SMTP_HOST` fehlt. Spam-Ordner/SPF/DKIM prüfen. Unbekannte Adressen erhalten bewusst keine Mail. |
 | Upload schlägt fehl (große Datei) | `MAX_UPLOAD_MB` erhöhen; Cloudflare-Free begrenzt ~100 MB/Anfrage. |
 | Foto erscheint bei Eltern nicht | Checkliste 6.3 „Eltern finden keine Fotos“. |

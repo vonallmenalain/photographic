@@ -35,8 +35,15 @@ Die Web-App, Firestore und Authentication sind bereits in deinem Projekt
 1. Firebase Console → **Build → Authentication → Get started**.
 2. Tab **Sign-in method** → Anbieter **„E-Mail-/Passwort“** aktivieren.
 3. Dort zusätzlich **„E-Mail-Link (passwortlose Anmeldung)“** einschalten.
-4. Tab **Settings → Authorized domains**: deine Netlify-Domain (und ggf.
-   `localhost` fürs Testen) hinzufügen.
+4. Tab **Settings → Authorized domains** → folgende Domains hinzufügen:
+   - `fotos.alae.app` (eigene App-Domain)
+   - `creartphotographic.netlify.app` (rohe Netlify-URL)
+   - `localhost` (nur fürs lokale Testen)
+
+   > Fehlt eine dieser Domains, schlägt der Anmeldelink mit
+   > `auth/unauthorized-continue-uri` fehl. Der Anmeldelink wird immer auf die
+   > Domain ausgestellt, von der aus die Eltern die App geöffnet haben
+   > (`window.location.origin`), daher müssen beide App-Domains eingetragen sein.
 
 So bekommen Eltern beim Login eine E-Mail mit einem sicheren Anmeldelink. Nach
 dem Klick wird im Frontend die Anmeldung abgeschlossen, ein Firebase-ID-Token

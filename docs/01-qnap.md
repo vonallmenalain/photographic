@@ -51,15 +51,18 @@ cp .env.example .env
 `.env` öffnen (z. B. via File Station Texteditor) und mindestens setzen:
 
 ```ini
-PUBLIC_APP_URL=https://deine-app.netlify.app   # trägst du nach Netlify-Setup ein
+PUBLIC_APP_URL=https://fotos.alae.app          # deine App-Domain (Netlify)
+EXTRA_CORS_ORIGINS=https://creartphotographic.netlify.app
 FIREBASE_PROJECT_ID=photographic-7ba68
 FIREBASE_SERVICE_ACCOUNT_PATH=/run/secrets/firebase-service-account.json
 JWT_SECRET=<openssl rand -base64 48>
 FILE_TOKEN_SECRET=<openssl rand -base64 48>
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=<starkes-passwort>              # für ersten Start; später Hash, s. u.
+# Empfohlen: API unter api.alae.app -> dann genuegt SameSite=lax + COOKIE_DOMAIN
 COOKIE_SECURE=true
-COOKIE_SAMESITE=none
+COOKIE_SAMESITE=lax
+COOKIE_DOMAIN=.alae.app
 ```
 
 > **Firebase-Service-Account:** Lade die Service-Account-JSON aus der Firebase

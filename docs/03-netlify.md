@@ -26,7 +26,7 @@ Falls Netlify die Werte nicht automatisch übernimmt, trage sie manuell so ein.
 
 | Key | Value |
 |---|---|
-| `VITE_API_BASE_URL` | `https://api.deinedomain.de` (deine Cloudflare-Tunnel-URL) |
+| `VITE_API_BASE_URL` | `https://api.alae.app` (deine Cloudflare-Tunnel-URL) |
 | `VITE_FIREBASE_API_KEY` | aus der Firebase Web-Config |
 | `VITE_FIREBASE_AUTH_DOMAIN` | `photographic-7ba68.firebaseapp.com` |
 | `VITE_FIREBASE_PROJECT_ID` | `photographic-7ba68` |
@@ -37,25 +37,41 @@ Falls Netlify die Werte nicht automatisch übernimmt, trage sie manuell so ein.
 > Diese Variablen werden beim Build eingebacken. Wenn du sie änderst, musst du
 > **neu deployen** (Trigger deploy → Clear cache and deploy site).
 >
-> **Wichtig (Firebase Authentication):** Trage deine Netlify-Domain in der
-> Firebase Console unter **Authentication → Settings → Authorized domains** ein,
-> und aktiviere unter **Authentication → Sign-in method** den Anbieter
-> **„E-Mail/Passwort“** inkl. **„E-Mail-Link (passwortlose Anmeldung)“**.
-> Details: [docs/08-firebase.md](08-firebase.md).
+> **Wichtig (Firebase Authentication):** Trage **`fotos.alae.app`** UND
+> **`creartphotographic.netlify.app`** in der Firebase Console unter
+> **Authentication → Settings → Authorized domains** ein, und aktiviere unter
+> **Authentication → Sign-in method** den Anbieter **„E-Mail/Passwort“** inkl.
+> **„E-Mail-Link (passwortlose Anmeldung)“**. Details: [docs/08-firebase.md](08-firebase.md).
 
-## 3.4 Deployen
+## 3.4 Eigene Domain (fotos.alae.app)
 
-**Deploys → Trigger deploy → Deploy site.** Nach dem Build erhältst du eine URL
-wie `https://deine-app.netlify.app` (unter „Domain settings“ änderbar / eigene
-Domain möglich).
+Diese App nutzt die Netlify-Site **`creartphotographic.netlify.app`** mit der
+eigenen Domain **`fotos.alae.app`**.
 
-## 3.5 Backend auf diese URL einstellen
+1. **Site configuration → Domain management → Add a domain** → `fotos.alae.app`.
+2. Im DNS deiner Domain `alae.app` einen **CNAME** `fotos` auf
+   `creartphotographic.netlify.app` setzen (oder Netlify-DNS verwenden).
+3. Netlify stellt automatisch ein **HTTPS-Zertifikat** aus (Let’s Encrypt).
+4. Optional: `fotos.alae.app` als **Primary domain** festlegen, damit Aufrufe der
+   `*.netlify.app`-Adresse dorthin umgeleitet werden.
 
-Jetzt im **Backend** (`.env` auf dem QNAP) die Netlify-URL eintragen, damit CORS
-und E-Mail-Links stimmen:
+> Beide Adressen bleiben erreichbar. Deshalb ist `creartphotographic.netlify.app`
+> sowohl in den Firebase „Authorized domains“ als auch in `EXTRA_CORS_ORIGINS`
+> hinterlegt – falls jemand die rohe Netlify-URL öffnet, funktioniert alles trotzdem.
+
+## 3.5 Deployen
+
+**Deploys → Trigger deploy → Deploy site.** Nach dem Build ist die App unter
+`https://fotos.alae.app` (und `https://creartphotographic.netlify.app`) erreichbar.
+
+## 3.6 Backend auf diese Domain einstellen
+
+Im **Backend** (`.env` auf dem QNAP) die App-Domain eintragen, damit CORS und
+E-Mail-/Bestätigungslinks stimmen:
 
 ```ini
-PUBLIC_APP_URL=https://deine-app.netlify.app
+PUBLIC_APP_URL=https://fotos.alae.app
+EXTRA_CORS_ORIGINS=https://creartphotographic.netlify.app
 ```
 
 Backend neu starten:
@@ -64,31 +80,32 @@ Backend neu starten:
 docker compose up -d backend
 ```
 
-Nutzt du eine **eigene Domain** in Netlify (z. B. `fotos.deinedomain.de`), trage
-diese in `PUBLIC_APP_URL` ein. Mehrere erlaubte Origins (z. B. Preview-Deploys)
-kannst du über `EXTRA_CORS_ORIGINS` (Komma-getrennt) ergänzen.
+## 3.7 Cookies (mit api.alae.app besonders einfach)
 
-## 3.6 Cookies über zwei Domains (wichtig zu verstehen)
+- **Empfohlen:** Betreibe die API auf **`api.alae.app`** (siehe Cloudflare-Doku).
+  Dann liegen Frontend (`fotos.alae.app`) und API (`api.alae.app`) unter derselben
+  Hauptdomain `alae.app` → das ist **„same-site“**. Im Backend genügt dann:
 
-- Frontend läuft auf `*.netlify.app` (oder deiner Domain), die API auf
-  `api.deinedomain.de`. Das sind unterschiedliche Domains.
-- Damit die Sitzungs-Cookies funktionieren, sind im Backend gesetzt:
-  `COOKIE_SECURE=true` und `COOKIE_SAMESITE=none`. Beide Seiten laufen über
-  HTTPS (Netlify + Cloudflare) – das ist erfüllt.
-- **Tipp für saubere First-Party-Cookies:** Lege Frontend und API unter dieselbe
-  Hauptdomain, z. B. `fotos.deinedomain.de` (Netlify) und `api.deinedomain.de`
-  (Cloudflare). Dann kannst du im Backend zusätzlich `COOKIE_DOMAIN=.deinedomain.de`
-  setzen. Das ist optional, erhöht aber die Kompatibilität mit strengen
-  Browser-Einstellungen (z. B. Safari ITP).
+  ```ini
+  COOKIE_SECURE=true
+  COOKIE_SAMESITE=lax
+  COOKIE_DOMAIN=.alae.app
+  ```
 
-## 3.7 Test
+  Das ergibt robuste First-Party-Cookies (auch mit Safari ITP).
+- **Falls die API auf einer anderen Domain liegt** (echtes Cross-Site), nutze
+  stattdessen `COOKIE_SAMESITE=none` und lass `COOKIE_DOMAIN` leer. Beide Seiten
+  müssen über HTTPS laufen (Netlify + Cloudflare erfüllen das).
 
-1. `https://deine-app.netlify.app` öffnen → Startseite mit E-Mail-Eingabe.
-2. `https://deine-app.netlify.app/admin` → Admin-Login.
+## 3.8 Test
+
+1. `https://fotos.alae.app` öffnen → Startseite mit E-Mail-Eingabe.
+2. `https://fotos.alae.app/admin` → Admin-Login.
 3. Admin-Login testen (Benutzer/Passwort wie im Backend gesetzt).
 
 Wenn der Login „Failed to fetch“ zeigt: meist falsche `VITE_API_BASE_URL`,
-fehlendes HTTPS, oder `PUBLIC_APP_URL` im Backend passt nicht zur Netlify-URL
-(CORS). Siehe [Betrieb / Troubleshooting](06-betrieb.md).
+fehlendes HTTPS, oder `PUBLIC_APP_URL` im Backend passt nicht zu `fotos.alae.app`
+(CORS). Zeigt Firebase `auth/unauthorized-continue-uri`, fehlt die Domain in den
+**Authorized domains**. Siehe [Betrieb / Troubleshooting](06-betrieb.md).
 
 ➡️ Weiter mit **[4. E-Mail / SMTP](04-email-smtp.md)**.

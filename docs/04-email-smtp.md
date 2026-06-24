@@ -29,8 +29,8 @@ SMTP_PORT=587
 SMTP_SECURE=false          # true nur bei Port 465 (SMTPS)
 SMTP_USER=dein-smtp-benutzer
 SMTP_PASS=dein-smtp-passwort
-MAIL_FROM=Foto-Galerie <no-reply@deinedomain.de>
-SUPPORT_EMAIL=support@deinedomain.de
+MAIL_FROM=Foto-Galerie <no-reply@alae.app>
+SUPPORT_EMAIL=support@alae.app
 ```
 
 - `SMTP_PORT=587` mit `SMTP_SECURE=false` (STARTTLS) ist der Normalfall.

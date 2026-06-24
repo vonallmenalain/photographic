@@ -104,7 +104,7 @@ Schritt erklärt:
 
 1. **QNAP/Docker**: Container bauen & starten, Volume-Pfad, Admin anlegen
    → [01-qnap.md](01-qnap.md)
-2. **Cloudflare Tunnel**: Tunnel-Token, Public Hostname `api.deinedomain.de`
+2. **Cloudflare Tunnel**: Tunnel-Token, Public Hostname `api.alae.app`
    → [02-cloudflare-tunnel.md](02-cloudflare-tunnel.md)
 3. **Netlify**: Repository verbinden, `VITE_API_BASE_URL` setzen, deployen
    → [03-netlify.md](03-netlify.md)
