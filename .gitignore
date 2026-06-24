@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+backend/dist/
+frontend/dist/
+
+# Local data / storage (photos + sqlite live on the QNAP volume)
+backend/data/
+data/
+
+# Env
+.env
+.env.local
+**/.env
+!**/.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
