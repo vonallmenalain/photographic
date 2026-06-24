@@ -1,0 +1,15 @@
+# ============================================================================
+# Override zum LOKALEN Bauen statt Pullen (nur bei Bedarf, z. B. zum Testen
+# eigener Änderungen direkt auf dem QNAP, ohne auf GitHub Actions zu warten).
+#
+# Verwenden:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build backend
+#
+# Im Normalbetrieb NICHT nötig – dann wird das fertige Image aus der GHCR
+# verwendet (siehe docker-compose.yml und docs/09-auto-deploy.md).
+# ============================================================================
+services:
+  backend:
+    build:
+      context: ./backend
+    image: ${BACKEND_IMAGE:-ghcr.io/vonallmenalain/photographic-backend:latest}

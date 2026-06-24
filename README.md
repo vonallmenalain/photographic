@@ -146,6 +146,8 @@ In dieser Reihenfolge durcharbeiten:
 5. **[E-Mail / SMTP](docs/04-email-smtp.md)** – nur für den optionalen Code-Fallback & Bestellbestätigungen.
 6. **[Stripe (optional)](docs/05-stripe.md)** – echte Bezahlung; ohne Stripe gibt es einen manuellen Bestellabschluss.
 7. **[Betrieb, Admin, Backups, Aufbewahrung](docs/06-betrieb.md)**.
+8. **[Automatisches Deployment](docs/09-auto-deploy.md)** – Backend bei jedem
+   Merge ohne ZIP/Kopieren automatisch aufs QNAP bringen (GitHub Actions + Watchtower).
 
 ### Domains dieses Projekts
 
@@ -167,6 +169,7 @@ In dieser Reihenfolge durcharbeiten:
 
 ```
 .
+├── .github/workflows/       # CI: baut & pusht das Backend-Image nach GHCR
 ├── backend/                 # Node/Express API (läuft auf QNAP via Docker)
 │   ├── src/
 │   │   ├── routes/          # parent, admin, files, webhook
@@ -183,7 +186,8 @@ In dieser Reihenfolge durcharbeiten:
 ├── docs/                    # Detaillierte Einrichtungs-Anleitungen
 ├── firestore.rules          # Firestore-Sicherheitsregeln (Client-Zugriff gesperrt)
 ├── firebase.json            # Firestore/Emulator-Konfiguration
-├── docker-compose.yml       # Backend (+ optional Cloudflare Tunnel)
+├── docker-compose.yml       # Backend (+ optional Watchtower-Auto-Update / Cloudflare Tunnel)
+├── docker-compose.build.yml # Override zum lokalen Bauen statt Pullen (optional)
 └── .env.example             # Compose-/Backend-Konfiguration
 ```
 
