@@ -3,6 +3,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { useParentAuth } from '../../context/ParentAuth';
 import { Alert, Spinner, TrustNote } from '../../components/common';
+import {
+  firebaseEnabled,
+  isParentSignInLink,
+  getStoredSignInEmail,
+  completeParentSignIn,
+  sendParentSignInLink,
+} from '../../lib/firebase';
 
 export default function Verify() {
   const [params] = useSearchParams();
@@ -10,14 +17,71 @@ export default function Verify() {
   const navigate = useNavigate();
   const { setVerified, refresh } = useParentAuth();
 
-  const [email, setEmail] = useState(sessionStorage.getItem('pending_email') ?? '');
+  const [email, setEmail] = useState(
+    sessionStorage.getItem('pending_email') ?? getStoredSignInEmail(),
+  );
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [resent, setResent] = useState('');
   const linkTried = useRef(false);
+  const firebaseTried = useRef(false);
 
-  // Magic link flow: verify automatically when a token is present.
+  // Is this page being opened from a Firebase passwordless e-mail link?
+  const isFirebaseLink =
+    typeof window !== 'undefined' && isParentSignInLink(window.location.href);
+
+  // Firebase email-link flow: complete sign-in and exchange the ID token.
+  useEffect(() => {
+    if (!isFirebaseLink || firebaseTried.current) return;
+    const knownEmail = sessionStorage.getItem('pending_email') ?? getStoredSignInEmail();
+    // Firebase requires the e-mail to finish sign-in. If we don't have it (link
+    // opened on another device), ask the user to type it before continuing.
+    if (!knownEmail) return;
+    firebaseTried.current = true;
+    (async () => {
+      setBusy(true);
+      try {
+        const idToken = await completeParentSignIn(window.location.href, knownEmail);
+        const res = await api<{ verified: boolean; email: string }>('/api/parent/firebase-session', {
+          method: 'POST',
+          body: { idToken },
+        });
+        setVerified(res.email);
+        await refresh();
+        sessionStorage.removeItem('pending_email');
+        navigate('/galerie', { replace: true });
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [isFirebaseLink, navigate, setVerified, refresh]);
+
+  // Complete Firebase sign-in once the user supplies the e-mail manually.
+  const completeFirebaseWithEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      const idToken = await completeParentSignIn(window.location.href, email);
+      const res = await api<{ verified: boolean; email: string }>('/api/parent/firebase-session', {
+        method: 'POST',
+        body: { idToken },
+      });
+      setVerified(res.email);
+      await refresh();
+      sessionStorage.removeItem('pending_email');
+      navigate('/galerie', { replace: true });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Magic link flow (non-Firebase backend codes): verify when a token is present.
   useEffect(() => {
     if (!linkToken || linkTried.current) return;
     linkTried.current = true;
@@ -63,17 +127,22 @@ export default function Verify() {
     setError('');
     setResent('');
     try {
+      if (firebaseEnabled) {
+        await sendParentSignInLink(email);
+        setResent('Wir haben dir erneut einen Anmeldelink an deine E-Mail-Adresse gesendet.');
+        return;
+      }
       const res = await api<{ message: string }>('/api/parent/request-code', {
         method: 'POST',
         body: { email },
       });
       setResent(res.message);
     } catch {
-      setResent('Falls die Adresse freigeschaltet ist, haben wir dir erneut einen Code gesendet.');
+      setResent('Falls die Adresse freigeschaltet ist, haben wir dir erneut eine Nachricht gesendet.');
     }
   };
 
-  if (linkToken && busy) {
+  if ((linkToken || isFirebaseLink) && busy) {
     return (
       <div className="narrow" style={{ margin: '0 auto' }}>
         <Spinner label="Wir bestätigen deine E-Mail-Adresse …" />
@@ -81,6 +150,57 @@ export default function Verify() {
     );
   }
 
+  // Firebase mode: passwordless e-mail-link sign-in.
+  if (firebaseEnabled) {
+    const needsEmailForLink = isFirebaseLink; // link opened but e-mail unknown
+    return (
+      <div className="narrow" style={{ margin: '0 auto' }}>
+        <div className="hero">
+          <div className="lock-big">✉️</div>
+          <h1>E-Mail bestätigen</h1>
+          <p className="soft">
+            {needsEmailForLink
+              ? 'Bitte bestätige deine E-Mail-Adresse, um die Anmeldung abzuschließen.'
+              : 'Wir haben dir einen Anmeldelink an deine E-Mail-Adresse gesendet. Bitte öffne die E-Mail und klicke auf den Link.'}
+          </p>
+        </div>
+
+        <div className="card">
+          {error && <Alert kind="error">{error}</Alert>}
+          {resent && <Alert kind="success">{resent}</Alert>}
+          <form onSubmit={needsEmailForLink ? completeFirebaseWithEmail : (e) => { e.preventDefault(); resend(); }}>
+            <div className="field">
+              <label htmlFor="email">E-Mail-Adresse</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@beispiel.de"
+                required
+              />
+            </div>
+            <button className="btn block" disabled={busy || !email}>
+              {busy
+                ? 'Wird geprüft …'
+                : needsEmailForLink
+                  ? 'Anmeldung abschließen'
+                  : 'Anmeldelink erneut senden'}
+            </button>
+          </form>
+        </div>
+
+        <div style={{ marginTop: 18 }}>
+          <TrustNote>
+            Der Link ist nur kurze Zeit gültig. Bitte gib ihn nicht weiter – er schützt den Zugang zu
+            deinen Fotos.
+          </TrustNote>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback mode: 6-digit verification code (no Firebase configured).
   return (
     <div className="narrow" style={{ margin: '0 auto' }}>
       <div className="hero">

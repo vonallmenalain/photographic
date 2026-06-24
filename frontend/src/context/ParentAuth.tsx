@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 import { api } from '../api/client';
+import { firebaseSignOut } from '../lib/firebase';
 
 interface ParentAuthState {
   loading: boolean;
@@ -45,6 +46,7 @@ export function ParentAuthProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
+    await firebaseSignOut();
     setV(false);
     setEmail(null);
   };

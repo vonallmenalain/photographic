@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { useParentAuth } from '../../context/ParentAuth';
 import { Alert, TrustNote } from '../../components/common';
+import { firebaseEnabled, sendParentSignInLink } from '../../lib/firebase';
 
 export default function Landing() {
   const { verified, loading } = useParentAuth();
@@ -22,14 +23,23 @@ export default function Landing() {
     setMessage('');
     setSending(true);
     try {
-      const res = await api<{ message: string }>('/api/parent/request-code', {
-        method: 'POST',
-        body: { email },
-      });
-      setMessage(res.message);
-      // Pass the e-mail to the verify page so the code can be checked.
-      sessionStorage.setItem('pending_email', email.trim().toLowerCase());
-      setTimeout(() => navigate('/verifizieren'), 900);
+      if (firebaseEnabled) {
+        // Firebase Authentication: send a passwordless e-mail sign-in link.
+        await sendParentSignInLink(email);
+        sessionStorage.setItem('pending_email', email.trim().toLowerCase());
+        setMessage(
+          'Wir haben dir einen Anmeldelink an deine E-Mail-Adresse gesendet. Bitte öffne die E-Mail und klicke auf den Link, um deine Fotos zu sehen.',
+        );
+      } else {
+        const res = await api<{ message: string }>('/api/parent/request-code', {
+          method: 'POST',
+          body: { email },
+        });
+        setMessage(res.message);
+        // Pass the e-mail to the verify page so the code can be checked.
+        sessionStorage.setItem('pending_email', email.trim().toLowerCase());
+        setTimeout(() => navigate('/verifizieren'), 900);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Es ist ein Fehler aufgetreten.');
     } finally {
@@ -43,7 +53,8 @@ export default function Landing() {
         <div className="lock-big">🔒</div>
         <h1>Deine Kinderfotos – sicher &amp; geschützt</h1>
         <p className="soft">
-          Gib deine E-Mail-Adresse ein. Wir senden dir einen Zugangscode, damit nur du deine
+          Gib deine E-Mail-Adresse ein. Wir senden dir{' '}
+          {firebaseEnabled ? 'einen sicheren Anmeldelink' : 'einen Zugangscode'}, damit nur du deine
           zugeordneten Fotos sehen kannst.
         </p>
       </div>
@@ -65,11 +76,16 @@ export default function Landing() {
             />
           </div>
           <button className="btn block" disabled={sending}>
-            {sending ? 'Wird gesendet …' : 'Zugangscode anfordern'}
+            {sending
+              ? 'Wird gesendet …'
+              : firebaseEnabled
+                ? 'Anmeldelink anfordern'
+                : 'Zugangscode anfordern'}
           </button>
         </form>
         <p className="muted center" style={{ marginTop: 14, marginBottom: 0, fontSize: '0.85rem' }}>
-          Schon einen Code? <a onClick={() => navigate('/verifizieren')} style={{ cursor: 'pointer' }}>Hier bestätigen</a>
+          {firebaseEnabled ? 'Schon einen Link erhalten?' : 'Schon einen Code?'}{' '}
+          <a onClick={() => navigate('/verifizieren')} style={{ cursor: 'pointer' }}>Hier bestätigen</a>
         </p>
       </div>
 
