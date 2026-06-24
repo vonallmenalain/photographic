@@ -27,10 +27,10 @@ import { newId } from '../lib/ids';
 import { emailSchema, parse, normalizeEmail } from '../lib/validation';
 import { processOriginal, reprocessFromOriginal, deleteAllVariants, variantPath } from '../lib/images';
 import { requestVerification } from '../services/verification';
+import { EVENT_STATUSES, archiveExpiredEvents, retentionExpiry } from '../services/events';
 
 const router = Router();
 
-const EVENT_STATUSES = ['draft', 'in_progress', 'ready', 'published', 'archived', 'disabled'] as const;
 const EMAIL_STATUSES = ['created', 'not_verified', 'verification_sent', 'verified', 'disabled', 'support'] as const;
 const PHOTO_STATUSES = ['uploaded', 'processed', 'assigned', 'disabled'] as const;
 const ORDER_STATUSES = ['cart', 'checkout_started', 'paid', 'failed', 'completed', 'fulfilled', 'cancelled', 'refunded'] as const;
@@ -127,6 +127,8 @@ router.get(
 router.get(
   '/events',
   asyncHandler(async (_req, res) => {
+    // Keep statuses current (auto-archive expired galleries) before listing.
+    await archiveExpiredEvents();
     const [events, photos, children] = await Promise.all([
       runQuery<Record<string, unknown>>(col(COL.events)),
       runQuery<{ event_id: string }>(col(COL.photos)),
@@ -160,12 +162,11 @@ router.post(
       req.body,
     );
     const id = newId('evt');
-    const expires = new Date(Date.now() + config.retentionDaysDefault * 86400_000).toISOString();
     await setById(COL.events, id, {
       name,
       description,
       status: 'draft',
-      expires_at: expires,
+      expires_at: retentionExpiry(),
       created_at: nowIso(),
       updated_at: nowIso(),
     });
@@ -177,6 +178,7 @@ router.post(
 router.get(
   '/events/:id',
   asyncHandler(async (req, res) => {
+    await archiveExpiredEvents();
     const event = await getById<Record<string, unknown>>(COL.events, req.params.id);
     if (!event) throw new ApiError(404, 'Event nicht gefunden.');
     const children = (await runQuery<{ name: string }>(col(COL.children).where('event_id', '==', req.params.id)))
@@ -222,11 +224,18 @@ router.patch(
       }),
       req.body,
     );
-    const event = await getById(COL.events, req.params.id);
+    const event = await getById<{ expires_at: string | null }>(COL.events, req.params.id);
     if (!event) throw new ApiError(404, 'Event nicht gefunden.');
-    if (Object.keys(data).length) {
-      await updateById(COL.events, req.params.id, { ...data, updated_at: nowIso() });
-      await audit('event.update', `${req.params.id}: ${JSON.stringify(data)}`);
+    const updates: Record<string, unknown> = { ...data };
+    // Re-publishing an already-expired event refreshes its retention window so
+    // the auto-archive sweep does not immediately archive it again.
+    if (data.status === 'published' && data.expires_at === undefined) {
+      const exp = event.expires_at ? new Date(event.expires_at).getTime() : 0;
+      if (!exp || exp <= Date.now()) updates.expires_at = retentionExpiry();
+    }
+    if (Object.keys(updates).length) {
+      await updateById(COL.events, req.params.id, { ...updates, updated_at: nowIso() });
+      await audit('event.update', `${req.params.id}: ${JSON.stringify(updates)}`);
     }
     res.json({ ok: true });
   }),

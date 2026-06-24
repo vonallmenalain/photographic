@@ -45,6 +45,22 @@ export default function Events() {
     }
   };
 
+  const remove = async (ev: EventRow) => {
+    if (
+      !confirm(
+        `Event „${ev.name}“ wirklich löschen? Alle Fotos, Kinder und Zuordnungen werden unwiderruflich entfernt.`,
+      )
+    )
+      return;
+    setError('');
+    try {
+      await api(`/api/admin/events/${ev.id}`, { method: 'DELETE', admin: true });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Event konnte nicht gelöscht werden.');
+    }
+  };
+
   if (loading) return <Spinner />;
 
   return (
@@ -97,7 +113,16 @@ export default function Events() {
                   <td>{ev.child_count}</td>
                   <td>{ev.expires_at ? formatDateShort(ev.expires_at) : '—'}</td>
                   <td>
-                    <Link to={ev.id}>Verwalten</Link>
+                    <div className="row" style={{ gap: 12, justifyContent: 'flex-end' }}>
+                      <Link to={ev.id}>Verwalten</Link>
+                      <button
+                        className="btn ghost small"
+                        style={{ color: 'var(--danger)' }}
+                        onClick={() => remove(ev)}
+                      >
+                        Löschen
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
