@@ -33,7 +33,7 @@ Im Log erscheint `stripe: enabled`.
 Damit Bestellungen nach der Zahlung automatisch als bezahlt markiert werden:
 
 1. Stripe-Dashboard → **Developers → Webhooks → Add endpoint**.
-2. **Endpoint URL**: `https://api.deinedomain.de/webhook/stripe`
+2. **Endpoint URL**: `https://api.alae.app/webhook/stripe`
    (deine Cloudflare-Tunnel-Adresse + `/webhook/stripe`).
 3. **Events to send**: mindestens `checkout.session.completed`.
 4. Endpoint speichern → den **Signing secret** (`whsec_...`) kopieren.

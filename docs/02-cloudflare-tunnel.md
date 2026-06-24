@@ -4,14 +4,19 @@ Damit das Netlify-Frontend mit deiner QNAP-API sprechen kann, muss die API über
 HTTPS erreichbar sein – **ohne** Portfreigabe an deinem Router. Genau dafür ist
 ein **Cloudflare Tunnel** ideal.
 
-Ergebnis: Deine API ist unter z. B. `https://api.deinedomain.de` erreichbar und
-leitet intern an den Container `backend:4000` weiter.
+Ergebnis: Deine API ist unter **`https://api.alae.app`** erreichbar und leitet
+intern an den Container `backend:4000` weiter.
+
+> Empfehlung: Nutze für die API bewusst `api.alae.app` (gleiche Hauptdomain wie
+> das Frontend `fotos.alae.app`). Dadurch sind Frontend und API „same-site“ und
+> die Sitzungs-Cookies funktionieren besonders zuverlässig (siehe
+> [3. Netlify](03-netlify.md), Abschnitt Cookies).
 
 ## 2.1 Voraussetzungen
 
-- Eine Domain, deren DNS bei **Cloudflare** verwaltet wird (kostenloser Plan
-  genügt). Domain in Cloudflare hinzufügen und Nameserver beim Registrar auf die
-  Cloudflare-Nameserver umstellen.
+- Die Domain **`alae.app`**, deren DNS bei **Cloudflare** verwaltet wird
+  (kostenloser Plan genügt). Domain in Cloudflare hinzufügen und Nameserver beim
+  Registrar auf die Cloudflare-Nameserver umstellen.
 
 ## 2.2 Tunnel im Cloudflare-Dashboard anlegen (empfohlen: „Remotely-managed“)
 
@@ -46,8 +51,8 @@ Tunnel das Backend unter `http://backend:4000`.
 Zurück im Cloudflare-Dashboard beim Tunnel:
 
 1. Reiter **Public Hostname** → **Add a public hostname**.
-2. **Subdomain**: `api`  · **Domain**: `deinedomain.de`
-   → ergibt `api.deinedomain.de`.
+2. **Subdomain**: `api`  · **Domain**: `alae.app`
+   → ergibt `api.alae.app`.
 3. **Service**: Type **HTTP**, URL **`backend:4000`**.
    - Falls dein Tunnel nicht im selben Docker-Netz läuft, stattdessen
      `http://<QNAP-IP>:4000` verwenden.
@@ -58,7 +63,7 @@ Cloudflare legt automatisch den passenden DNS-Eintrag (CNAME) an.
 ## 2.5 Testen
 
 ```bash
-curl https://api.deinedomain.de/health
+curl https://api.alae.app/health
 # {"ok":true,"time":"..."}
 ```
 
@@ -67,10 +72,10 @@ NAS-Port, kein Zugriff auf andere Dienste).
 
 ## 2.6 Diese URL brauchst du weiter
 
-- In **Netlify** als `VITE_API_BASE_URL=https://api.deinedomain.de`
+- In **Netlify** als `VITE_API_BASE_URL=https://api.alae.app`
   (siehe [3. Netlify](03-netlify.md)).
-- Im **Backend** muss `PUBLIC_APP_URL` auf die Netlify-Adresse zeigen
-  (für CORS + E-Mail-Links).
+- Im **Backend** muss `PUBLIC_APP_URL=https://fotos.alae.app` zeigen
+  (für CORS + E-Mail-/Bestätigungslinks).
 
 ## 2.7 Hinweise / Hardening (optional)
 
