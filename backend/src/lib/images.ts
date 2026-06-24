@@ -37,11 +37,16 @@ function watermarkSvg(width: number, height: number, text: string): Buffer {
   const fontSize = Math.max(16, Math.round(width / 22));
   const stepX = fontSize * 11;
   const stepY = fontSize * 6;
+  // Use font families that are actually installed in the runtime image
+  // (see backend/Dockerfile). librsvg only renders text when it can resolve a
+  // font; "Liberation Sans"/"DejaVu Sans" are the metric-compatible packages we
+  // ship, with the generic fallbacks kept for local development.
+  const fontFamily = "'Liberation Sans', 'DejaVu Sans', Arial, Helvetica, sans-serif";
   const texts: string[] = [];
   for (let y = -height; y < height * 2; y += stepY) {
     for (let x = -width; x < width * 2; x += stepX) {
       texts.push(
-        `<text x="${x}" y="${y}" font-family="Helvetica, Arial, sans-serif" font-size="${fontSize}" font-weight="700" fill="#ffffff" fill-opacity="0.34" stroke="#000000" stroke-opacity="0.12" stroke-width="0.6">${safe}</text>`,
+        `<text x="${x}" y="${y}" font-family="${fontFamily}" font-size="${fontSize}" font-weight="700" fill="#ffffff" fill-opacity="0.34" stroke="#000000" stroke-opacity="0.12" stroke-width="0.6">${safe}</text>`,
       );
     }
   }
@@ -131,6 +136,48 @@ export async function reprocessFromOriginal(storageKey: string, ext: string): Pr
   const originalPath = variantPath('original', storageKey, ext);
   const buffer = await fsp.readFile(originalPath);
   return processOriginal(buffer, storageKey, ext);
+}
+
+/**
+ * Renders a small watermarked test tile and checks that the overlay text was
+ * actually drawn. If no fonts are installed (common on slim base images),
+ * librsvg silently produces an empty overlay and previews would ship WITHOUT a
+ * watermark. We surface that as a loud warning on startup instead of failing
+ * quietly. Returns true when watermark text renders, false otherwise.
+ */
+export async function checkWatermarkRendering(): Promise<boolean> {
+  try {
+    const w = 600;
+    const h = 400;
+    const overlay = watermarkSvg(w, h, config.images.watermarkText);
+    // Composite onto a perfectly flat grey tile. With fonts the watermark text
+    // adds clear pixel variation; without usable fonts the overlay is (near)
+    // empty and the result stays essentially flat.
+    const flat = await sharp({
+      create: { width: w, height: h, channels: 3, background: { r: 128, g: 128, b: 128 } },
+    })
+      .jpeg()
+      .toBuffer();
+    const composited = await sharp(flat)
+      .composite([{ input: overlay, top: 0, left: 0 }])
+      .raw()
+      .toBuffer();
+    const stats = await sharp(composited, { raw: { width: w, height: h, channels: 3 } }).stats();
+    const maxStdev = Math.max(...stats.channels.map((c) => c.stdev));
+    const ok = maxStdev > 3;
+    if (!ok) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[images] WARNING: watermark text did not render — no usable fonts found. ' +
+          'Previews will NOT be watermarked. Install fonts (e.g. fontconfig + fonts-dejavu-core) in the runtime image.',
+      );
+    }
+    return ok;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[images] WARNING: watermark self-check failed', err);
+    return false;
+  }
 }
 
 export function fileExists(p: string): boolean {

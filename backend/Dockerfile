@@ -16,6 +16,14 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# Fonts are REQUIRED for the photo watermark: sharp renders the watermark text
+# through an SVG overlay (librsvg). The slim base image ships without any fonts,
+# in which case the text silently renders as nothing and previews end up WITHOUT
+# a watermark. fontconfig + a sans-serif family fix that.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        fontconfig fonts-dejavu-core fonts-liberation \
+    && fc-cache -f \
+    && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
