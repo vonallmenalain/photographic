@@ -9,6 +9,7 @@ import Events from './Events';
 import EventDetail from './EventDetail';
 import Emails from './Emails';
 import EmailDetail from './EmailDetail';
+import Import from './Import';
 import AdminOrders from './AdminOrders';
 import AdminOrderDetail from './AdminOrderDetail';
 import Reports from './Reports';
@@ -47,6 +48,7 @@ export default function AdminApp() {
         <Route path="events/:id" element={<EventDetail />} />
         <Route path="emails" element={<Emails />} />
         <Route path="emails/:id" element={<EmailDetail />} />
+        <Route path="import" element={<Import />} />
         <Route path="orders" element={<AdminOrders />} />
         <Route path="orders/:id" element={<AdminOrderDetail />} />
         <Route path="reports" element={<Reports />} />
