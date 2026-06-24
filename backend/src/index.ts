@@ -44,20 +44,27 @@ function buildApp() {
   return app;
 }
 
-function main() {
+async function main() {
   // Ensure storage directories exist on the (QNAP) volume.
   fs.mkdirSync(config.storageDir, { recursive: true });
-  migrate();
+  await migrate();
 
   const app = buildApp();
   app.listen(config.port, () => {
+    const emulator = config.firebase.firestoreEmulatorHost || config.firebase.authEmulatorHost;
     // eslint-disable-next-line no-console
     console.log(`[server] listening on :${config.port} (env=${config.env})`);
     console.log(`[server] storage dir: ${config.storageDir}`);
     console.log(`[server] public app : ${config.publicAppUrl}`);
+    console.log(`[server] firestore   : project ${config.firebase.projectId}${emulator ? ' (EMULATOR)' : ''}`);
+    console.log(`[server] parent auth : ${config.firebase.parentAuthEnabled ? 'Firebase + code fallback' : 'code only'}`);
     console.log(`[server] stripe      : ${config.stripe.enabled ? 'enabled' : 'manual/test mode'}`);
     console.log(`[server] mail        : ${config.mail.devLogOnly ? 'DEV LOG ONLY' : config.mail.host}`);
   });
 }
 
-main();
+main().catch((err) => {
+  // eslint-disable-next-line no-console
+  console.error('[server] failed to start', err);
+  process.exit(1);
+});

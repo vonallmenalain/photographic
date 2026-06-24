@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { getDb } from '../db';
+import { COL, col, runQuery, setById, nowIso } from '../db';
 import { config } from '../config';
 import { asyncHandler, ApiError } from '../middleware/errorHandler';
 import { attachParent, requireParent, PARENT_COOKIE } from '../middleware/parentAuth';
@@ -13,6 +13,7 @@ import {
   requestVerification,
   verifyByCode,
   verifyByLink,
+  verifyByFirebaseToken,
   startSession,
   endSession,
 } from '../services/verification';
@@ -36,13 +37,30 @@ const router = Router();
 const NEUTRAL_MESSAGE =
   'Falls diese E-Mail-Adresse für Fotos freigeschaltet ist, senden wir dir einen Zugangslink und einen Code.';
 
+interface ProductDoc {
+  name: string;
+  description: string;
+  type: string;
+  price_cents: number;
+  currency: string;
+  active: number;
+  sort_order: number;
+}
+
 router.get(
   '/products',
   asyncHandler(async (_req, res) => {
-    const db = getDb();
-    const products = db
-      .prepare('SELECT id, name, description, type, price_cents, currency FROM products WHERE active = 1 ORDER BY sort_order')
-      .all();
+    const products = (await runQuery<ProductDoc>(col(COL.products)))
+      .filter((p) => p.active === 1)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        type: p.type,
+        price_cents: p.price_cents,
+        currency: p.currency,
+      }));
     res.json({ products });
   }),
 );
@@ -66,11 +84,11 @@ router.post(
       z.object({ email: emailSchema, code: z.string().trim().regex(/^\d{4,8}$/, 'Ungültiger Code.') }),
       req.body,
     );
-    const result = verifyByCode(email, code);
+    const result = await verifyByCode(email, code);
     if (!result.ok || !result.emailId) {
       throw new ApiError(400, 'Der Code ist ungültig oder abgelaufen.');
     }
-    startSession(res, result.emailId, req.headers['user-agent'] ?? '');
+    await startSession(res, result.emailId, req.headers['user-agent'] ?? '');
     res.json({ verified: true, email: result.email });
   }),
 );
@@ -80,11 +98,29 @@ router.post(
   codeCheckLimiter,
   asyncHandler(async (req, res) => {
     const { token } = parse(z.object({ token: z.string().min(10) }), req.body);
-    const result = verifyByLink(token);
+    const result = await verifyByLink(token);
     if (!result.ok || !result.emailId) {
       throw new ApiError(400, 'Dieser Bestätigungslink ist ungültig oder abgelaufen.');
     }
-    startSession(res, result.emailId, req.headers['user-agent'] ?? '');
+    await startSession(res, result.emailId, req.headers['user-agent'] ?? '');
+    res.json({ verified: true, email: result.email });
+  }),
+);
+
+// Firebase Authentication: exchange a verified Firebase ID token for a session.
+router.post(
+  '/firebase-session',
+  codeCheckLimiter,
+  asyncHandler(async (req, res) => {
+    if (!config.firebase.parentAuthEnabled) {
+      throw new ApiError(400, 'Firebase-Anmeldung ist nicht aktiviert.');
+    }
+    const { idToken } = parse(z.object({ idToken: z.string().min(20) }), req.body);
+    const result = await verifyByFirebaseToken(idToken);
+    if (!result.ok || !result.emailId) {
+      throw new ApiError(400, 'Die Anmeldung konnte nicht bestätigt werden.');
+    }
+    await startSession(res, result.emailId, req.headers['user-agent'] ?? '');
     res.json({ verified: true, email: result.email });
   }),
 );
@@ -105,7 +141,7 @@ router.post(
   '/logout',
   attachParent,
   asyncHandler(async (req, res) => {
-    if (req.parent) endSession(req.parent.sessionId);
+    if (req.parent) await endSession(req.parent.sessionId);
     clearAuthCookie(res, PARENT_COOKIE);
     res.json({ ok: true });
   }),
@@ -116,7 +152,7 @@ router.get(
   '/photos',
   requireParent,
   asyncHandler(async (req, res) => {
-    const photos = getVisiblePhotos(req.parent!.emailId);
+    const photos = await getVisiblePhotos(req.parent!.emailId);
     // Group by event for a calm presentation.
     const eventsMap = new Map<string, { id: string; name: string; photos: unknown[] }>();
     for (const p of photos) {
@@ -140,7 +176,7 @@ router.get(
   '/cart',
   requireParent,
   asyncHandler(async (req, res) => {
-    const cart = getCart(req.parent!.emailId);
+    const cart = await getCart(req.parent!.emailId);
     res.json({
       cart: {
         total_cents: cart.total_cents,
@@ -168,7 +204,7 @@ router.post(
       z.object({ photoId: z.string(), productId: z.string(), qty: z.number().int().min(1).max(20).default(1) }),
       req.body,
     );
-    addToCart(req.parent!.emailId, photoId, productId, qty);
+    await addToCart(req.parent!.emailId, photoId, productId, qty);
     res.json({ ok: true });
   }),
 );
@@ -177,7 +213,7 @@ router.delete(
   '/cart/:itemId',
   requireParent,
   asyncHandler(async (req, res) => {
-    removeFromCart(req.parent!.emailId, req.params.itemId);
+    await removeFromCart(req.parent!.emailId, req.params.itemId);
     res.json({ ok: true });
   }),
 );
@@ -186,7 +222,7 @@ router.post(
   '/cart/clear',
   requireParent,
   asyncHandler(async (req, res) => {
-    clearCart(req.parent!.emailId);
+    await clearCart(req.parent!.emailId);
     res.json({ ok: true });
   }),
 );
@@ -196,8 +232,8 @@ router.post(
   '/checkout',
   requireParent,
   asyncHandler(async (req, res) => {
-    const { orderId } = beginCheckout(req.parent!.emailId);
-    const cart = getCart(req.parent!.emailId);
+    const { orderId } = await beginCheckout(req.parent!.emailId);
+    const cart = await getCart(req.parent!.emailId);
     const lines = cart.items.map((i) => ({
       name: `${i.product_name}`,
       amountCents: i.unit_price_cents,
@@ -223,10 +259,10 @@ router.post(
       throw new ApiError(400, 'Bitte schließe die Zahlung über den bereitgestellten Bezahllink ab.');
     }
     const { orderId } = parse(z.object({ orderId: z.string() }), req.body);
-    const order = getOrderForEmail(req.parent!.emailId, orderId);
+    const order = await getOrderForEmail(req.parent!.emailId, orderId);
     if (!order) throw new ApiError(404, 'Bestellung nicht gefunden.');
-    markOrderPaid(orderId, 'manual', 'manual-confirm');
-    const final = getOrderForEmail(req.parent!.emailId, orderId)!;
+    await markOrderPaid(orderId, 'manual', 'manual-confirm');
+    const final = (await getOrderForEmail(req.parent!.emailId, orderId))!;
     await sendConfirmationEmail(req.parent!.email, final);
     res.json({ ok: true, orderId });
   }),
@@ -237,7 +273,7 @@ router.get(
   '/orders',
   requireParent,
   asyncHandler(async (req, res) => {
-    res.json({ orders: listOrdersForEmail(req.parent!.emailId) });
+    res.json({ orders: await listOrdersForEmail(req.parent!.emailId) });
   }),
 );
 
@@ -245,7 +281,7 @@ router.get(
   '/orders/:id',
   requireParent,
   asyncHandler(async (req, res) => {
-    const order = getOrderForEmail(req.parent!.emailId, req.params.id);
+    const order = await getOrderForEmail(req.parent!.emailId, req.params.id);
     if (!order) throw new ApiError(404, 'Bestellung nicht gefunden.');
     res.json({
       order: {
@@ -283,15 +319,19 @@ router.post(
       }),
       req.body,
     );
-    const db = getDb();
-    db.prepare(
-      `INSERT INTO reports (id, email_id, email_text, type, message) VALUES (?, ?, ?, ?, ?)`,
-    ).run(newId('rep'), req.parent?.emailId ?? null, email ?? req.parent?.email ?? '', type, message);
+    await setById(COL.reports, newId('rep'), {
+      email_id: req.parent?.emailId ?? null,
+      email_text: email ?? req.parent?.email ?? '',
+      type,
+      message,
+      status: 'open',
+      created_at: nowIso(),
+    });
     res.json({ message: 'Danke, deine Meldung ist bei uns eingegangen. Wir melden uns bei dir.' });
   }),
 );
 
-async function sendConfirmationEmail(email: string, order: NonNullable<ReturnType<typeof getOrderForEmail>>) {
+async function sendConfirmationEmail(email: string, order: NonNullable<Awaited<ReturnType<typeof getOrderForEmail>>>) {
   const summary = order.items
     .map((i) => `• ${i.qty}× ${i.product_name} – ${(i.unit_price_cents / 100).toFixed(2)} ${order.currency.toUpperCase()}`)
     .join('\n');

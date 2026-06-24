@@ -1,48 +1,54 @@
 import { NextFunction, Request, Response } from 'express';
-import { getDb } from '../db';
+import { COL, col, getById, firstOf, updateById, nowIso } from '../db';
 import { hashToken } from '../lib/auth';
 import { ApiError } from './errorHandler';
 
 export const PARENT_COOKIE = 'parent_session';
 
-interface SessionRow {
-  id: string;
+interface SessionDoc {
   email_id: string;
-  email: string;
+  token_hash: string;
   expires_at: string;
 }
 
-export function loadParent(req: Request): Request['parent'] | null {
+export async function loadParent(req: Request): Promise<NonNullable<Request['parent']> | null> {
   const token = (req.cookies && req.cookies[PARENT_COOKIE]) as string | undefined;
   if (!token) return null;
-  const db = getDb();
-  const row = db
-    .prepare(
-      `SELECT s.id, s.email_id, s.expires_at, e.email
-       FROM parent_sessions s
-       JOIN parent_emails e ON e.id = s.email_id
-       WHERE s.token_hash = ? AND s.expires_at > datetime('now')
-         AND e.status = 'verified'`,
-    )
-    .get(hashToken(token)) as SessionRow | undefined;
-  if (!row) return null;
-  db.prepare("UPDATE parent_sessions SET last_seen = datetime('now') WHERE id = ?").run(row.id);
-  return { emailId: row.email_id, email: row.email, sessionId: row.id };
+
+  const session = await firstOf<SessionDoc>(
+    col(COL.parentSessions).where('token_hash', '==', hashToken(token)),
+  );
+  if (!session) return null;
+  if (new Date(session.expires_at).getTime() <= Date.now()) return null;
+
+  const email = await getById<{ email: string; status: string }>(COL.parentEmails, session.email_id);
+  if (!email || email.status !== 'verified') return null;
+
+  await updateById(COL.parentSessions, session.id, { last_seen: nowIso() });
+  return { emailId: session.email_id, email: email.email, sessionId: session.id };
 }
 
 /** Attaches req.parent if a valid verified session exists; never throws. */
-export function attachParent(req: Request, _res: Response, next: NextFunction) {
-  const parent = loadParent(req);
-  if (parent) req.parent = parent;
-  next();
+export async function attachParent(req: Request, _res: Response, next: NextFunction) {
+  try {
+    const parent = await loadParent(req);
+    if (parent) req.parent = parent;
+    next();
+  } catch (err) {
+    next(err);
+  }
 }
 
 /** Requires a verified parent session. */
-export function requireParent(req: Request, _res: Response, next: NextFunction) {
-  const parent = loadParent(req);
-  if (!parent) {
-    throw new ApiError(401, 'Bitte bestätige zuerst deine E-Mail-Adresse.');
+export async function requireParent(req: Request, _res: Response, next: NextFunction) {
+  try {
+    const parent = await loadParent(req);
+    if (!parent) {
+      throw new ApiError(401, 'Bitte bestätige zuerst deine E-Mail-Adresse.');
+    }
+    req.parent = parent;
+    next();
+  } catch (err) {
+    next(err);
   }
-  req.parent = parent;
-  next();
 }

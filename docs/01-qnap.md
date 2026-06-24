@@ -1,7 +1,10 @@
 # 1. QNAP einrichten (Backend + Foto-Speicher)
 
-Das Backend läuft als Docker-Container direkt auf deinem QNAP. Dort werden auch
-die Fotos und die Datenbank gespeichert – du behältst die volle Kontrolle.
+Das Backend läuft als Docker-Container direkt auf deinem QNAP. Dort werden die
+**Fotos** gespeichert – du behältst die volle Kontrolle. Alle übrigen Daten
+(Nutzer/E-Mails, Zuordnungen, Bestellungen, Meldungen) liegen in **Cloud
+Firestore**, die Eltern-Anmeldung läuft über **Firebase Authentication**.
+Richte zuerst Firebase ein: **[8. Firebase](08-firebase.md)**.
 
 ## 1.1 Voraussetzungen
 
@@ -17,7 +20,8 @@ die Fotos und die Datenbank gespeichert – du behältst die volle Kontrolle.
 3. Darin wird die App später automatisch anlegen:
    - `storage/originals/` – Originaldateien (geschützt)
    - `storage/admin/`, `storage/thumbs/`, `storage/previews/` – generierte Varianten
-   - `app.db` – die SQLite-Datenbank
+
+   (Eine lokale Datenbankdatei gibt es nicht mehr – die Daten liegen in Firestore.)
 
 Den vollständigen Pfad merken, z. B. `/share/Photos/foto-app`
 (unter manchen QNAPs `/share/CACHEDEV1_DATA/Photos/foto-app`).
@@ -48,6 +52,8 @@ cp .env.example .env
 
 ```ini
 PUBLIC_APP_URL=https://deine-app.netlify.app   # trägst du nach Netlify-Setup ein
+FIREBASE_PROJECT_ID=photographic-7ba68
+FIREBASE_SERVICE_ACCOUNT_PATH=/run/secrets/firebase-service-account.json
 JWT_SECRET=<openssl rand -base64 48>
 FILE_TOKEN_SECRET=<openssl rand -base64 48>
 ADMIN_USERNAME=admin
@@ -55,6 +61,12 @@ ADMIN_PASSWORD=<starkes-passwort>              # für ersten Start; später Hash
 COOKIE_SECURE=true
 COOKIE_SAMESITE=none
 ```
+
+> **Firebase-Service-Account:** Lade die Service-Account-JSON aus der Firebase
+> Console (siehe [docs/08-firebase.md](08-firebase.md)) herunter und lege sie als
+> `firebase-service-account.json` in den Projektordner (neben `.env`). Die
+> `docker-compose.yml` hängt sie schreibgeschützt in den Container ein. Diese
+> Datei niemals ins Git committen!
 
 > Secrets erzeugen (auf einem Mac/Linux/QNAP-SSH):
 > `openssl rand -base64 48`
@@ -79,12 +91,13 @@ docker compose up -d --build backend
 docker compose logs -f backend
 ```
 
-Beim ersten Start legt die App Schema, Standardprodukte und (aus `ADMIN_PASSWORD`)
-den Admin-Benutzer an. In den Logs solltest du sehen:
+Beim ersten Start legt die App Standardprodukte und (aus `ADMIN_PASSWORD`)
+den Admin-Benutzer in Firestore an. In den Logs solltest du sehen:
 
 ```
-[migrate] schema ready at /data/app.db
+[migrate] Firestore ready (project=photographic-7ba68)
 [server] listening on :4000 (env=production)
+[server] firestore   : project photographic-7ba68
 ```
 
 ### Variante B: Container Station GUI
@@ -136,12 +149,14 @@ git pull            # oder neue Dateien per File Station kopieren
 docker compose up -d --build backend
 ```
 
-Die Datenbank in `/data/app.db` bleibt erhalten (liegt im Volume).
+Die Daten in Firestore bleiben unverändert erhalten (liegen in der Cloud, nicht
+im Container). Die Fotos im `/data`-Volume bleiben ebenfalls erhalten.
 
 ## 1.9 Backups
 
-Sichere regelmäßig den gesamten `data/`-Ordner (DB **und** Fotos). Am besten mit
-QNAP **Hybrid Backup Sync** auf ein zweites Ziel. Die Datei `app.db` enthält
-sämtliche Zuordnungen und Bestellungen.
+Sichere regelmäßig den `data/`-Ordner (die **Fotos**). Am besten mit QNAP
+**Hybrid Backup Sync** auf ein zweites Ziel. Die übrigen Daten (Zuordnungen,
+Bestellungen, Meldungen) liegen in **Firestore**; sichere sie über die Firebase
+Console bzw. `gcloud firestore export` (siehe [docs/08-firebase.md](08-firebase.md)).
 
 ➡️ Weiter mit **[2. Cloudflare Tunnel](02-cloudflare-tunnel.md)**.

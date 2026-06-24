@@ -1,76 +1,88 @@
-import { runSchema, getDb } from './index';
+import bcrypt from 'bcryptjs';
+import { COL, col, getById, nowIso, setById, updateById } from './index';
 import { config } from '../config';
 import { newId } from '../lib/ids';
-import bcrypt from 'bcryptjs';
 
 /**
- * Applies the schema (idempotent) and ensures a default product + admin exist.
- * Safe to run on every container start.
+ * Firestore needs no schema, but we still seed sensible defaults (a starter
+ * product list + the admin user from the environment). Safe to run on every
+ * container start.
  */
-export function migrate(): void {
-  runSchema();
-  ensureDefaultProduct();
-  ensureAdminFromEnv();
+export async function migrate(): Promise<void> {
+  await ensureDefaultProducts();
+  await ensureAdminFromEnv();
   // eslint-disable-next-line no-console
-  console.log('[migrate] schema ready at', config.dbPath);
+  console.log(`[migrate] Firestore ready (project=${config.firebase.projectId})`);
 }
 
-function ensureDefaultProduct(): void {
-  const db = getDb();
-  const count = db.prepare('SELECT COUNT(*) AS c FROM products').get() as { c: number };
-  if (count.c > 0) return;
-  db.prepare(
-    `INSERT INTO products (id, name, description, type, price_cents, currency, active, sort_order)
-     VALUES (@id, @name, @description, @type, @price_cents, @currency, 1, @sort_order)`,
-  ).run({
-    id: newId('prod'),
-    name: 'Digitaler Download (hohe Auflösung)',
-    description: 'Originalfoto in voller Auflösung, ohne Wasserzeichen, als Download.',
-    type: 'digital',
-    price_cents: 1500,
-    currency: config.stripe.currency,
-    sort_order: 0,
-  });
-  db.prepare(
-    `INSERT INTO products (id, name, description, type, price_cents, currency, active, sort_order)
-     VALUES (@id, @name, @description, @type, @price_cents, @currency, 1, @sort_order)`,
-  ).run({
-    id: newId('prod'),
-    name: 'Abzug 13×18 cm',
-    description: 'Gedrucktes Foto auf Fotopapier, Format 13×18 cm.',
-    type: 'print',
-    price_cents: 600,
-    currency: config.stripe.currency,
-    sort_order: 1,
-  });
+async function ensureDefaultProducts(): Promise<void> {
+  const snap = await col(COL.products).limit(1).get();
+  if (!snap.empty) return;
+
+  const defaults = [
+    {
+      name: 'Digitaler Download (hohe Auflösung)',
+      description: 'Originalfoto in voller Auflösung, ohne Wasserzeichen, als Download.',
+      type: 'digital',
+      price_cents: 1500,
+      sort_order: 0,
+    },
+    {
+      name: 'Abzug 13×18 cm',
+      description: 'Gedrucktes Foto auf Fotopapier, Format 13×18 cm.',
+      type: 'print',
+      price_cents: 600,
+      sort_order: 1,
+    },
+  ];
+
+  for (const d of defaults) {
+    const id = newId('prod');
+    await setById(COL.products, id, {
+      name: d.name,
+      description: d.description,
+      type: d.type,
+      price_cents: d.price_cents,
+      currency: config.stripe.currency,
+      active: 1,
+      sort_order: d.sort_order,
+      created_at: nowIso(),
+    });
+  }
   // eslint-disable-next-line no-console
   console.log('[migrate] seeded default products');
 }
 
-function ensureAdminFromEnv(): void {
-  const db = getDb();
+async function ensureAdminFromEnv(): Promise<void> {
   const { username, passwordHash, plainPassword } = config.admin;
   if (!passwordHash && !plainPassword) return; // nothing configured yet
 
   const hash = passwordHash || bcrypt.hashSync(plainPassword, 10);
-  const existing = db.prepare('SELECT id FROM admin_users WHERE username = ?').get(username) as
-    | { id: string }
-    | undefined;
-
+  // Admin user documents are keyed by username for a stable, unique identity.
+  const existing = await getById<{ username: string }>(COL.adminUsers, username);
   if (existing) {
-    db.prepare('UPDATE admin_users SET password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?').run(
-      hash,
-      existing.id,
-    );
+    await updateById(COL.adminUsers, username, {
+      password_hash: hash,
+      updated_at: nowIso(),
+    });
   } else {
-    db.prepare(
-      'INSERT INTO admin_users (id, username, password_hash) VALUES (?, ?, ?)',
-    ).run(newId('adm'), username, hash);
+    await setById(COL.adminUsers, username, {
+      username,
+      password_hash: hash,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    });
   }
   // eslint-disable-next-line no-console
   console.log(`[migrate] admin user '${username}' ensured`);
 }
 
 if (require.main === module) {
-  migrate();
+  migrate()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('[migrate] failed', err);
+      process.exit(1);
+    });
 }

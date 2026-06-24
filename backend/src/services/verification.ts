@@ -1,9 +1,20 @@
 import { Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { getDb } from '../db';
+import {
+  COL,
+  col,
+  getById,
+  firstOf,
+  runQuery,
+  setById,
+  updateById,
+  deleteById,
+  nowIso,
+} from '../db';
 import { config } from '../config';
 import { newId, randomToken, numericCode } from '../lib/ids';
 import { hashToken } from '../lib/auth';
+import { authAdmin } from '../lib/firebase';
 import { sendVerificationEmail } from '../lib/email';
 import { setAuthCookie } from '../lib/cookies';
 import { PARENT_COOKIE } from '../middleware/parentAuth';
@@ -15,11 +26,12 @@ interface EmailRow {
   status: string;
 }
 
-export function findEmail(email: string): EmailRow | undefined {
-  const db = getDb();
-  return db
-    .prepare('SELECT id, email, status FROM parent_emails WHERE email = ?')
-    .get(normalizeEmail(email)) as EmailRow | undefined;
+export async function findEmail(email: string): Promise<EmailRow | undefined> {
+  const row = await firstOf<{ email: string; status: string }>(
+    col(COL.parentEmails).where('email', '==', normalizeEmail(email)),
+  );
+  if (!row) return undefined;
+  return { id: row.id, email: row.email, status: row.status };
 }
 
 /**
@@ -29,33 +41,36 @@ export function findEmail(email: string): EmailRow | undefined {
  */
 export async function requestVerification(rawEmail: string): Promise<void> {
   const email = normalizeEmail(rawEmail);
-  const row = findEmail(email);
+  const row = await findEmail(email);
   // Neutral behaviour: do nothing (but do not reveal) for unknown/disabled.
   if (!row || row.status === 'disabled') return;
 
-  const db = getDb();
   const code = numericCode(6);
   const linkToken = randomToken(32);
   const codeHash = bcrypt.hashSync(code, 10);
-  const expiresAt = new Date(Date.now() + config.verification.codeTtlMinutes * 60_000)
-    .toISOString()
-    .replace('T', ' ')
-    .slice(0, 19);
+  const expiresAt = new Date(Date.now() + config.verification.codeTtlMinutes * 60_000).toISOString();
 
   // Invalidate older unconsumed tokens for this e-mail.
-  db.prepare(
-    "UPDATE verification_tokens SET consumed_at = datetime('now') WHERE email_id = ? AND consumed_at IS NULL",
-  ).run(row.id);
+  const open = await runQuery(
+    col(COL.verificationTokens).where('email_id', '==', row.id).where('consumed_at', '==', null),
+  );
+  await Promise.all(open.map((t) => updateById(COL.verificationTokens, t.id, { consumed_at: nowIso() })));
 
-  db.prepare(
-    `INSERT INTO verification_tokens (id, email_id, code_hash, link_token, expires_at)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(newId('vt'), row.id, codeHash, linkToken, expiresAt);
+  await setById(COL.verificationTokens, newId('vt'), {
+    email_id: row.id,
+    code_hash: codeHash,
+    link_token: linkToken,
+    attempts: 0,
+    consumed_at: null,
+    expires_at: expiresAt,
+    created_at: nowIso(),
+  });
 
   if (row.status === 'created' || row.status === 'not_verified') {
-    db.prepare(
-      "UPDATE parent_emails SET status = 'verification_sent', updated_at = datetime('now') WHERE id = ?",
-    ).run(row.id);
+    await updateById(COL.parentEmails, row.id, {
+      status: 'verification_sent',
+      updated_at: nowIso(),
+    });
   }
 
   const link = `${config.publicAppUrl}/verifizieren?token=${linkToken}`;
@@ -68,69 +83,121 @@ interface VerifyResult {
   email?: string;
 }
 
-function consumeToken(emailId: string, tokenId: string) {
-  const db = getDb();
-  db.prepare("UPDATE verification_tokens SET consumed_at = datetime('now') WHERE id = ?").run(tokenId);
-  db.prepare(
-    "UPDATE parent_emails SET status = 'verified', verified_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
-  ).run(emailId);
+async function consumeToken(emailId: string, tokenId: string): Promise<void> {
+  await updateById(COL.verificationTokens, tokenId, { consumed_at: nowIso() });
+  await updateById(COL.parentEmails, emailId, {
+    status: 'verified',
+    verified_at: nowIso(),
+    updated_at: nowIso(),
+  });
 }
 
-export function verifyByCode(rawEmail: string, code: string): VerifyResult {
-  const db = getDb();
-  const row = findEmail(rawEmail);
+interface VTokenDoc {
+  email_id: string;
+  code_hash: string;
+  link_token: string;
+  attempts: number;
+  consumed_at: string | null;
+  expires_at: string;
+  created_at: string;
+}
+
+export async function verifyByCode(rawEmail: string, code: string): Promise<VerifyResult> {
+  const row = await findEmail(rawEmail);
   if (!row || row.status === 'disabled') return { ok: false };
 
-  const token = db
-    .prepare(
-      `SELECT id, code_hash, attempts FROM verification_tokens
-       WHERE email_id = ? AND consumed_at IS NULL AND expires_at > datetime('now')
-       ORDER BY created_at DESC LIMIT 1`,
-    )
-    .get(row.id) as { id: string; code_hash: string; attempts: number } | undefined;
+  const open = await runQuery<VTokenDoc>(
+    col(COL.verificationTokens).where('email_id', '==', row.id).where('consumed_at', '==', null),
+  );
+  const token = open
+    .filter((t) => new Date(t.expires_at).getTime() > Date.now())
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   if (!token) return { ok: false };
 
   if (token.attempts >= config.verification.maxAttempts) return { ok: false };
-
-  db.prepare('UPDATE verification_tokens SET attempts = attempts + 1 WHERE id = ?').run(token.id);
+  await updateById(COL.verificationTokens, token.id, { attempts: token.attempts + 1 });
 
   if (!bcrypt.compareSync(code, token.code_hash)) return { ok: false };
 
-  consumeToken(row.id, token.id);
+  await consumeToken(row.id, token.id);
   return { ok: true, emailId: row.id, email: row.email };
 }
 
-export function verifyByLink(linkToken: string): VerifyResult {
-  const db = getDb();
-  const token = db
-    .prepare(
-      `SELECT id, email_id FROM verification_tokens
-       WHERE link_token = ? AND consumed_at IS NULL AND expires_at > datetime('now')
-       LIMIT 1`,
-    )
-    .get(linkToken) as { id: string; email_id: string } | undefined;
+export async function verifyByLink(linkToken: string): Promise<VerifyResult> {
+  const matches = await runQuery<VTokenDoc>(
+    col(COL.verificationTokens).where('link_token', '==', linkToken).where('consumed_at', '==', null),
+  );
+  const token = matches.filter((t) => new Date(t.expires_at).getTime() > Date.now())[0];
   if (!token) return { ok: false };
-  const emailRow = db
-    .prepare("SELECT email, status FROM parent_emails WHERE id = ?")
-    .get(token.email_id) as { email: string; status: string } | undefined;
+
+  const emailRow = await getById<{ email: string; status: string }>(COL.parentEmails, token.email_id);
   if (!emailRow || emailRow.status === 'disabled') return { ok: false };
-  consumeToken(token.email_id, token.id);
+
+  await consumeToken(token.email_id, token.id);
   return { ok: true, emailId: token.email_id, email: emailRow.email };
 }
 
+/**
+ * Firebase Authentication flow. The frontend signs the parent in with Firebase
+ * (e-mail link / verified e-mail) and posts the resulting ID token here. We
+ * verify it with the Admin SDK, then upsert the matching parent_emails record.
+ *
+ * A parent who verifies an address that the admin has not registered yet still
+ * gets a session, but simply sees an empty gallery (no info leak) until the
+ * admin links children/photos to that address.
+ */
+export async function verifyByFirebaseToken(idToken: string): Promise<VerifyResult> {
+  let decoded;
+  try {
+    decoded = await authAdmin().verifyIdToken(idToken, true);
+  } catch {
+    return { ok: false };
+  }
+  const email = decoded.email ? normalizeEmail(decoded.email) : '';
+  if (!email || decoded.email_verified === false) return { ok: false };
+
+  const existing = await findEmail(email);
+  if (existing) {
+    if (existing.status === 'disabled') return { ok: false };
+    await updateById(COL.parentEmails, existing.id, {
+      status: 'verified',
+      verified_at: nowIso(),
+      firebase_uid: decoded.uid,
+      updated_at: nowIso(),
+    });
+    return { ok: true, emailId: existing.id, email: existing.email };
+  }
+
+  // Self-registration on first verified sign-in.
+  const id = newId('eml');
+  await setById(COL.parentEmails, id, {
+    email,
+    status: 'verified',
+    verified_at: nowIso(),
+    firebase_uid: decoded.uid,
+    note: '',
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  });
+  return { ok: true, emailId: id, email };
+}
+
 /** Creates a parent session and sets the httpOnly cookie (browser remembers). */
-export function startSession(res: Response, emailId: string, userAgent: string): void {
-  const db = getDb();
+export async function startSession(res: Response, emailId: string, userAgent: string): Promise<void> {
   const token = randomToken(32);
   const ttlMs = config.verification.sessionTtlDays * 24 * 60 * 60 * 1000;
-  const expiresAt = new Date(Date.now() + ttlMs).toISOString().replace('T', ' ').slice(0, 19);
-  db.prepare(
-    `INSERT INTO parent_sessions (id, email_id, token_hash, user_agent, expires_at)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(newId('ps'), emailId, hashToken(token), userAgent.slice(0, 255), expiresAt);
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+  await setById(COL.parentSessions, newId('ps'), {
+    email_id: emailId,
+    token_hash: hashToken(token),
+    user_agent: userAgent.slice(0, 255),
+    created_at: nowIso(),
+    last_seen: nowIso(),
+    expires_at: expiresAt,
+  });
   setAuthCookie(res, PARENT_COOKIE, token, { maxAgeMs: ttlMs });
 }
 
-export function endSession(sessionId: string): void {
-  getDb().prepare('DELETE FROM parent_sessions WHERE id = ?').run(sessionId);
+export async function endSession(sessionId: string): Promise<void> {
+  await deleteById(COL.parentSessions, sessionId);
 }

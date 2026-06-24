@@ -56,8 +56,11 @@ Bevor du ein Event auf „published“ setzt:
 
 ## 6.5 Backups
 
-- Sichere den `data/`-Ordner (enthält `app.db` + alle Fotos), z. B. mit QNAP
-  **Hybrid Backup Sync**. `app.db` enthält alle Zuordnungen/Bestellungen.
+- Sichere den `data/`-Ordner (alle **Fotos**), z. B. mit QNAP **Hybrid Backup
+  Sync**.
+- Sichere die **Firestore-Datenbank** (Zuordnungen, E-Mails, Bestellungen,
+  Meldungen) über die Firebase Console oder `gcloud firestore export gs://<bucket>`.
+  Details in [docs/08-firebase.md](08-firebase.md).
 
 ## 6.6 Logs & Neustart
 

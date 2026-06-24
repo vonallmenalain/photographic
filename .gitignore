@@ -6,9 +6,17 @@ node_modules/
 backend/dist/
 frontend/dist/
 
-# Local data / storage (photos + sqlite live on the QNAP volume)
+# Local data / storage (photo originals + variants live on the QNAP volume)
 backend/data/
 data/
+
+# Firebase: never commit service-account credentials or emulator artifacts
+**/serviceAccount*.json
+**/firebase-service-account*.json
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
 
 # Env
 .env

@@ -3,7 +3,7 @@
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
-# Build tools for native modules (better-sqlite3, sharp) just in case.
+# Build tools for native modules (sharp) just in case.
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json* ./
@@ -19,7 +19,8 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
-# Storage + DB live on a mounted volume.
+# Photo originals + generated variants live on a mounted volume.
+# (All other data lives in Cloud Firestore.)
 VOLUME ["/data"]
 EXPOSE 4000
 CMD ["node", "dist/index.js"]

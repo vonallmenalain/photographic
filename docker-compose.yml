@@ -2,7 +2,8 @@
 # Läuft auf dem QNAP (Container Station -> "Create Application" mit dieser Datei,
 # oder via SSH:  docker compose up -d --build).
 #
-#   - "backend"     = die API + Bildverarbeitung; speichert Fotos & DB unter ./data
+#   - "backend"     = die API + Bildverarbeitung. Fotos liegen unter ./data,
+#                     alle Metadaten/Nutzerdaten in Cloud Firestore.
 #   - "cloudflared" = optionaler Cloudflare-Tunnel, der die API sicher ins
 #                     Internet bringt (ohne Portfreigabe am Router).
 #
@@ -22,11 +23,17 @@ services:
       NODE_ENV: production
       PORT: 4000
       STORAGE_DIR: /data/storage
-      DB_PATH: /data/app.db
+      # Firebase-Projekt + Service-Account (siehe .env / docs/08-firebase.md).
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET}
+      # Pfad zur Service-Account-JSON IM Container (per Volume eingehängt).
+      FIREBASE_SERVICE_ACCOUNT_PATH: /run/secrets/firebase-service-account.json
     volumes:
-      # WICHTIG: Linker Pfad = Ordner auf deinem QNAP (Fotos + Datenbank).
+      # WICHTIG: Linker Pfad = Ordner auf deinem QNAP (nur noch die Fotos).
       # Passe ihn an deine Freigabe an, z. B. /share/Photos/foto-app
       - ./data:/data
+      # Service-Account-JSON read-only in den Container einhängen.
+      - ./firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
     ports:
       # Nur nötig, wenn du OHNE Cloudflare-Tunnel direkt zugreifen willst.
       - "4000:4000"

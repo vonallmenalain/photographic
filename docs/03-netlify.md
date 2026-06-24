@@ -27,9 +27,21 @@ Falls Netlify die Werte nicht automatisch übernimmt, trage sie manuell so ein.
 | Key | Value |
 |---|---|
 | `VITE_API_BASE_URL` | `https://api.deinedomain.de` (deine Cloudflare-Tunnel-URL) |
+| `VITE_FIREBASE_API_KEY` | aus der Firebase Web-Config |
+| `VITE_FIREBASE_AUTH_DOMAIN` | `photographic-7ba68.firebaseapp.com` |
+| `VITE_FIREBASE_PROJECT_ID` | `photographic-7ba68` |
+| `VITE_FIREBASE_STORAGE_BUCKET` | `photographic-7ba68.firebasestorage.app` |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | `83987903614` |
+| `VITE_FIREBASE_APP_ID` | aus der Firebase Web-Config |
 
-> Diese Variable wird beim Build eingebacken. Wenn du sie änderst, musst du **neu
-> deployen** (Trigger deploy → Clear cache and deploy site).
+> Diese Variablen werden beim Build eingebacken. Wenn du sie änderst, musst du
+> **neu deployen** (Trigger deploy → Clear cache and deploy site).
+>
+> **Wichtig (Firebase Authentication):** Trage deine Netlify-Domain in der
+> Firebase Console unter **Authentication → Settings → Authorized domains** ein,
+> und aktiviere unter **Authentication → Sign-in method** den Anbieter
+> **„E-Mail/Passwort“** inkl. **„E-Mail-Link (passwortlose Anmeldung)“**.
+> Details: [docs/08-firebase.md](08-firebase.md).
 
 ## 3.4 Deployen
 
