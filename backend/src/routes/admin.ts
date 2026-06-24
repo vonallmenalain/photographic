@@ -34,6 +34,14 @@ import {
 } from '../lib/images';
 import { requestVerification } from '../services/verification';
 import { EVENT_STATUSES, archiveExpiredEvents, retentionExpiry } from '../services/events';
+import { matchChildByFilename } from '../lib/names';
+import {
+  detectMapping,
+  describeColumns,
+  buildPlan,
+  commitImport,
+  type Mapping,
+} from '../services/import';
 
 const router = Router();
 
@@ -323,14 +331,30 @@ router.post(
     const files = (req.files as Express.Multer.File[]) ?? [];
     if (files.length === 0) throw new ApiError(400, 'Keine Dateien empfangen.');
 
-    const results: { id: string; filename: string; ok: boolean; error?: string }[] = [];
+    // Auto-assignment by file name is on by default; pass autoAssign=0 to skip.
+    const autoAssign = String((req.query.autoAssign ?? req.body?.autoAssign) ?? '1') !== '0';
+    const children = autoAssign
+      ? await runQuery<{ name: string }>(col(COL.children).where('event_id', '==', req.params.id))
+      : [];
+
+    const results: {
+      id: string;
+      filename: string;
+      ok: boolean;
+      error?: string;
+      matchedChildId?: string;
+      matchedChildName?: string;
+    }[] = [];
     for (const file of files) {
       const id = newId('pho');
       const ext = (path.extname(file.originalname).replace('.', '').toLowerCase() || 'jpg').slice(0, 5);
       const storageKey = `${req.params.id}/${id}`;
+      // Try to recognise the child from the file name (tolerant matching).
+      const match = autoAssign ? matchChildByFilename(file.originalname, children) : null;
+      const childId = match && !match.ambiguous ? match.childId : null;
       await setById(COL.photos, id, {
         event_id: req.params.id,
-        child_id: null,
+        child_id: childId,
         is_class_photo: 0,
         original_filename: file.originalname.slice(0, 255),
         storage_key: storageKey,
@@ -338,7 +362,7 @@ router.post(
         width: null,
         height: null,
         bytes: null,
-        status: 'uploaded',
+        status: childId ? 'assigned' : 'uploaded',
         processing_error: null,
         published: 0,
         sort_order: 0,
@@ -348,13 +372,19 @@ router.post(
       try {
         const meta = await processOriginal(file.buffer, storageKey, ext);
         await updateById(COL.photos, id, {
-          status: 'processed',
+          status: childId ? 'assigned' : 'processed',
           width: meta.width,
           height: meta.height,
           bytes: meta.bytes,
           updated_at: nowIso(),
         });
-        results.push({ id, filename: file.originalname, ok: true });
+        results.push({
+          id,
+          filename: file.originalname,
+          ok: true,
+          matchedChildId: childId ?? undefined,
+          matchedChildName: childId ? match?.childName : undefined,
+        });
       } catch (err) {
         await updateById(COL.photos, id, {
           processing_error: String(err).slice(0, 500),
@@ -363,8 +393,53 @@ router.post(
         results.push({ id, filename: file.originalname, ok: false, error: 'Verarbeitung fehlgeschlagen' });
       }
     }
-    await audit('photo.upload', `${req.params.id}: ${results.length} files`);
+    const matched = results.filter((r) => r.matchedChildId).length;
+    await audit('photo.upload', `${req.params.id}: ${results.length} files, ${matched} auto-assigned`);
     res.json({ results });
+  }),
+);
+
+// Re-run filename based auto-assignment for photos that are not yet linked to a
+// child. Useful after children have been imported/created post-upload.
+router.post(
+  '/events/:id/photos/auto-assign',
+  asyncHandler(async (req, res) => {
+    const event = await getById(COL.events, req.params.id);
+    if (!event) throw new ApiError(404, 'Event nicht gefunden.');
+    const { overwrite } = parse(
+      z.object({ overwrite: z.boolean().default(false) }),
+      req.body ?? {},
+    );
+    const [children, photos] = await Promise.all([
+      runQuery<{ name: string }>(col(COL.children).where('event_id', '==', req.params.id)),
+      runQuery<{ child_id: string | null; is_class_photo: number; original_filename: string; status: string }>(
+        col(COL.photos).where('event_id', '==', req.params.id),
+      ),
+    ]);
+
+    let assigned = 0;
+    let ambiguous = 0;
+    const details: { id: string; filename: string; childName: string }[] = [];
+    for (const p of photos) {
+      if (p.is_class_photo) continue;
+      if (p.child_id && !overwrite) continue;
+      const match = matchChildByFilename(p.original_filename, children);
+      if (!match) continue;
+      if (match.ambiguous) {
+        ambiguous += 1;
+        continue;
+      }
+      if (p.child_id === match.childId) continue;
+      await updateById(COL.photos, p.id, {
+        child_id: match.childId,
+        status: 'assigned',
+        updated_at: nowIso(),
+      });
+      assigned += 1;
+      details.push({ id: p.id, filename: p.original_filename, childName: match.childName });
+    }
+    await audit('photo.autoassign', `${req.params.id}: ${assigned} assigned`);
+    res.json({ assigned, ambiguous, details });
   }),
 );
 
@@ -520,8 +595,14 @@ router.get(
   '/emails',
   asyncHandler(async (req, res) => {
     const q = String(req.query.q ?? '').trim().toLowerCase();
-    let rows = await runQuery<{ email: string; created_at: string }>(col(COL.parentEmails));
-    if (q) rows = rows.filter((r) => String(r.email).toLowerCase().includes(q));
+    let rows = await runQuery<{ email: string; name?: string; created_at: string }>(col(COL.parentEmails));
+    if (q) {
+      rows = rows.filter(
+        (r) =>
+          String(r.email).toLowerCase().includes(q) ||
+          String(r.name ?? '').toLowerCase().includes(q),
+      );
+    }
     rows.sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
     res.json({ emails: rows.slice(0, 200) });
   }),
@@ -530,8 +611,12 @@ router.get(
 router.post(
   '/emails',
   asyncHandler(async (req, res) => {
-    const { email, note } = parse(
-      z.object({ email: emailSchema, note: z.string().max(1000).default('') }),
+    const { email, name, note } = parse(
+      z.object({
+        email: emailSchema,
+        name: z.string().max(200).default(''),
+        note: z.string().max(1000).default(''),
+      }),
       req.body,
     );
     const normalized = normalizeEmail(email);
@@ -540,6 +625,7 @@ router.post(
     const id = newId('eml');
     await setById(COL.parentEmails, id, {
       email: normalized,
+      name,
       status: 'not_verified',
       verified_at: null,
       note,
@@ -601,6 +687,7 @@ router.patch(
     const data = parse(
       z.object({
         email: emailSchema.optional(),
+        name: z.string().max(200).optional(),
         status: z.enum(EMAIL_STATUSES).optional(),
         note: z.string().max(1000).optional(),
       }),
@@ -616,6 +703,7 @@ router.patch(
     }
     const map: Record<string, unknown> = {};
     if (data.email) map.email = normalizeEmail(data.email);
+    if (data.name !== undefined) map.name = data.name;
     if (data.status) map.status = data.status;
     if (data.note !== undefined) map.note = data.note;
     if (Object.keys(map).length) {
@@ -670,6 +758,107 @@ router.post(
     await requestVerification(row.email);
     await audit('email.resend', req.params.id);
     res.json({ ok: true });
+  }),
+);
+
+// --- Bulk import (paste / CSV / Excel) -----------------------------------
+// The frontend converts any input (pasted table, CSV or XLSX) into a 2-D array
+// of strings. The backend owns the tolerant column detection, builds a review
+// plan and finally commits it (creating e-mails, children and their links).
+const mappingSchema = z
+  .object({
+    email: z.number().int().nonnegative().optional(),
+    name: z.number().int().nonnegative().optional(),
+    first_name: z.number().int().nonnegative().optional(),
+    last_name: z.number().int().nonnegative().optional(),
+    child: z.number().int().nonnegative().optional(),
+    event: z.number().int().nonnegative().optional(),
+    note: z.number().int().nonnegative().optional(),
+  })
+  .partial();
+
+const MAX_IMPORT_ROWS = 5000;
+const MAX_IMPORT_COLS = 60;
+
+function sanitizeRows(raw: unknown[][]): string[][] {
+  return raw
+    .slice(0, MAX_IMPORT_ROWS)
+    .map((r) => (Array.isArray(r) ? r : []).slice(0, MAX_IMPORT_COLS).map((c) => (c == null ? '' : String(c))))
+    .filter((r) => r.some((c) => c.trim() !== ''));
+}
+
+router.post(
+  '/import/preview',
+  asyncHandler(async (req, res) => {
+    const { rows, mapping, hasHeader } = parse(
+      z.object({
+        rows: z.array(z.array(z.any())).max(MAX_IMPORT_ROWS),
+        mapping: mappingSchema.optional(),
+        hasHeader: z.boolean().optional(),
+      }),
+      req.body,
+    );
+    const clean = sanitizeRows(rows);
+    if (clean.length === 0) throw new ApiError(400, 'Keine verwertbaren Zeilen gefunden.');
+
+    let effectiveMapping: Mapping;
+    let effectiveHeader: boolean;
+    let columns;
+    if (mapping && Object.keys(mapping).length > 0) {
+      effectiveMapping = mapping as Mapping;
+      effectiveHeader = hasHeader ?? false;
+      columns = describeColumns(clean, effectiveMapping, effectiveHeader);
+    } else {
+      const detection = detectMapping(clean);
+      effectiveMapping = detection.mapping;
+      effectiveHeader = detection.hasHeader;
+      columns = detection.columns;
+    }
+
+    const plan = buildPlan(clean, effectiveMapping, effectiveHeader);
+    res.json({
+      hasHeader: effectiveHeader,
+      mapping: effectiveMapping,
+      columns,
+      rowCount: clean.length,
+      plan,
+    });
+  }),
+);
+
+router.post(
+  '/import/commit',
+  asyncHandler(async (req, res) => {
+    const { rows, mapping, hasHeader, defaultEventId, defaultEventName, createMissingEvents } = parse(
+      z.object({
+        rows: z.array(z.array(z.any())).max(MAX_IMPORT_ROWS),
+        mapping: mappingSchema,
+        hasHeader: z.boolean().default(false),
+        defaultEventId: z.string().optional(),
+        defaultEventName: z.string().max(200).optional(),
+        createMissingEvents: z.boolean().default(false),
+      }),
+      req.body,
+    );
+    const clean = sanitizeRows(rows);
+    if (clean.length === 0) throw new ApiError(400, 'Keine verwertbaren Zeilen gefunden.');
+
+    if (defaultEventId) {
+      const ev = await getById(COL.events, defaultEventId);
+      if (!ev) throw new ApiError(404, 'Ziel-Event nicht gefunden.');
+    }
+
+    const plan = buildPlan(clean, mapping as Mapping, hasHeader);
+    const result = await commitImport(plan, {
+      defaultEventId,
+      defaultEventName,
+      createMissingEvents,
+    });
+    await audit(
+      'import.commit',
+      `emails +${result.emailsCreated}, children +${result.childrenCreated}, links +${result.linksCreated}`,
+    );
+    res.json({ result });
   }),
 );
 
