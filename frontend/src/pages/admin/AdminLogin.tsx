@@ -39,7 +39,7 @@ export default function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
           {error && <Alert kind="error">{error}</Alert>}
           <form onSubmit={submit}>
             <div className="field">
-              <label htmlFor="u">Benutzername</label>
+              <label htmlFor="u">Benutzername / E-Mail</label>
               <input id="u" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
             </div>
             <div className="field">
