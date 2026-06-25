@@ -64,25 +64,45 @@ async function ensureAdminFromEnv(): Promise<void> {
   // vergessen" sie zuverlässig wiederfinden (Suche läuft ebenfalls normalisiert).
   const normalizedEmail = email ? normalizeEmail(email) : '';
   const emailUpdate = normalizedEmail ? { email: normalizedEmail } : {};
-  // Admin user documents are keyed by username for a stable, unique identity.
+
+  // Admin-Dokumente sind über ihre ID (= Benutzername) verschlüsselt.
   const existing = await getById<{ username: string }>(COL.adminUsers, username);
   if (existing) {
+    // Passwort/E-Mail des passenden Kontos aktualisieren (Env-Recovery-Pfad).
     await updateById(COL.adminUsers, username, {
       password_hash: hash,
       ...emailUpdate,
       updated_at: nowIso(),
     });
-  } else {
-    await setById(COL.adminUsers, username, {
-      username,
-      password_hash: hash,
-      ...emailUpdate,
-      created_at: nowIso(),
-      updated_at: nowIso(),
-    });
+    // eslint-disable-next-line no-console
+    console.log(`[migrate] admin user '${username}' ensured`);
+    return;
   }
+
+  // Kein Dokument unter dem konfigurierten Benutzernamen. Wenn bereits ein
+  // anderer Admin existiert (z.B. weil der Benutzername im Adminbereich
+  // umbenannt wurde), NICHT erneut "admin" anlegen – sonst würde eine
+  // In-App-Umbenennung beim nächsten Start überschrieben.
+  const anyAdmin = await firstOf<{ username?: string }>(col(COL.adminUsers).limit(1));
+  if (anyAdmin) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[migrate] admin already exists ('${anyAdmin.username ?? anyAdmin.id}'); ` +
+        `skip creating '${username}'. Set ADMIN_USERNAME to that name to reset its password via env.`,
+    );
+    return;
+  }
+
+  // Erststart: Admin-Konto aus der Umgebung anlegen.
+  await setById(COL.adminUsers, username, {
+    username,
+    password_hash: hash,
+    ...emailUpdate,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  });
   // eslint-disable-next-line no-console
-  console.log(`[migrate] admin user '${username}' ensured`);
+  console.log(`[migrate] admin user '${username}' created`);
 }
 
 /**

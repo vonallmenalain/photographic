@@ -93,12 +93,23 @@ type AdminUser = { username: string; password_hash: string; email?: string };
 async function findAdminUser(identifier: string): Promise<(AdminUser & { id: string }) | null> {
   const trimmed = identifier.trim();
   if (!trimmed) return null;
+  // 1) Exakter Treffer über die Dokument-ID (Benutzername).
   const byUsername = await getById<AdminUser>(COL.adminUsers, trimmed);
   if (byUsername) return byUsername;
+  // 2) Treffer über die hinterlegte E-Mail-Adresse.
   const byEmail = await firstOf<AdminUser>(
     col(COL.adminUsers).where('email', '==', normalizeEmail(trimmed)),
   );
-  return byEmail;
+  if (byEmail) return byEmail;
+  // 3) Fallback: Benutzername unabhängig von Groß-/Kleinschreibung. Die
+  // Admin-Sammlung ist sehr klein, deshalb ist ein vollständiger Scan günstig.
+  const lower = trimmed.toLowerCase();
+  const all = await runQuery<AdminUser>(col(COL.adminUsers));
+  return (
+    all.find((u) => (u.username ?? u.id).toLowerCase() === lower) ??
+    all.find((u) => u.id.toLowerCase() === lower) ??
+    null
+  );
 }
 
 router.post(
@@ -127,6 +138,107 @@ router.post('/logout', (_req, res) => {
 router.get('/me', requireAdmin, (req, res) => {
   res.json({ username: req.admin!.username });
 });
+
+// --- Konto-Einstellungen (Benutzername / E-Mail ändern) -------------------
+const adminUsernameSchema = z
+  .string()
+  .trim()
+  .min(1, 'Bitte gib einen Benutzernamen ein.')
+  .max(60, 'Der Benutzername darf höchstens 60 Zeichen lang sein.')
+  .regex(
+    /^[\p{L}\p{N} ._-]+$/u,
+    'Erlaubt sind Buchstaben, Zahlen, Leerzeichen sowie die Zeichen . _ -',
+  );
+
+router.get(
+  '/account',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const current = await getById<AdminUser>(COL.adminUsers, req.admin!.username);
+    res.json({ username: req.admin!.username, email: current?.email ?? '' });
+  }),
+);
+
+router.put(
+  '/account',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { username: usernameInput, email: emailInput } = parse(
+      z.object({
+        username: adminUsernameSchema,
+        email: z.union([emailSchema, z.literal('')]).optional(),
+      }),
+      req.body,
+    );
+
+    const oldUsername = req.admin!.username;
+    const current = await getById<AdminUser & { created_at?: string }>(
+      COL.adminUsers,
+      oldUsername,
+    );
+    if (!current) throw new ApiError(404, 'Admin-Konto nicht gefunden.');
+
+    const newUsername = usernameInput.trim();
+    // Leeres E-Mail-Feld bedeutet "unverändert lassen".
+    const newEmail = emailInput ? normalizeEmail(emailInput) : current.email ?? '';
+
+    // E-Mail darf nicht bereits einem ANDEREN Admin-Konto gehören.
+    if (newEmail) {
+      const clash = await firstOf<AdminUser>(
+        col(COL.adminUsers).where('email', '==', newEmail),
+      );
+      if (clash && clash.id !== oldUsername) {
+        throw new ApiError(
+          409,
+          'Diese E-Mail-Adresse wird bereits von einem anderen Konto verwendet.',
+        );
+      }
+    }
+
+    const renaming = newUsername !== oldUsername;
+    if (renaming) {
+      const taken = await getById<AdminUser>(COL.adminUsers, newUsername);
+      if (taken) throw new ApiError(409, 'Dieser Benutzername ist bereits vergeben.');
+
+      // Firestore-Dokumente sind über ihre ID (= Benutzername) verschlüsselt,
+      // daher wird das Konto unter der neuen ID neu angelegt und das alte
+      // Dokument entfernt.
+      await setById(COL.adminUsers, newUsername, {
+        username: newUsername,
+        password_hash: current.password_hash,
+        ...(newEmail ? { email: newEmail } : {}),
+        created_at: current.created_at ?? nowIso(),
+        updated_at: nowIso(),
+      });
+      await deleteById(COL.adminUsers, oldUsername);
+
+      // Offene Passwort-Reset-Token auf den neuen Benutzernamen umhängen.
+      const resets = await runQuery<{ username: string }>(
+        col(COL.adminPasswordResets).where('username', '==', oldUsername),
+      );
+      await Promise.all(
+        resets.map((r) =>
+          updateById(COL.adminPasswordResets, r.id, { username: newUsername }),
+        ),
+      );
+    } else {
+      await updateById(COL.adminUsers, oldUsername, {
+        ...(newEmail ? { email: newEmail } : {}),
+        updated_at: nowIso(),
+      });
+    }
+
+    // Neues Token ausstellen (sub = neuer Benutzername) und Cookie erneuern,
+    // damit die Sitzung nach der Umbenennung gültig bleibt.
+    const token = signAdminToken({ sub: newUsername, role: 'admin' });
+    setAuthCookie(res, ADMIN_COOKIE, token, { maxAgeMs: 12 * 60 * 60 * 1000 });
+    await audit(
+      'admin.account.update',
+      `${oldUsername} -> ${newUsername}${newEmail ? ` (${newEmail})` : ''}`,
+    );
+    res.json({ token, username: newUsername, email: newEmail });
+  }),
+);
 
 // --- Passwort vergessen / zurücksetzen (öffentlich, rate-limited) ----------
 router.post(

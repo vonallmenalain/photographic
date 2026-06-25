@@ -175,6 +175,13 @@ docker compose up -d backend
 > E-Mail als 3. Argument setzt sofort ein neues Passwort **und** registriert die
 > Admin-E-Mail – unabhängig davon, ob SMTP eingerichtet ist. Danach kannst du
 > dich direkt mit der E-Mail-Adresse und dem neuen Passwort anmelden.
+>
+> **Benutzername ändern (z. B. weg von „admin“):** Melde dich im Adminbereich an
+> und öffne **Konto** in der Seitenleiste. Dort kannst du Benutzername und
+> E-Mail-Adresse frei ändern (z. B. auf „Alain“). Danach kannst du dich mit dem
+> neuen Benutzernamen **oder** der E-Mail-Adresse anmelden. Die Umbenennung wird
+> beim nächsten Start **nicht** überschrieben – `ADMIN_USERNAME` aus der `.env`
+> legt nur beim allerersten Start (wenn noch kein Admin existiert) den Namen fest.
 
 ## 1.8 Updates einspielen
 

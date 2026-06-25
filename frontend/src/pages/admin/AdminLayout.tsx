@@ -9,6 +9,7 @@ const links = [
   { to: 'emails', label: 'E-Mail-Adressen' },
   { to: 'orders', label: 'Bestellungen' },
   { to: 'reports', label: 'Meldungen' },
+  { to: 'account', label: 'Konto' },
 ];
 
 export default function AdminLayout({
