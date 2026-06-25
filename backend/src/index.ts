@@ -7,6 +7,7 @@ import { migrate } from './db/migrate';
 import { archiveExpiredEvents } from './services/events';
 import { checkWatermarkRendering } from './lib/images';
 import { errorHandler, notFound } from './middleware/errorHandler';
+import { requestTiming } from './middleware/requestTiming';
 import parentRoutes from './routes/parent';
 import adminRoutes from './routes/admin';
 import filesRoutes from './routes/files';
@@ -15,6 +16,10 @@ import webhookRoutes from './routes/webhook';
 function buildApp() {
   const app = express();
   app.set('trust proxy', 1);
+
+  // Per-request timing + Firestore accounting (see middleware/requestTiming).
+  // Mounted first so it wraps the whole request, including body parsing.
+  app.use(requestTiming);
 
   // CORS: allow the configured public app (Netlify) + extra origins, with credentials.
   const allowed = new Set<string>([config.publicAppUrl, ...config.extraCorsOrigins]);

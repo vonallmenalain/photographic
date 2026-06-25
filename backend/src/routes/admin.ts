@@ -14,6 +14,7 @@ import {
   deleteById,
   deleteWhere,
   countQuery,
+  getManyById,
   linkId,
   nowIso,
 } from '../db';
@@ -344,14 +345,22 @@ router.get(
   asyncHandler(async (_req, res) => {
     // Keep statuses current (auto-archive expired galleries) before listing.
     await archiveExpiredEvents();
-    const [events, photos, children, emailLinks] = await Promise.all([
+    const [events, children, emailLinks] = await Promise.all([
       runQuery<Record<string, unknown>>(col(COL.events)),
-      runQuery<{ event_id: string }>(col(COL.photos)),
       runQuery<{ id: string; event_id: string }>(col(COL.children)),
       runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
     ]);
-    const photoCounts = new Map<string, number>();
-    for (const p of photos) photoCounts.set(p.event_id, (photoCounts.get(p.event_id) ?? 0) + 1);
+    // Photo counts via server-side aggregation per event instead of streaming
+    // the ENTIRE photos collection into memory. The photos collection grows
+    // without bound (one doc per uploaded photo); reading all of it on every
+    // events-list render is what makes the admin area crawl after a big import.
+    const photoCountEntries = await Promise.all(
+      events.map(
+        async (e) =>
+          [e.id, await countQuery(col(COL.photos).where('event_id', '==', e.id))] as const,
+      ),
+    );
+    const photoCounts = new Map<string, number>(photoCountEntries);
     const childCounts = new Map<string, number>();
     for (const c of children) childCounts.set(c.event_id, (childCounts.get(c.event_id) ?? 0) + 1);
 
@@ -857,12 +866,11 @@ router.get(
     // linked child of that event or via a direct photo assignment in that event.
     const eventId = String(req.query.eventId ?? '').trim();
 
-    const [rows, childLinks, children, photoLinks, photos, events] = await Promise.all([
+    const [rows, childLinks, children, photoLinks, events] = await Promise.all([
       runQuery<{ email: string; name?: string; created_at: string }>(col(COL.parentEmails)),
       runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
       runQuery<{ id: string; event_id: string; name: string }>(col(COL.children)),
       runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
-      runQuery<{ id: string; event_id: string }>(col(COL.photos)),
       runQuery<{ id: string; name: string }>(col(COL.events)),
     ]);
 
@@ -872,8 +880,15 @@ router.get(
       childEvent.set(c.id, c.event_id);
       childName.set(c.id, c.name);
     }
+    // Only the photos that are directly assigned to an e-mail (photoLinks) matter
+    // here, so fetch just those by id instead of scanning the whole (potentially
+    // huge) photos collection.
+    const photosById = await getManyById<{ event_id: string }>(
+      COL.photos,
+      photoLinks.map((l) => l.photo_id),
+    );
     const photoEvent = new Map<string, string>();
-    for (const p of photos) photoEvent.set(p.id, p.event_id);
+    for (const [id, p] of photosById) photoEvent.set(id, p.event_id);
     const eventName = new Map<string, string>();
     for (const e of events) eventName.set(e.id, e.name);
 
