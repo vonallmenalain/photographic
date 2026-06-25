@@ -76,13 +76,16 @@ export default function EventDetail() {
     const fd = new FormData();
     Array.from(files).forEach((f) => fd.append('photos', f));
     try {
-      const res = await api<{ results: { ok: boolean }[] }>(`/api/admin/events/${id}/photos`, {
-        method: 'POST',
-        admin: true,
-        formData: fd,
-      });
+      const res = await api<{ results: { ok: boolean; matchedChildId?: string }[] }>(
+        `/api/admin/events/${id}/photos`,
+        { method: 'POST', admin: true, formData: fd },
+      );
       const ok = res.results.filter((r) => r.ok).length;
-      setUploadMsg(`${ok} von ${res.results.length} Fotos hochgeladen und verarbeitet.`);
+      const matched = res.results.filter((r) => r.matchedChildId).length;
+      setUploadMsg(
+        `${ok} von ${res.results.length} Fotos hochgeladen und verarbeitet.` +
+          (matched > 0 ? ` ${matched} automatisch einem Kind zugeordnet (Dateiname).` : ''),
+      );
       if (fileRef.current) fileRef.current.value = '';
       load();
     } catch (err) {
@@ -134,6 +137,24 @@ export default function EventDetail() {
     if (!confirm('Kind löschen? Zuordnungen gehen verloren.')) return;
     await api(`/api/admin/children/${childId}`, { method: 'DELETE', admin: true });
     load();
+  };
+
+  const autoAssign = async () => {
+    setUploadMsg('');
+    setError('');
+    try {
+      const res = await api<{ assigned: number; ambiguous: number }>(
+        `/api/admin/events/${id}/photos/auto-assign`,
+        { method: 'POST', admin: true, body: {} },
+      );
+      setUploadMsg(
+        `${res.assigned} Foto(s) automatisch nach Dateiname zugeordnet.` +
+          (res.ambiguous > 0 ? ` ${res.ambiguous} mehrdeutig – bitte manuell prüfen.` : ''),
+      );
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Automatische Zuordnung fehlgeschlagen.');
+    }
   };
 
   if (loading) return <Spinner />;
@@ -216,6 +237,7 @@ export default function EventDetail() {
         <h2>Fotos hochladen</h2>
         <p className="muted" style={{ fontSize: '0.85rem' }}>
           Lade nur die Originale hoch. Thumbnail und Wasserzeichen-Preview werden automatisch erzeugt.
+          Enthält der Dateiname den Namen eines Kindes, wird das Foto automatisch zugeordnet.
         </p>
         {uploadMsg && <Alert kind="success">{uploadMsg}</Alert>}
         <div className="row">
@@ -224,6 +246,16 @@ export default function EventDetail() {
             {uploading ? 'Wird hochgeladen …' : 'Hochladen & verarbeiten'}
           </button>
         </div>
+        {children.length > 0 && photos.length > 0 && (
+          <button
+            className="btn secondary small"
+            onClick={autoAssign}
+            style={{ marginTop: 10 }}
+            title="Vorhandene Fotos anhand des Dateinamens den Kindern zuordnen"
+          >
+            Vorhandene Fotos automatisch zuordnen (nach Dateiname)
+          </button>
+        )}
       </div>
 
       {/* Photos */}

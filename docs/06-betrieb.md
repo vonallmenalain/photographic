@@ -2,6 +2,10 @@
 
 ## 6.1 Der typische Admin-Workflow
 
+> **Schneller Weg (empfohlen):** Nutze den **Import** und die **automatische
+> Foto-Zuordnung nach Dateiname** – siehe [6.1a](#61a-schnell-import--automatische-zuordnung).
+> Du musst dann weder E-Mail-Adressen noch Kinder einzeln eintippen.
+
 1. **Event / Foto-Set anlegen** (Adminbereich → „Events / Foto-Sets“).
    Ein Event hat ein Ablaufdatum (Standard 30 Tage), das du anpassen kannst.
 2. **Originale hochladen** (im Event → „Fotos hochladen“). Pro Datei nur das
@@ -16,6 +20,68 @@
    verknüpfen (n:m: Mutter+Vater, mehrere Kinder).
 6. **Event-Status auf „published“** setzen. (Foto sichtbar = Event published
    **und** Foto published **und** Zuordnung vorhanden **und** E-Mail verifiziert.)
+
+## 6.1a Schnell-Import & automatische Zuordnung
+
+Damit du **nicht** jede E-Mail-Adresse und jedes Kind einzeln eintippen musst,
+gibt es im Adminbereich den Menüpunkt **„Import“** sowie eine **automatische
+Foto-Zuordnung nach Dateiname**.
+
+### Schritt 1 – Eltern & Kinder per Tabelle importieren
+
+Adminbereich → **Import**. Es gibt zwei Wege:
+
+- **Kopieren & Einfügen:** Markiere in Excel/Numbers/Google Tabellen die Zeilen
+  und füge sie in das Textfeld ein (das ist automatisch tab-getrennt).
+- **Datei hochladen:** `.csv`, `.tsv`, `.txt` oder `.xlsx`/`.xls`.
+
+Empfohlene Spalten (Reihenfolge **egal**, Schreibweise tolerant erkannt):
+
+| Spalte | Bedeutung |
+|---|---|
+| `E-Mail` | Eltern-Adresse (zentrale Identität) |
+| `Vorname`, `Nachname` | Name (siehe Hinweis unten) |
+| `Kind` | Name des Kindes – mehrere Geschwister mit `,` `;` `/` `&` oder „und“ trennen |
+| `Event` *(optional)* | Klasse/Gruppe; landet im passenden Event |
+| `Notiz` *(optional)* | interne Notiz zur E-Mail |
+
+Beispiel (Kopiervorlage):
+
+```
+E-Mail        Vorname   Nachname   Kind                    Event
+anna@x.de     Anna      Müller     Lena Müller             Klasse 3b
+paul@x.de     Paul      Weber      Tim Weber, Lisa Weber   Klasse 3b
+```
+
+**Toleranz / Hinweise:**
+
+- Spalten dürfen **vertauscht** sein und andere Bezeichnungen tragen
+  (z. B. „Mail“, „E-Mail-Adresse“, „Nachname“ statt „Name“). Die Erkennung
+  läuft automatisch und lässt sich in der Vorschau **pro Spalte korrigieren**.
+- Ohne erkennbare Kopfzeile wird die E-Mail-Spalte am `@` erkannt.
+- Gibt es eine **`Kind`-Spalte**, gelten `Vorname`/`Nachname` als **Eltern**-Name.
+  Fehlt sie, werden `Vorname`/`Nachname` als **Kind**-Name verwendet.
+- Vor dem Import siehst du eine **Vorschau** mit Hinweisen (z. B. ungültige
+  E-Mail). Bereits vorhandene Adressen/Kinder/Verknüpfungen werden **nicht
+  doppelt** angelegt.
+- Ziel-Event: bestehendes wählen **oder** neues anlegen. Zeilen mit eigener
+  `Event`-Spalte können fehlende Events automatisch anlegen.
+
+### Schritt 2 – Fotos hochladen mit automatischer Zuordnung
+
+Beim Hochladen im Event wird jedes Foto automatisch dem Kind zugeordnet, dessen
+Name **im Dateinamen** vorkommt (`Lena_Mueller_01.jpg` → Kind „Lena Müller“).
+Die Erkennung ist tolerant gegenüber Groß-/Kleinschreibung, Umlauten
+(`ü`/`ue`), Trennzeichen und Zusatztext. Über das Kind hängt die Zuordnung
+automatisch an der verknüpften E-Mail – die Familie sieht das Foto also sofort.
+
+- Mehrdeutige Treffer (Name passt auf mehrere Kinder) bleiben **bewusst
+  unzugeordnet** und müssen manuell gesetzt werden.
+- Wurden Kinder erst **nach** dem Upload importiert: im Event den Button
+  **„Vorhandene Fotos automatisch zuordnen (nach Dateiname)“** nutzen.
+
+> Empfohlener Ablauf: Event anlegen → **Import** (E-Mails + Kinder) → Fotos mit
+> sprechenden Dateinamen hochladen → kurz prüfen → veröffentlichen.
 
 ### Prüfschritt vor Veröffentlichung (empfohlen)
 Bevor du ein Event auf „published“ setzt:

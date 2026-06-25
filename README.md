@@ -84,6 +84,8 @@ optional SMTP/Stripe), ist Schritt für Schritt in [`docs/`](docs/) beschrieben.
 | Aufbewahrung 30 Tage | `expires_at` je Event (Standard 30 Tage), nach Ablauf nicht mehr sichtbar |
 | Meldefunktion | Eltern-Formular → Admin „Meldungen“ |
 | Adminbereich | Events/Fotos/Zuordnung/E-Mails/Bestellungen/Meldungen/Produkte |
+| Massen-Import | E-Mails + Kinder + Verknüpfungen per Copy-&-Paste oder CSV/Excel (tolerante Spaltenerkennung) |
+| Auto-Zuordnung | Fotos werden beim Upload automatisch dem Kind im Dateinamen zugeordnet |
 | Statuswerte | Fotos, E-Mails, Bestellungen, Events – wie im Konzept benannt |
 
 Details zur fachlichen Logik: [`docs/07-konzept-abgleich.md`](docs/07-konzept-abgleich.md).
@@ -127,11 +129,17 @@ Firebase-Anmeldung deaktiviert, schreibt das Backend den 6-stelligen Code in die
 **Backend-Konsole**.
 
 Typischer erster Durchlauf:
-1. Admin-Login → **Event** anlegen → **Fotos** hochladen.
-2. **Kind** anlegen, Foto dem Kind zuordnen, Foto **veröffentlichen**.
-3. Event-Status auf **„published“** setzen.
-4. Unter **E-Mail-Adressen** eine Eltern-Adresse anlegen, mit dem Kind verknüpfen.
+1. Admin-Login → **Event** anlegen.
+2. **Import** öffnen → Eltern-Adressen + Kinder als Tabelle einfügen oder als
+   CSV/Excel hochladen (legt E-Mails, Kinder und die Verknüpfungen in einem
+   Schritt an). Alternativ einzeln unter **E-Mail-Adressen** / im Event anlegen.
+3. **Fotos** hochladen – Fotos, deren Dateiname den Kindnamen enthält
+   (z. B. `Lena_Mueller_01.jpg`), werden automatisch zugeordnet.
+4. Fotos **veröffentlichen**, Event-Status auf **„published“** setzen.
 5. Eltern-App: Adresse eingeben → Anmeldelink öffnen (Auth-Emulator-UI) → Galerie sehen → kaufen.
+
+> Mehr zum Schnell-Import und zur automatischen Foto-Zuordnung:
+> [`docs/06-betrieb.md`](docs/06-betrieb.md) (Abschnitt 6.1a).
 
 ---
 

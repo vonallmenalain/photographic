@@ -7,6 +7,7 @@ import { formatPrice, formatDate } from '../../lib/format';
 interface EmailObj {
   id: string;
   email: string;
+  name?: string;
   status: string;
   note: string;
   verified_at: string | null;
@@ -142,6 +143,10 @@ export default function EmailDetail() {
             <label>E-Mail-Adresse korrigieren</label>
             <EmailEditor current={email.email} onSave={(v) => patch({ email: v })} />
           </div>
+        </div>
+        <div className="field mt">
+          <label>Name (intern)</label>
+          <NoteEditor current={email.name ?? ''} onSave={(v) => patch({ name: v })} />
         </div>
         <div className="field mt">
           <label>Notiz (intern)</label>

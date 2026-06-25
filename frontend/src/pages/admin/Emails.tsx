@@ -7,6 +7,7 @@ import { formatDateShort } from '../../lib/format';
 interface EmailRow {
   id: string;
   email: string;
+  name?: string;
   status: string;
   created_at: string;
 }
@@ -16,6 +17,7 @@ export default function Emails() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [newName, setNewName] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -33,8 +35,13 @@ export default function Emails() {
     setError('');
     setBusy(true);
     try {
-      await api('/api/admin/emails', { method: 'POST', admin: true, body: { email: newEmail } });
+      await api('/api/admin/emails', {
+        method: 'POST',
+        admin: true,
+        body: { email: newEmail, name: newName },
+      });
       setNewEmail('');
+      setNewName('');
       load(q);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Konnte nicht angelegt werden.');
@@ -65,10 +72,21 @@ export default function Emails() {
               required
             />
           </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <input
+              placeholder="Name (optional)"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+          </div>
           <button className="btn" disabled={busy}>
             E-Mail anlegen
           </button>
         </form>
+        <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0 }}>
+          Tipp: Mehrere Adressen und Kinder auf einmal? Nutze den{' '}
+          <Link to="/admin/import">Import</Link> (Kopieren &amp; Einfügen oder CSV/Excel).
+        </p>
       </div>
 
       <div className="card">
@@ -89,6 +107,7 @@ export default function Emails() {
             <thead>
               <tr>
                 <th>E-Mail</th>
+                <th>Name</th>
                 <th>Status</th>
                 <th>Angelegt</th>
                 <th></th>
@@ -100,6 +119,7 @@ export default function Emails() {
                   <td>
                     <Link to={e.id}>{e.email}</Link>
                   </td>
+                  <td>{e.name || <span className="muted">—</span>}</td>
                   <td>
                     <StatusBadge status={e.status} />
                   </td>

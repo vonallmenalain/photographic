@@ -4,6 +4,7 @@ import { api, setAdminToken } from '../../api/client';
 
 const links = [
   { to: 'dashboard', label: 'Übersicht' },
+  { to: 'import', label: 'Import' },
   { to: 'events', label: 'Events / Foto-Sets' },
   { to: 'emails', label: 'E-Mail-Adressen' },
   { to: 'orders', label: 'Bestellungen' },
