@@ -243,13 +243,17 @@ router.post(
   '/checkout',
   requireParent,
   asyncHandler(async (req, res) => {
-    const { orderId } = await beginCheckout(req.parent!.emailId);
+    // Read the cart (and its line items) BEFORE beginCheckout transitions it
+    // from status "cart" to "checkout_started". Otherwise getCart would no
+    // longer find a cart and silently create a new, empty one, so the Stripe
+    // session would be created without line_items.
     const cart = await getCart(req.parent!.emailId);
     const lines = cart.items.map((i) => ({
       name: `${i.product_name}`,
       amountCents: i.unit_price_cents,
       qty: i.qty,
     }));
+    const { orderId } = await beginCheckout(req.parent!.emailId);
 
     const url = await createCheckoutSession({ orderId, email: req.parent!.email, lines });
     if (url) {
