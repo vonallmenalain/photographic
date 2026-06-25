@@ -3,13 +3,11 @@ import { NavLink } from 'react-router-dom';
 import { api, setAdminToken } from '../../api/client';
 
 const links = [
-  { to: 'dashboard', label: 'Übersicht' },
+  { to: 'events', label: 'Aufträge' },
   { to: 'import', label: 'Import' },
-  { to: 'events', label: 'Events / Foto-Sets' },
   { to: 'emails', label: 'E-Mail-Adressen' },
   { to: 'orders', label: 'Bestellungen' },
   { to: 'reports', label: 'Meldungen' },
-  { to: 'account', label: 'Konto' },
 ];
 
 export default function AdminLayout({
@@ -41,7 +39,12 @@ export default function AdminLayout({
           </NavLink>
         ))}
         <div className="spacer" />
-        <div style={{ fontSize: '0.82rem', color: '#94a3b8', padding: '8px 12px' }}>{username}</div>
+        <NavLink to="account" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Konto
+        </NavLink>
+        <div style={{ fontSize: '0.82rem', color: '#94a3b8', padding: '8px 12px' }}>
+          Angemeldet als {username}
+        </div>
         <button className="btn ghost small" style={{ color: '#cbd5e1' }} onClick={logout}>
           Abmelden
         </button>

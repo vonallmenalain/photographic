@@ -189,7 +189,7 @@ export default function EmailDetail() {
         </div>
         <div className="row">
           <select value={pickEvent} onChange={(e) => setPickEvent(e.target.value)} style={{ width: 240 }}>
-            <option value="">— Event wählen —</option>
+            <option value="">— Auftrag wählen —</option>
             {events.map((ev) => (
               <option key={ev.id} value={ev.id}>
                 {ev.name}

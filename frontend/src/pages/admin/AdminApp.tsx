@@ -4,7 +4,6 @@ import { api, getAdminToken } from '../../api/client';
 import { Spinner } from '../../components/common';
 import AdminLogin from './AdminLogin';
 import AdminLayout from './AdminLayout';
-import Dashboard from './Dashboard';
 import Events from './Events';
 import EventDetail from './EventDetail';
 import Emails from './Emails';
@@ -45,8 +44,7 @@ function AuthGatedAdmin() {
   return (
     <AdminLayout username={username} onLogout={() => setState('out')}>
       <Routes>
-        <Route index element={<Navigate to="dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
+        <Route index element={<Navigate to="events" replace />} />
         <Route path="events" element={<Events />} />
         <Route path="events/:id" element={<EventDetail />} />
         <Route path="emails" element={<Emails />} />
@@ -56,7 +54,7 @@ function AuthGatedAdmin() {
         <Route path="orders/:id" element={<AdminOrderDetail />} />
         <Route path="reports" element={<Reports />} />
         <Route path="account" element={<AdminAccount onUsernameChange={setUsername} />} />
-        <Route path="*" element={<Navigate to="dashboard" replace />} />
+        <Route path="*" element={<Navigate to="events" replace />} />
       </Routes>
     </AdminLayout>
   );
