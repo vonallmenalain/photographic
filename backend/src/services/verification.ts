@@ -74,7 +74,17 @@ export async function requestVerification(rawEmail: string): Promise<void> {
   }
 
   const link = `${config.publicAppUrl}/verifizieren?token=${linkToken}`;
-  await sendVerificationEmail(email, code, link);
+  // E-mail delivery must never crash the request. The verification token is
+  // already persisted above, so the code/link remain valid even if SMTP is
+  // momentarily unavailable. Crucially, throwing here would also break the
+  // neutral-response policy: unknown addresses return 200, so a registered
+  // address whose send fails returning 500 would reveal that it exists.
+  try {
+    await sendVerificationEmail(email, code, link);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[verification] Failed to send verification e-mail. Check SMTP_* settings.', err);
+  }
 }
 
 interface VerifyResult {

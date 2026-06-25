@@ -74,6 +74,15 @@ async function main() {
     console.log(`[server] stripe      : ${config.stripe.enabled ? 'enabled' : 'manual/test mode'}`);
     console.log(`[server] mail        : ${config.mail.devLogOnly ? 'DEV LOG ONLY' : config.mail.host}`);
     console.log(`[server] watermark   : ${watermarkOk ? 'OK (fonts available)' : 'BROKEN — no fonts, previews NOT watermarked!'}`);
+    // When parents can ONLY log in via the SMTP code flow but no SMTP server is
+    // configured, verification codes are merely printed to this log and parents
+    // can never sign in. Surface this prominently so it is easy to diagnose.
+    if (!config.firebase.parentAuthEnabled && config.mail.devLogOnly) {
+      console.warn(
+        '[server] WARNING: parent auth is "code only" but no SMTP_HOST is set — ' +
+          'verification e-mails are NOT being sent. Configure SMTP_* or set FIREBASE_PARENT_AUTH=true.',
+      );
+    }
   });
 }
 

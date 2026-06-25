@@ -14,6 +14,13 @@ function getTransporter(): Transporter | null {
       config.mail.user || config.mail.pass
         ? { user: config.mail.user, pass: config.mail.pass }
         : undefined,
+    // Fail fast on an unreachable/misconfigured SMTP server instead of letting
+    // the parent's login request hang on the default (multi-minute) socket
+    // timeout. Without these bounds a wrong host/port silently blocked the
+    // /request-code call for ~10s+ before erroring out.
+    connectionTimeout: config.mail.timeoutMs,
+    greetingTimeout: config.mail.timeoutMs,
+    socketTimeout: config.mail.timeoutMs,
   });
   return transporter;
 }
