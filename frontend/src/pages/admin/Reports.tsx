@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../api/client';
-import { Spinner, StatusBadge } from '../../components/common';
+import { api, ApiError } from '../../api/client';
+import { Alert, Spinner, StatusBadge } from '../../components/common';
 import { formatDate } from '../../lib/format';
 
 interface Report {
@@ -24,6 +24,7 @@ const TYPE_LABELS: Record<string, string> = {
 export default function Reports() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const load = () =>
     api<{ reports: Report[] }>('/api/admin/reports', { admin: true })
@@ -39,12 +40,24 @@ export default function Reports() {
     load();
   };
 
+  const remove = async (id: string) => {
+    if (!confirm('Meldung wirklich löschen? Dies kann nicht rückgängig gemacht werden.')) return;
+    setError('');
+    try {
+      await api(`/api/admin/reports/${id}`, { method: 'DELETE', admin: true });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Meldung konnte nicht gelöscht werden.');
+    }
+  };
+
   if (loading) return <Spinner />;
 
   return (
     <div>
       <h1>Meldungen</h1>
       <p className="soft">Anliegen von Eltern – etwa falsche Zuordnungen oder fehlende Fotos.</p>
+      {error && <Alert kind="error">{error}</Alert>}
       <div className="card">
         {reports.length === 0 ? (
           <p className="muted">Keine Meldungen.</p>
@@ -57,6 +70,7 @@ export default function Reports() {
                 <th>E-Mail</th>
                 <th>Nachricht</th>
                 <th>Status</th>
+                <th></th>
                 <th></th>
               </tr>
             </thead>
@@ -76,6 +90,16 @@ export default function Reports() {
                       <option value="in_progress">in Bearbeitung</option>
                       <option value="resolved">gelöst</option>
                     </select>
+                  </td>
+                  <td>
+                    <button
+                      className="btn ghost small"
+                      style={{ color: 'var(--danger)' }}
+                      onClick={() => remove(r.id)}
+                      title="Meldung löschen"
+                    >
+                      Löschen
+                    </button>
                   </td>
                 </tr>
               ))}
