@@ -34,8 +34,8 @@ function escapeXml(s: string): string {
  */
 function watermarkSvg(width: number, height: number, text: string): Buffer {
   const safe = escapeXml(text);
-  // Roughly double the previous size so the watermark is clearly legible.
-  const fontSize = Math.max(32, Math.round(width / 11));
+  // Doubled again on request so the "Vorschau" watermark is even more prominent.
+  const fontSize = Math.max(64, Math.round(width / 5.5));
   // Estimate the rendered text width and add a gap so tiled repetitions of the
   // word sit next to each other instead of overlapping.
   const approxTextWidth = fontSize * 0.62 * text.length;
