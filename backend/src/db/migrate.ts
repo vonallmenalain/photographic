@@ -11,6 +11,7 @@ import { newId } from '../lib/ids';
 export async function migrate(): Promise<void> {
   await ensureDefaultProducts();
   await ensureAdminFromEnv();
+  await ensureAdminEmail();
   // eslint-disable-next-line no-console
   console.log(`[migrate] Firestore ready (project=${config.firebase.projectId})`);
 }
@@ -54,27 +55,45 @@ async function ensureDefaultProducts(): Promise<void> {
 }
 
 async function ensureAdminFromEnv(): Promise<void> {
-  const { username, passwordHash, plainPassword } = config.admin;
+  const { username, passwordHash, plainPassword, email } = config.admin;
   if (!passwordHash && !plainPassword) return; // nothing configured yet
 
   const hash = passwordHash || bcrypt.hashSync(plainPassword, 10);
   // Admin user documents are keyed by username for a stable, unique identity.
   const existing = await getById<{ username: string }>(COL.adminUsers, username);
+  const emailUpdate = email ? { email } : {};
   if (existing) {
     await updateById(COL.adminUsers, username, {
       password_hash: hash,
+      ...emailUpdate,
       updated_at: nowIso(),
     });
   } else {
     await setById(COL.adminUsers, username, {
       username,
       password_hash: hash,
+      ...emailUpdate,
       created_at: nowIso(),
       updated_at: nowIso(),
     });
   }
   // eslint-disable-next-line no-console
   console.log(`[migrate] admin user '${username}' ensured`);
+}
+
+/**
+ * Trägt die Admin-E-Mail-Adresse in bestehende Admin-Dokumente ein, sofern
+ * sie noch nicht gesetzt ist. Läuft unabhängig von Passwort-Env-Variablen.
+ */
+async function ensureAdminEmail(): Promise<void> {
+  const { username, email } = config.admin;
+  if (!email) return;
+  const existing = await getById<{ username: string; email?: string }>(COL.adminUsers, username);
+  if (!existing) return; // Kein Admin-Dokument vorhanden – nichts zu tun
+  if (existing.email === email) return; // Bereits aktuell
+  await updateById(COL.adminUsers, username, { email, updated_at: nowIso() });
+  // eslint-disable-next-line no-console
+  console.log(`[migrate] admin email updated for '${username}'`);
 }
 
 if (require.main === module) {

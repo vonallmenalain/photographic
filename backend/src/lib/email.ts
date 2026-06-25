@@ -70,6 +70,21 @@ export async function sendVerificationEmail(to: string, code: string, link: stri
   await sendMail({ to, subject, html, text });
 }
 
+export async function sendPasswordResetEmail(to: string, username: string, link: string, ttlMinutes: number) {
+  const subject = 'Passwort zurücksetzen – Adminbereich';
+  const html = wrap(
+    'Passwort zurücksetzen',
+    `<p style="font-size:15px;line-height:1.6;">Hallo <strong>${username}</strong>,</p>
+     <p style="font-size:15px;line-height:1.6;">du hast eine Anfrage zum Zurücksetzen deines Passworts gestellt. Klicke auf den folgenden Button, um ein neues Passwort zu vergeben:</p>
+     <p style="text-align:center;margin:24px 0;">
+       <a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:600;font-size:15px;">Passwort zurücksetzen</a>
+     </p>
+     <p style="font-size:13px;color:#7b8794;line-height:1.6;">Dieser Link ist <strong>${ttlMinutes} Minuten</strong> gültig. Wenn du keine Passwort-Rücksetzung beantragt hast, kannst du diese E-Mail ignorieren – dein Passwort bleibt unverändert.</p>`,
+  );
+  const text = `Hallo ${username},\n\ndu hast eine Anfrage zum Zurücksetzen deines Passworts gestellt.\n\nPasswort zurücksetzen: ${link}\n\nDieser Link ist ${ttlMinutes} Minuten gültig. Wenn du das nicht angefragt hast, kannst du diese E-Mail ignorieren.`;
+  await sendMail({ to, subject, html, text });
+}
+
 export async function sendOrderConfirmation(to: string, orderId: string, summary: string, link: string) {
   const subject = 'Deine Bestellung ist bestätigt';
   const html = wrap(

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, ApiError, setAdminToken } from '../../api/client';
 import { Alert } from '../../components/common';
 
@@ -56,6 +57,11 @@ export default function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
               {busy ? 'Anmelden …' : 'Anmelden'}
             </button>
           </form>
+          <p style={{ marginTop: 16, textAlign: 'center', fontSize: 14, color: '#7b8794' }}>
+            <Link to="/admin/passwort-vergessen" style={{ color: 'var(--blue, #2f6fed)', textDecoration: 'none' }}>
+              Passwort vergessen?
+            </Link>
+          </p>
         </div>
       </div>
     </div>

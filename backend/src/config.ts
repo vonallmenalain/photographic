@@ -91,6 +91,10 @@ export const config = {
     passwordHash: optional('ADMIN_PASSWORD_HASH'),
     // Fallback for first run / local dev only.
     plainPassword: optional('ADMIN_PASSWORD'),
+    // E-Mail-Adresse des Admins – wird für den "Passwort vergessen"-Link benötigt.
+    email: optional('ADMIN_EMAIL', 'vonallmenalain@gmail.com'),
+    // TTL für Passwort-Reset-Token in Minuten (Standard: 60).
+    passwordResetTtlMinutes: int('ADMIN_PASSWORD_RESET_TTL_MINUTES', 60),
   },
 
   // Parent verification behaviour.
