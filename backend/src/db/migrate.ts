@@ -21,6 +21,7 @@ import { normalizeEmail } from '../lib/validation';
  */
 export async function migrate(): Promise<void> {
   await ensureDefaultProducts();
+  await ensureProductsCurrency();
   await ensureAdminFromEnv();
   await ensureAdminEmail();
   await dedupeAdminAccounts();
@@ -64,6 +65,27 @@ async function ensureDefaultProducts(): Promise<void> {
   }
   // eslint-disable-next-line no-console
   console.log('[migrate] seeded default products');
+}
+
+/**
+ * Selbstheilend: stellt sicher, dass alle Produkte die konfigurierte Währung
+ * (standardmäßig CHF) tragen. Ältere Bestände wurden teils noch mit "eur"
+ * angelegt, wodurch die Galerie Preise in Euro statt CHF anzeigte.
+ */
+async function ensureProductsCurrency(): Promise<void> {
+  const target = config.stripe.currency.toLowerCase();
+  const products = await runQuery<{ currency?: string }>(col(COL.products));
+  let updated = 0;
+  for (const p of products) {
+    if ((p.currency ?? '').toLowerCase() !== target) {
+      await updateById(COL.products, p.id, { currency: target });
+      updated += 1;
+    }
+  }
+  if (updated > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[migrate] currency normalised to '${target}' for ${updated} product(s)`);
+  }
 }
 
 async function ensureAdminFromEnv(): Promise<void> {
