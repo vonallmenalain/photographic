@@ -13,6 +13,7 @@ import Import from './Import';
 import AdminOrders from './AdminOrders';
 import AdminOrderDetail from './AdminOrderDetail';
 import Reports from './Reports';
+import AdminAccount from './AdminAccount';
 import AdminForgotPassword from './AdminForgotPassword';
 import AdminResetPassword from './AdminResetPassword';
 
@@ -54,6 +55,7 @@ function AuthGatedAdmin() {
         <Route path="orders" element={<AdminOrders />} />
         <Route path="orders/:id" element={<AdminOrderDetail />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="account" element={<AdminAccount onUsernameChange={setUsername} />} />
         <Route path="*" element={<Navigate to="dashboard" replace />} />
       </Routes>
     </AdminLayout>
