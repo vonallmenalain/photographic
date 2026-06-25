@@ -860,14 +860,18 @@ router.get(
     const [rows, childLinks, children, photoLinks, photos, events] = await Promise.all([
       runQuery<{ email: string; name?: string; created_at: string }>(col(COL.parentEmails)),
       runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
-      runQuery<{ id: string; event_id: string }>(col(COL.children)),
+      runQuery<{ id: string; event_id: string; name: string }>(col(COL.children)),
       runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
       runQuery<{ id: string; event_id: string }>(col(COL.photos)),
       runQuery<{ id: string; name: string }>(col(COL.events)),
     ]);
 
     const childEvent = new Map<string, string>();
-    for (const c of children) childEvent.set(c.id, c.event_id);
+    const childName = new Map<string, string>();
+    for (const c of children) {
+      childEvent.set(c.id, c.event_id);
+      childName.set(c.id, c.name);
+    }
     const photoEvent = new Map<string, string>();
     for (const p of photos) photoEvent.set(p.id, p.event_id);
     const eventName = new Map<string, string>();
@@ -884,7 +888,19 @@ router.get(
       }
       set.add(evId);
     };
-    for (const link of childLinks) addEvent(link.email_id, childEvent.get(link.child_id));
+    // email_id -> linked children (for the "Name Kind" column and search)
+    const emailChildrenMap = new Map<string, { id: string; name: string; event_id: string }[]>();
+    for (const link of childLinks) {
+      addEvent(link.email_id, childEvent.get(link.child_id));
+      const evId = childEvent.get(link.child_id);
+      const list = emailChildrenMap.get(link.email_id) ?? [];
+      list.push({
+        id: link.child_id,
+        name: childName.get(link.child_id) ?? '',
+        event_id: evId ?? '',
+      });
+      emailChildrenMap.set(link.email_id, list);
+    }
     for (const link of photoLinks) addEvent(link.email_id, photoEvent.get(link.photo_id));
 
     let result = rows.map((r) => {
@@ -893,14 +909,21 @@ router.get(
         .map((id) => ({ id, name: eventName.get(id) ?? '' }))
         .filter((e) => e.name)
         .sort((a, b) => a.name.localeCompare(b.name));
-      return { ...r, events: eventList };
+      const childList = (emailChildrenMap.get(r.id) ?? [])
+        .filter((c) => c.name)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return { ...r, events: eventList, children: childList };
     });
 
     if (q) {
+      // Free-text search across e-mail address, parent name AND linked child
+      // names, so typing e.g. "Alain" surfaces both an "alain@…" address and an
+      // address whose linked child is called "Alain".
       result = result.filter(
         (r) =>
           String(r.email).toLowerCase().includes(q) ||
-          String(r.name ?? '').toLowerCase().includes(q),
+          String(r.name ?? '').toLowerCase().includes(q) ||
+          r.children.some((c) => c.name.toLowerCase().includes(q)),
       );
     }
     if (eventId) {
