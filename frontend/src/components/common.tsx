@@ -41,15 +41,12 @@ export function StatusBadge({ status }: { status: string }) {
     uploaded: { label: 'Hochgeladen', cls: 'gray' },
     processed: { label: 'Verarbeitet', cls: 'amber' },
     assigned: { label: 'Zugeordnet', cls: 'green' },
-    // orders
+    // orders (simplified life cycle)
     cart: { label: 'Warenkorb', cls: 'gray' },
     checkout_started: { label: 'Kauf gestartet', cls: 'amber' },
-    paid: { label: 'Bezahlt', cls: 'green' },
-    failed: { label: 'Fehlgeschlagen', cls: 'red' },
+    pending: { label: 'Pendent', cls: 'amber' },
     completed: { label: 'Abgeschlossen', cls: 'green' },
-    fulfilled: { label: 'Bereitgestellt', cls: 'green' },
     cancelled: { label: 'Storniert', cls: 'red' },
-    refunded: { label: 'Rückerstattet', cls: 'red' },
     // reports
     open: { label: 'Offen', cls: 'amber' },
     resolved: { label: 'Gelöst', cls: 'green' },

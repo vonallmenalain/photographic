@@ -48,7 +48,7 @@ export default function OrderDetail() {
       </div>
     );
 
-  const isDone = ['paid', 'completed', 'fulfilled'].includes(order.status);
+  const isDone = ['completed', 'pending'].includes(order.status);
 
   return (
     <div className="narrow" style={{ margin: '0 auto' }}>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
+import { AdminThumb } from '../../components/AdminThumb';
 import { formatPrice, formatDate } from '../../lib/format';
 
 interface Order {
@@ -16,21 +17,18 @@ interface Order {
 }
 interface Item {
   id: string;
+  photo_id: string;
   product_name: string;
+  product_type?: string;
   qty: number;
   unit_price_cents: number;
   original_filename: string;
 }
 
-const ORDER_STATUSES = [
-  'cart',
-  'checkout_started',
-  'paid',
-  'failed',
-  'completed',
-  'fulfilled',
-  'cancelled',
-  'refunded',
+const ORDER_STATUS_OPTIONS = [
+  { value: 'pending', label: 'Pendent (Druck offen)' },
+  { value: 'completed', label: 'Abgeschlossen' },
+  { value: 'cancelled', label: 'Storniert' },
 ] as const;
 
 export default function AdminOrderDetail() {
@@ -59,6 +57,8 @@ export default function AdminOrderDetail() {
     load();
   };
 
+  const printItems = items.filter((i) => i.product_type === 'print');
+
   return (
     <div>
       <p>
@@ -76,13 +76,39 @@ export default function AdminOrderDetail() {
       <div className="card mb">
         <label>Status ändern</label>
         <select value={order.status} onChange={(e) => setStatus(e.target.value)} style={{ width: 260 }}>
-          {ORDER_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
+          {!ORDER_STATUS_OPTIONS.some((s) => s.value === order.status) && (
+            <option value={order.status}>{order.status}</option>
+          )}
+          {ORDER_STATUS_OPTIONS.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
             </option>
           ))}
         </select>
+        <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0 }}>
+          „Pendent“ heißt: ein Druckprodukt muss noch versendet werden. Setze auf „Abgeschlossen“,
+          sobald der Druck raus ist. „Storniert“ wird ausschließlich manuell vergeben.
+        </p>
       </div>
+
+      {printItems.length > 0 && (
+        <div className="card mb">
+          <h2>Zum Ausdrucken</h2>
+          <p className="muted" style={{ fontSize: '0.82rem' }}>
+            Diese Positionen enthalten ein Druckprodukt und müssen versendet werden.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+            {printItems.map((i) => (
+              <div key={i.id} style={{ width: 140 }}>
+                <AdminThumb photoId={i.photo_id} size={140} />
+                <div className="muted" style={{ fontSize: '0.78rem', marginTop: 6 }} title={i.original_filename}>
+                  {i.qty}× {i.product_name}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h2>Positionen</h2>
@@ -90,6 +116,7 @@ export default function AdminOrderDetail() {
           <thead>
             <tr>
               <th>Produkt</th>
+              <th>Art</th>
               <th>Datei</th>
               <th>Menge</th>
               <th>Preis</th>
@@ -99,6 +126,7 @@ export default function AdminOrderDetail() {
             {items.map((i) => (
               <tr key={i.id}>
                 <td>{i.product_name}</td>
+                <td>{i.product_type === 'print' ? 'Druck' : 'Digital'}</td>
                 <td className="muted">{i.original_filename}</td>
                 <td>{i.qty}</td>
                 <td>{formatPrice(i.unit_price_cents * i.qty, order.currency)}</td>

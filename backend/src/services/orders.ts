@@ -276,23 +276,35 @@ export async function beginCheckout(
   return { orderId: cart.id, total_cents: cart.total_cents, currency: cart.currency };
 }
 
-/** Marks an order paid and creates download grants for digital items. */
+/**
+ * Marks an order as paid and creates download grants for digital items.
+ *
+ * The order's final status is reduced to the simplified life cycle used across
+ * the admin tools:
+ *   - `pending`   – the order contains a print product that still has to be
+ *                   produced/shipped (auto-set on payment, can later be moved
+ *                   to `completed` by hand).
+ *   - `completed` – purely digital orders are done the moment they are paid.
+ *   - `cancelled` – only ever set manually.
+ */
 export async function markOrderPaid(orderId: string, provider: string, ref: string): Promise<void> {
   const order = await getById<OrderDoc>(COL.orders, orderId);
   if (!order) return;
-  if (order.status === 'paid' || order.status === 'completed' || order.status === 'fulfilled') return;
-
-  await updateById(COL.orders, orderId, {
-    status: 'paid',
-    payment_provider: provider,
-    payment_ref: ref,
-    updated_at: nowIso(),
-  });
+  // Already in a final state – nothing to do.
+  if (order.status === 'pending' || order.status === 'completed' || order.status === 'cancelled') {
+    return;
+  }
 
   const items = await itemsForOrder(orderId);
+  let hasPrint = false;
   for (const item of items) {
     const product = await getById<ProductDoc>(COL.products, item.product_id);
-    if (!product || product.type !== 'digital') continue;
+    if (!product) continue;
+    if (product.type === 'print') {
+      hasPrint = true;
+      continue;
+    }
+    if (product.type !== 'digital') continue;
     const grant = await firstOf(
       col(COL.downloadGrants)
         .where('order_id', '==', orderId)
@@ -310,7 +322,15 @@ export async function markOrderPaid(orderId: string, provider: string, ref: stri
     });
   }
 
-  await updateById(COL.orders, orderId, { status: 'completed', updated_at: nowIso() });
+  // Orders that include a print product land in "Pendent" until the print is
+  // sent; purely digital orders are immediately "Abgeschlossen".
+  await updateById(COL.orders, orderId, {
+    status: hasPrint ? 'pending' : 'completed',
+    payment_provider: provider,
+    payment_ref: ref,
+    paid_at: nowIso(),
+    updated_at: nowIso(),
+  });
 }
 
 export interface OrderDetail {

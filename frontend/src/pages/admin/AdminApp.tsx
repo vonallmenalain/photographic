@@ -6,12 +6,12 @@ import AdminLogin from './AdminLogin';
 import AdminLayout from './AdminLayout';
 import Events from './Events';
 import EventDetail from './EventDetail';
-import Emails from './Emails';
 import EmailDetail from './EmailDetail';
 import Import from './Import';
 import AdminOrders from './AdminOrders';
 import AdminOrderDetail from './AdminOrderDetail';
 import Reports from './Reports';
+import Analytics from './Analytics';
 import AdminAccount from './AdminAccount';
 import AdminForgotPassword from './AdminForgotPassword';
 import AdminResetPassword from './AdminResetPassword';
@@ -47,7 +47,10 @@ function AuthGatedAdmin() {
         <Route index element={<Navigate to="events" replace />} />
         <Route path="events" element={<Events />} />
         <Route path="events/:id" element={<EventDetail />} />
-        <Route path="emails" element={<Emails />} />
+        <Route path="analytics" element={<Analytics />} />
+        {/* "emails" list is now integrated into each Auftrag; keep a redirect
+            so old links land on the new Auswertung view. */}
+        <Route path="emails" element={<Navigate to="/admin/analytics" replace />} />
         <Route path="emails/:id" element={<EmailDetail />} />
         <Route path="import" element={<Import />} />
         <Route path="orders" element={<AdminOrders />} />

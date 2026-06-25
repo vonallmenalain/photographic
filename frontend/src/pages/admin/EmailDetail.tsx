@@ -119,7 +119,7 @@ export default function EmailDetail() {
     setError('');
     try {
       await api(`/api/admin/emails/${id}`, { method: 'DELETE', admin: true });
-      navigate('/admin/emails');
+      navigate(-1);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'E-Mail-Adresse konnte nicht gelöscht werden.');
     }
@@ -133,7 +133,14 @@ export default function EmailDetail() {
   return (
     <div>
       <p>
-        <Link to="/admin/emails">← Alle E-Mail-Adressen</Link>
+        <button
+          type="button"
+          className="btn ghost small"
+          style={{ paddingLeft: 0 }}
+          onClick={() => navigate(-1)}
+        >
+          ← Zurück
+        </button>
       </p>
       <div className="row between">
         <h1 style={{ marginBottom: 4 }}>{email.email}</h1>

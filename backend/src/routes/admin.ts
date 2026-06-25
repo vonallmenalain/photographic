@@ -49,7 +49,10 @@ const router = Router();
 
 const EMAIL_STATUSES = ['created', 'not_verified', 'verification_sent', 'verified', 'disabled', 'support'] as const;
 const PHOTO_STATUSES = ['uploaded', 'processed', 'assigned', 'disabled'] as const;
-const ORDER_STATUSES = ['cart', 'checkout_started', 'paid', 'failed', 'completed', 'fulfilled', 'cancelled', 'refunded'] as const;
+// Simplified order life cycle. `cart`/`checkout_started` remain internal states
+// of the shopping flow and are never shown as real orders. Admins only ever set
+// one of the three customer-facing statuses below.
+const ADMIN_ORDER_STATUSES = ['pending', 'completed', 'cancelled'] as const;
 
 async function audit(action: string, detail: string, actor = 'admin') {
   await setById(COL.auditLog, newId('aud'), {
@@ -480,6 +483,7 @@ router.delete(
     const children = await runQuery(col(COL.children).where('event_id', '==', req.params.id));
     await Promise.all(photos.map((p) => deletePhotoCascade(p.id)));
     await Promise.all(children.map((c) => deleteChildCascade(c.id)));
+    await deleteWhere(col(COL.reminders).where('event_id', '==', req.params.id));
     // Remove the event's storage sub-folders entirely so no empty (or stray)
     // `<variant>/<eventId>` directories remain behind on the volume.
     await deleteEventStorage(req.params.id);
@@ -1162,18 +1166,54 @@ router.post(
 );
 
 // --- Orders --------------------------------------------------------------
+// Only confirmed orders are real "Bestellungen". `cart` and `checkout_started`
+// are intermediate states of the shopping flow and never surface here.
+const REAL_ORDER_STATUSES = new Set(['pending', 'completed', 'cancelled']);
+
 router.get(
   '/orders',
   asyncHandler(async (_req, res) => {
-    const orders = (await runQuery<{ status: string; total_cents: number; currency: string; created_at: string; email_id: string }>(
-      col(COL.orders),
-    ))
-      .filter((o) => o.status !== 'cart')
+    const [allOrders, products, photos, children] = await Promise.all([
+      runQuery<{ status: string; total_cents: number; currency: string; created_at: string; email_id: string }>(
+        col(COL.orders),
+      ),
+      runQuery<{ id: string; type: string }>(col(COL.products)),
+      runQuery<{ id: string; event_id: string; child_id: string | null }>(col(COL.photos)),
+      runQuery<{ id: string; name: string }>(col(COL.children)),
+    ]);
+
+    const productType = new Map(products.map((p) => [p.id, p.type]));
+    const photoMap = new Map(photos.map((p) => [p.id, p]));
+    const childName = new Map(children.map((c) => [c.id, c.name]));
+
+    const orders = allOrders
+      .filter((o) => REAL_ORDER_STATUSES.has(o.status))
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
       .slice(0, 300);
+
     const result = await Promise.all(
       orders.map(async (o) => {
-        const e = await getById<{ email: string }>(COL.parentEmails, o.email_id);
+        const [e, items] = await Promise.all([
+          getById<{ email: string }>(COL.parentEmails, o.email_id),
+          runQuery<{ photo_id: string; product_id: string; product_name: string; qty: number }>(
+            col(COL.orderItems).where('order_id', '==', o.id),
+          ),
+        ]);
+
+        // Items that need printing/shipping – these carry the thumbnails the
+        // admin wants to see directly for pending orders.
+        const printItems = items
+          .filter((it) => productType.get(it.product_id) === 'print')
+          .map((it) => {
+            const photo = photoMap.get(it.photo_id);
+            return {
+              photo_id: it.photo_id,
+              product_name: it.product_name,
+              qty: it.qty,
+              child_name: photo?.child_id ? childName.get(photo.child_id) ?? null : null,
+            };
+          });
+
         return {
           id: o.id,
           status: o.status,
@@ -1181,6 +1221,9 @@ router.get(
           currency: o.currency,
           created_at: o.created_at,
           email: e?.email ?? '',
+          item_count: items.length,
+          has_print: printItems.length > 0,
+          print_items: printItems,
         };
       }),
     );
@@ -1196,13 +1239,20 @@ router.get(
     const parentEmail = await getById<{ email: string }>(COL.parentEmails, orderDoc.email_id);
     const order = { ...orderDoc, email: parentEmail?.email ?? '' };
 
-    const rawItems = await runQuery<Record<string, unknown> & { photo_id: string }>(
+    const rawItems = await runQuery<Record<string, unknown> & { photo_id: string; product_id: string }>(
       col(COL.orderItems).where('order_id', '==', req.params.id),
     );
     const items = await Promise.all(
       rawItems.map(async (oi) => {
-        const photo = await getById<{ original_filename: string }>(COL.photos, oi.photo_id);
-        return { ...oi, original_filename: photo?.original_filename ?? '' };
+        const [photo, product] = await Promise.all([
+          getById<{ original_filename: string }>(COL.photos, oi.photo_id),
+          getById<{ type: string }>(COL.products, oi.product_id),
+        ]);
+        return {
+          ...oi,
+          original_filename: photo?.original_filename ?? '',
+          product_type: product?.type ?? 'digital',
+        };
       }),
     );
     res.json({ order, items });
@@ -1212,9 +1262,230 @@ router.get(
 router.patch(
   '/orders/:id',
   asyncHandler(async (req, res) => {
-    const { status } = parse(z.object({ status: z.enum(ORDER_STATUSES) }), req.body);
+    const { status } = parse(z.object({ status: z.enum(ADMIN_ORDER_STATUSES) }), req.body);
+    const order = await getById(COL.orders, req.params.id);
+    if (!order) throw new ApiError(404, 'Bestellung nicht gefunden.');
     await updateById(COL.orders, req.params.id, { status, updated_at: nowIso() });
     await audit('order.update', `${req.params.id}: ${status}`);
+    res.json({ ok: true });
+  }),
+);
+
+// --- Auswertung / Analytics ----------------------------------------------
+// Per-Auftrag (event) evaluation: revenue, verified e-mails, order count, a
+// per-buyer breakdown and a daily revenue series for the availability window so
+// the admin can judge when a reminder is worthwhile (and whether it worked).
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_CHART_DAYS = 92;
+
+function dayKey(value: string | number | Date): string {
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
+router.get(
+  '/analytics',
+  asyncHandler(async (_req, res) => {
+    await archiveExpiredEvents();
+    const [events, children, emailChildren, photoEmails, photos, parentEmails, orders, orderItems, reminders] =
+      await Promise.all([
+        runQuery<{ id: string; name: string; status: string; created_at: string; expires_at: string | null }>(
+          col(COL.events),
+        ),
+        runQuery<{ id: string; event_id: string }>(col(COL.children)),
+        runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
+        runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
+        runQuery<{ id: string; event_id: string }>(col(COL.photos)),
+        runQuery<{ id: string; email: string; name?: string; status: string }>(col(COL.parentEmails)),
+        runQuery<{ id: string; email_id: string; status: string; total_cents: number; currency: string; created_at: string }>(
+          col(COL.orders),
+        ),
+        runQuery<{ order_id: string; photo_id: string; qty: number; unit_price_cents: number }>(
+          col(COL.orderItems),
+        ),
+        runQuery<{ id: string; event_id: string; sent_at: string; note?: string }>(col(COL.reminders)),
+      ]);
+
+    const childEvent = new Map<string, string>();
+    for (const c of children) childEvent.set(c.id, c.event_id);
+    const photoEvent = new Map<string, string>();
+    for (const p of photos) photoEvent.set(p.id, p.event_id);
+    const emailById = new Map(parentEmails.map((e) => [e.id, e]));
+
+    // email_id -> set of event ids the address is connected to (child link or
+    // direct photo assignment). Mirrors the /emails event filter.
+    const eventEmails = new Map<string, Set<string>>();
+    const addEmailEvent = (emailId: string, eventId: string | undefined) => {
+      if (!eventId) return;
+      let set = eventEmails.get(eventId);
+      if (!set) {
+        set = new Set<string>();
+        eventEmails.set(eventId, set);
+      }
+      set.add(emailId);
+    };
+    for (const link of emailChildren) addEmailEvent(link.email_id, childEvent.get(link.child_id));
+    for (const link of photoEmails) addEmailEvent(link.email_id, photoEvent.get(link.photo_id));
+
+    // Only confirmed, revenue-bearing orders contribute to the figures.
+    const orderById = new Map(orders.map((o) => [o.id, o]));
+    const countsForRevenue = (status: string) => status === 'pending' || status === 'completed';
+
+    // event_id -> aggregates
+    interface BuyerAgg { email_id: string; revenue_cents: number; orderIds: Set<string> }
+    const eventRevenue = new Map<string, number>();
+    const eventOrders = new Map<string, Set<string>>();
+    const eventBuyers = new Map<string, Map<string, BuyerAgg>>();
+    const eventDaily = new Map<string, Map<string, number>>();
+
+    for (const item of orderItems) {
+      const order = orderById.get(item.order_id);
+      if (!order || !countsForRevenue(order.status)) continue;
+      const eventId = photoEvent.get(item.photo_id);
+      if (!eventId) continue;
+      const amount = (item.unit_price_cents ?? 0) * (item.qty ?? 0);
+
+      eventRevenue.set(eventId, (eventRevenue.get(eventId) ?? 0) + amount);
+
+      let oset = eventOrders.get(eventId);
+      if (!oset) {
+        oset = new Set<string>();
+        eventOrders.set(eventId, oset);
+      }
+      oset.add(order.id);
+
+      let buyers = eventBuyers.get(eventId);
+      if (!buyers) {
+        buyers = new Map<string, BuyerAgg>();
+        eventBuyers.set(eventId, buyers);
+      }
+      let buyer = buyers.get(order.email_id);
+      if (!buyer) {
+        buyer = { email_id: order.email_id, revenue_cents: 0, orderIds: new Set<string>() };
+        buyers.set(order.email_id, buyer);
+      }
+      buyer.revenue_cents += amount;
+      buyer.orderIds.add(order.id);
+
+      const key = dayKey(order.created_at);
+      if (key) {
+        let daily = eventDaily.get(eventId);
+        if (!daily) {
+          daily = new Map<string, number>();
+          eventDaily.set(eventId, daily);
+        }
+        daily.set(key, (daily.get(key) ?? 0) + amount);
+      }
+    }
+
+    const remindersByEvent = new Map<string, { id: string; sent_at: string; note: string }[]>();
+    for (const r of reminders) {
+      const list = remindersByEvent.get(r.event_id) ?? [];
+      list.push({ id: r.id, sent_at: r.sent_at, note: r.note ?? '' });
+      remindersByEvent.set(r.event_id, list);
+    }
+
+    const buildDaily = (eventId: string, createdAt: string, expiresAt: string | null) => {
+      const start = new Date(createdAt);
+      let startMs = isNaN(start.getTime()) ? Date.now() - 29 * DAY_MS : start.getTime();
+      const exp = expiresAt ? new Date(expiresAt).getTime() : NaN;
+      let endMs = !isNaN(exp) ? exp : startMs + 29 * DAY_MS;
+      if (endMs < startMs) endMs = startMs;
+      // Always extend the window up to today so a freshly created Auftrag still
+      // shows a meaningful axis.
+      endMs = Math.max(endMs, Date.now());
+      // Cap the number of buckets to keep the chart readable.
+      let days = Math.floor((endMs - startMs) / DAY_MS) + 1;
+      if (days > MAX_CHART_DAYS) {
+        startMs = endMs - (MAX_CHART_DAYS - 1) * DAY_MS;
+        days = MAX_CHART_DAYS;
+      }
+      const daily = eventDaily.get(eventId);
+      const series: { date: string; revenue_cents: number }[] = [];
+      for (let i = 0; i < days; i += 1) {
+        const key = dayKey(startMs + i * DAY_MS);
+        series.push({ date: key, revenue_cents: daily?.get(key) ?? 0 });
+      }
+      return series;
+    };
+
+    const result = events
+      .map((ev) => {
+        const linked = eventEmails.get(ev.id) ?? new Set<string>();
+        let verified = 0;
+        for (const emailId of linked) {
+          if (emailById.get(emailId)?.status === 'verified') verified += 1;
+        }
+        const buyersMap = eventBuyers.get(ev.id);
+        const buyers = buyersMap
+          ? Array.from(buyersMap.values())
+              .map((b) => {
+                const e = emailById.get(b.email_id);
+                return {
+                  email_id: b.email_id,
+                  email: e?.email ?? '—',
+                  name: e?.name ?? '',
+                  verified: e?.status === 'verified',
+                  order_count: b.orderIds.size,
+                  revenue_cents: b.revenue_cents,
+                };
+              })
+              .sort((a, b) => b.revenue_cents - a.revenue_cents)
+          : [];
+
+        return {
+          id: ev.id,
+          name: ev.name,
+          status: ev.status,
+          created_at: ev.created_at,
+          expires_at: ev.expires_at ?? null,
+          revenue_cents: eventRevenue.get(ev.id) ?? 0,
+          order_count: eventOrders.get(ev.id)?.size ?? 0,
+          email_total: linked.size,
+          email_verified: verified,
+          buyers,
+          daily: buildDaily(ev.id, ev.created_at, ev.expires_at ?? null),
+          reminders: (remindersByEvent.get(ev.id) ?? []).sort((a, b) =>
+            String(a.sent_at).localeCompare(String(b.sent_at)),
+          ),
+        };
+      })
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+
+    res.json({ events: result, currency: config.stripe.currency });
+  }),
+);
+
+// --- Reminders (markers for the Auswertung chart) ------------------------
+router.post(
+  '/events/:id/reminders',
+  asyncHandler(async (req, res) => {
+    const { sent_at, note } = parse(
+      z.object({ sent_at: z.string().optional(), note: z.string().max(300).default('') }),
+      req.body ?? {},
+    );
+    const event = await getById(COL.events, req.params.id);
+    if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
+    const when = sent_at ? new Date(sent_at) : new Date();
+    if (isNaN(when.getTime())) throw new ApiError(400, 'Ungültiges Datum.');
+    const id = newId('rem');
+    await setById(COL.reminders, id, {
+      event_id: req.params.id,
+      sent_at: when.toISOString(),
+      note,
+      created_at: nowIso(),
+    });
+    await audit('reminder.create', `${req.params.id}: ${when.toISOString()}`);
+    res.json({ id });
+  }),
+);
+
+router.delete(
+  '/reminders/:id',
+  asyncHandler(async (req, res) => {
+    await deleteById(COL.reminders, req.params.id);
+    await audit('reminder.delete', req.params.id);
     res.json({ ok: true });
   }),
 );
