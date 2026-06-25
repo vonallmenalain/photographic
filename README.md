@@ -77,7 +77,7 @@ optional SMTP/Stripe), ist Schritt für Schritt in [`docs/`](docs/) beschrieben.
 | Wasserzeichen-Previews | Server-seitig gerendert (diagonal gekachelt), reduzierte Auflösung/Qualität |
 | Nur ein Original hochladen | `sharp` erzeugt Admin-Thumb, Eltern-Thumb, Preview automatisch |
 | Familienlogik | E-Mail ↔ Kind als n:m (Mutter+Vater, mehrere Kinder, Geschwister) |
-| Klassenfotos | Foto ohne Kind-Bezug, direkt einzelnen E-Mails zugewiesen |
+| Klassenfotos | Gruppen-/Klassenfoto „für die ganze Klasse sichtbar“ → alle Familien des Events sehen es automatisch; optional zusätzlich einzelnen E-Mails zuweisbar |
 | Veröffentlichungs-Workflow | Event-Status steuert die Sichtbarkeit; zugeordnete Fotos werden sichtbar, sobald das Event „published“ ist |
 | Warenkorb & Kauf | Produkte (digital/Print), Warenkorb, Checkout (Stripe-ready oder manuell), Bestellstatus |
 | Nach dem Kauf | Bestellübersicht, Download-Links, Bestätigungs-E-Mail |
@@ -85,7 +85,7 @@ optional SMTP/Stripe), ist Schritt für Schritt in [`docs/`](docs/) beschrieben.
 | Meldefunktion | Eltern-Formular → Admin „Meldungen“ |
 | Adminbereich | Events/Fotos/Zuordnung/E-Mails/Bestellungen/Meldungen/Produkte |
 | Massen-Import | E-Mails + Kinder + Verknüpfungen per Copy-&-Paste oder CSV/Excel (tolerante Spaltenerkennung) |
-| Auto-Zuordnung | Fotos werden beim Upload automatisch dem Kind im Dateinamen zugeordnet |
+| Auto-Zuordnung | Fotos werden beim Upload automatisch dem Kind im Dateinamen zugeordnet – schon der Vorname samt Nummer (z. B. `Elin 1.jpg`) genügt; mehrdeutige Treffer bleiben unzugeordnet |
 | Statuswerte | Fotos, E-Mails, Bestellungen, Events – wie im Konzept benannt |
 
 Details zur fachlichen Logik: [`docs/07-konzept-abgleich.md`](docs/07-konzept-abgleich.md).
@@ -134,7 +134,9 @@ Typischer erster Durchlauf:
    CSV/Excel hochladen (legt E-Mails, Kinder und die Verknüpfungen in einem
    Schritt an). Alternativ einzeln unter **E-Mail-Adressen** / im Event anlegen.
 3. **Fotos** hochladen – Fotos, deren Dateiname den Kindnamen enthält
-   (z. B. `Lena_Mueller_01.jpg`), werden automatisch zugeordnet.
+   (z. B. `Lena_Mueller_01.jpg` oder nur der Vorname wie `Elin 1.jpg`), werden
+   automatisch zugeordnet. Gruppen-/Klassenfotos lassen sich „für die ganze
+   Klasse“ freischalten, sodass alle Familien des Events sie sehen.
 4. Event-Status auf **„published“** setzen – die zugeordneten Fotos werden dadurch sichtbar.
 5. Eltern-App: Adresse eingeben → Anmeldelink öffnen (Auth-Emulator-UI) → Galerie sehen → kaufen.
 

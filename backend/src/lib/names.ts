@@ -45,6 +45,39 @@ function canonicalTokens(input: string): string[] {
     .filter((t) => t.length >= 2);
 }
 
+/**
+ * Common name particles ("von", "van", "de", …). They appear in many surnames
+ * and must NOT be enough on their own to auto-assign a photo: otherwise a file
+ * named "von Allmen" would match every sibling that shares the surname. They
+ * still count towards a *full* name match, just not towards a partial one.
+ */
+const NAME_PARTICLES = new Set([
+  'von', 'van', 'de', 'der', 'den', 'des', 'del', 'della', 'di', 'da', 'do',
+  'dos', 'das', 'le', 'la', 'les', 'du', 'zu', 'zur', 'zum', 'am', 'auf',
+  'ten', 'ter', 'op', 'of', 'und', 'and', 'mac', 'mc', 'al', 'el', 'bin',
+  'ibn', 'san', 'santa', 'st',
+]);
+
+/**
+ * Expands the raw file-name tokens with digit-stripped variants so a photo
+ * named "Elin1", "Elin_1" or "Elin-01" still yields the bare token "elin".
+ * Photographers routinely append a running number directly to the first name.
+ */
+function expandFileTokens(tokens: string[]): Set<string> {
+  const set = new Set<string>();
+  for (const t of tokens) {
+    set.add(t);
+    const noTrailingDigits = t.replace(/\d+$/, '');
+    if (noTrailingDigits.length >= 2) set.add(noTrailingDigits);
+    const noLeadingDigits = t.replace(/^\d+/, '');
+    if (noLeadingDigits.length >= 2) set.add(noLeadingDigits);
+  }
+  return set;
+}
+
+/** Score offset that guarantees a full-name match always beats a partial one. */
+const FULL_MATCH_BASE = 1_000_000;
+
 /** Removes a trailing file extension (".jpg", ".jpeg", …). */
 export function stripExtension(filename: string): string {
   return String(filename ?? '').replace(/\.[a-z0-9]{1,8}$/i, '');
@@ -81,17 +114,24 @@ export interface FilenameMatch {
  *  1. All tokens of the child's name appear as whole tokens in the file name.
  *  2. The child's concatenated name appears as a substring of the concatenated
  *     file name (handles "MaxMustermann_001.jpg" without separators).
+ *  3. A *partial* match: at least one distinctive token of the child's name
+ *     (e.g. the first name) appears in the file name. This is what makes the
+ *     common "first name + running number" convention work – a file called
+ *     "Elin 1.jpg" is matched to the child "Elin von Allmen" even though only
+ *     the first name is in the file name. Pure name particles ("von", "de", …)
+ *     never trigger a partial match on their own.
  *
- * The best match is the one covering the most characters. If two different
- * children tie for the best score the result is flagged `ambiguous` so callers
- * can choose to skip the automatic assignment.
+ * Full matches (1 & 2) always outrank partial ones (3). Within a tier the best
+ * match is the one covering the most characters. If two different children tie
+ * for the best score the result is flagged `ambiguous` so callers can choose to
+ * skip the automatic assignment (e.g. two children share the same first name).
  */
 export function matchChildByFilename(
   filename: string,
   children: ChildLike[],
 ): FilenameMatch | null {
   const base = stripExtension(filename);
-  const fileTokens = canonicalTokens(base);
+  const fileTokens = expandFileTokens(canonicalTokens(base));
   const fileJoined = canonical(base).replace(/[^a-z0-9]+/g, '');
   if (!fileJoined) return null;
 
@@ -103,13 +143,19 @@ export function matchChildByFilename(
     const childJoined = canonical(child.name).replace(/[^a-z0-9]+/g, '');
     if (childJoined.length < 2) continue;
 
+    const matchedToks = childToks.filter((t) => fileTokens.has(t));
+    const substantiveMatched = matchedToks.filter((t) => !NAME_PARTICLES.has(t));
+
     let score = 0;
     const allTokensPresent =
-      childToks.length > 0 && childToks.every((t) => fileTokens.includes(t));
-    if (allTokensPresent) {
-      score = childToks.join('').length + 1; // whole-token match is strongest
-    } else if (fileJoined.includes(childJoined)) {
-      score = childJoined.length;
+      childToks.length > 0 && matchedToks.length === childToks.length;
+    if (allTokensPresent || fileJoined.includes(childJoined)) {
+      // Whole-name match (all tokens present or concatenated substring).
+      score = FULL_MATCH_BASE + childJoined.length;
+    } else if (substantiveMatched.length > 0) {
+      // Partial match: only part of the name (typically the first name) is in
+      // the file name. Score by how many real name characters were matched.
+      score = substantiveMatched.reduce((sum, t) => sum + t.length, 0);
     }
 
     if (score === 0) continue;
