@@ -242,9 +242,9 @@ input:focus, select:focus, textarea:focus {
 /* Buy controls shown directly beneath each photo (no enlargement needed) */
 .photo-buy { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .photo-buy .field { margin: 0; }
-.photo-buy select,
-.photo-buy input { width: 100%; }
-.photo-buy .qty-label { display: block; margin-bottom: 4px; font-size: 0.85rem; color: var(--text-soft); }
+.photo-buy .buy-row { display: flex; gap: 8px; align-items: center; }
+.photo-buy .buy-row select { flex: 1 1 auto; min-width: 0; }
+.photo-buy .qty-input { flex: 0 0 64px; width: 64px; text-align: center; }
 .buy-success { margin: 2px 0 0; font-size: 0.82rem; font-weight: 600; color: #1b7a52; text-align: center; }
 .badge {
   display: inline-block; font-size: 0.72rem; font-weight: 600;

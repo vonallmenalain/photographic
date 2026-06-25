@@ -249,7 +249,10 @@ function PhotoControls({
   return (
     <div className="photo-buy">
       {error && <Alert kind="error">{error}</Alert>}
-      <div className="field">
+      {/* Product select and quantity share one row. Showing the quantity field
+          for prints therefore never changes the tile's height, so no other
+          photo shifts position when the product is switched. */}
+      <div className="buy-row">
         <select
           value={productId}
           onChange={(e) => handleProductChange(e.target.value)}
@@ -261,16 +264,14 @@ function PhotoControls({
             </option>
           ))}
         </select>
-      </div>
-      {isPrint && (
-        <div className="field">
-          <label htmlFor={`qty-${photo.id}`} className="qty-label">
-            Menge
-          </label>
+        {isPrint && (
           <input
             id={`qty-${photo.id}`}
+            className="qty-input"
             type="number"
             inputMode="numeric"
+            aria-label="Menge"
+            title="Menge"
             min={1}
             max={99}
             value={qty}
@@ -280,8 +281,8 @@ function PhotoControls({
             }}
             onBlur={() => setQty(String(qtyNum))}
           />
-        </div>
-      )}
+        )}
+      </div>
       {digitalBlocked ? (
         <>
           <Alert kind="info">
