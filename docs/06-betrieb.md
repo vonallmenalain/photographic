@@ -12,8 +12,11 @@
    Original; Thumbnail + Wasserzeichen-Preview entstehen automatisch.
 3. **Kinder anlegen** und Fotos zuordnen:
    - Einzelfoto → Kind über das Dropdown zuordnen.
-   - **Klassen-/Gruppenfoto** → Häkchen „Gruppen-/Klassenfoto“ setzen und über
-     „E-Mail-Zuordnung verwalten“ den berechtigten Familien direkt zuweisen.
+   - **Klassen-/Gruppenfoto** → Häkchen „Gruppen-/Klassenfoto“ setzen. Es ist
+     dann automatisch **„Für die ganze Klasse sichtbar“** – alle Familien dieses
+     Events (jede E-Mail mit einem Kind in der Klasse) sehen es, ohne dass du
+     einzeln zuweisen musst. Für Sonderfälle kannst du das Häkchen entfernen und
+     das Foto über „Einzelne E-Mails …“ gezielt einzelnen Adressen zuweisen.
 4. **E-Mail-Adressen** anlegen (Adminbereich → „E-Mail-Adressen“) und mit Kindern
    verknüpfen (n:m: Mutter+Vater, mehrere Kinder).
 5. **Event-Status auf „published“** setzen. Erst dann sind die zugeordneten Fotos
@@ -71,14 +74,21 @@ paul@x.de     Paul      Weber      Tim Weber, Lisa Weber   Klasse 3b
 
 Beim Hochladen im Event wird jedes Foto automatisch dem Kind zugeordnet, dessen
 Name **im Dateinamen** vorkommt (`Lena_Mueller_01.jpg` → Kind „Lena Müller“).
-Die Erkennung ist tolerant gegenüber Groß-/Kleinschreibung, Umlauten
-(`ü`/`ue`), Trennzeichen und Zusatztext. Über das Kind hängt die Zuordnung
-automatisch an der verknüpften E-Mail – die Familie sieht das Foto also sofort.
+Es genügt bereits der **Vorname** plus laufender Nummer, wie ihn Fotografen
+üblich vergeben: `Elin 1.jpg`, `Elin 2.jpg`, `Lielle 1.jpg` werden den Kindern
+„Elin von Allmen“ bzw. „Lielle von Allmen“ zugeordnet (auch ohne Trennzeichen,
+z. B. `Elin1.jpg`). Die Erkennung ist tolerant gegenüber Groß-/Kleinschreibung,
+Umlauten (`ü`/`ue`), Trennzeichen und Zusatztext. Über das Kind hängt die
+Zuordnung automatisch an der verknüpften E-Mail – die Familie sieht das Foto
+also sofort.
 
-- Mehrdeutige Treffer (Name passt auf mehrere Kinder) bleiben **bewusst
-  unzugeordnet** und müssen manuell gesetzt werden.
-- Wurden Kinder erst **nach** dem Upload importiert: im Event den Button
-  **„Vorhandene Fotos automatisch zuordnen (nach Dateiname)“** nutzen.
+- Mehrdeutige Treffer (z. B. ein Vorname, der auf **mehrere Kinder** passt, oder
+  nur ein gemeinsamer Nachname) bleiben **bewusst unzugeordnet** und müssen
+  manuell gesetzt werden.
+- Wurden Kinder erst **nach** dem Upload importiert (oder der Dateiname enthielt
+  zunächst nur den Vornamen): im Event den Button **„Vorhandene Fotos
+  automatisch zuordnen (nach Dateiname)“** nutzen. Die Rückmeldung zeigt, wie
+  viele Fotos zugeordnet, mehrdeutig oder ohne Treffer geblieben sind.
 
 > Empfohlener Ablauf: Event anlegen → **Import** (E-Mails + Kinder) → Fotos mit
 > sprechenden Dateinamen hochladen → kurz prüfen → Event veröffentlichen.

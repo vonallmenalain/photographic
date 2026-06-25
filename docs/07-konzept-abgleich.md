@@ -38,8 +38,11 @@ umgesetzt**, **wie**, und **was musst du selbst einrichten**.
 ## Foto-/Zugriffslogik (Konzept 4, 13)
 - Sichtbar nur, wenn: Event `published` + nicht abgelaufen, Foto nicht
   deaktiviert, **und** Foto mit der E-Mail verknüpft (über Kind oder direkt).
-- **Klassenfotos** (ohne einzelnes Kind) werden gezielt einzelnen E-Mails
-  zugewiesen → jede Familie sieht nur ihr zugewiesenes Klassenfoto.
+- **Klassen-/Gruppenfotos** (ohne einzelnes Kind) werden in der Regel „für die
+  ganze Klasse“ freigeschaltet: alle Familien des Events (jede E-Mail mit einem
+  Kind in dieser Klasse) sehen sie automatisch. Alternativ lassen sie sich
+  gezielt einzelnen E-Mails zuweisen → diese Familien sehen nur ihr zugewiesenes
+  Foto.
 - Workflow: hochladen → verarbeiten → zuordnen → Event veröffentlichen. Ein
   separates Veröffentlichen je Foto gibt es nicht mehr.
 

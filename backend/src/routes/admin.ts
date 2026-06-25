@@ -399,6 +399,7 @@ router.get(
       await runQuery<{
         child_id: string | null;
         is_class_photo: number;
+        visible_to_event?: number;
         original_filename: string;
         status: string;
         sort_order: number;
@@ -412,6 +413,7 @@ router.get(
         id: p.id,
         child_id: p.child_id ?? null,
         is_class_photo: p.is_class_photo,
+        visible_to_event: Number(p.visible_to_event) === 1 ? 1 : 0,
         original_filename: p.original_filename,
         status: p.status,
         sort_order: p.sort_order,
@@ -552,6 +554,7 @@ router.post(
         event_id: req.params.id,
         child_id: childId,
         is_class_photo: 0,
+        visible_to_event: 0,
         original_filename: file.originalname.slice(0, 255),
         storage_key: storageKey,
         ext,
@@ -615,12 +618,16 @@ router.post(
 
     let assigned = 0;
     let ambiguous = 0;
+    let unmatched = 0;
     const details: { id: string; filename: string; childName: string }[] = [];
     for (const p of photos) {
       if (p.is_class_photo) continue;
       if (p.child_id && !overwrite) continue;
       const match = matchChildByFilename(p.original_filename, children);
-      if (!match) continue;
+      if (!match) {
+        unmatched += 1;
+        continue;
+      }
       if (match.ambiguous) {
         ambiguous += 1;
         continue;
@@ -635,7 +642,7 @@ router.post(
       details.push({ id: p.id, filename: p.original_filename, childName: match.childName });
     }
     await audit('photo.autoassign', `${req.params.id}: ${assigned} assigned`);
-    res.json({ assigned, ambiguous, details });
+    res.json({ assigned, ambiguous, unmatched, details });
   }),
 );
 
@@ -697,6 +704,7 @@ router.patch(
       z.object({
         child_id: z.string().nullable().optional(),
         is_class_photo: z.boolean().optional(),
+        visible_to_event: z.boolean().optional(),
         status: z.enum(PHOTO_STATUSES).optional(),
         sort_order: z.number().int().optional(),
       }),
@@ -707,8 +715,13 @@ router.patch(
     const map: Record<string, unknown> = {};
     if (data.child_id !== undefined) map.child_id = data.child_id;
     if (data.is_class_photo !== undefined) map.is_class_photo = data.is_class_photo ? 1 : 0;
+    if (data.visible_to_event !== undefined) map.visible_to_event = data.visible_to_event ? 1 : 0;
     if (data.status !== undefined) map.status = data.status;
     if (data.sort_order !== undefined) map.sort_order = data.sort_order;
+    // Safety: a photo tied to a single child (or no longer a class photo) must
+    // never stay class-wide visible.
+    if (data.is_class_photo === false) map.visible_to_event = 0;
+    if (data.child_id) map.visible_to_event = 0;
     if (Object.keys(map).length) {
       await updateById(COL.photos, req.params.id, { ...map, updated_at: nowIso() });
       await audit('photo.update', `${req.params.id}: ${JSON.stringify(data)}`);

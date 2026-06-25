@@ -17,6 +17,12 @@ interface PhotoDoc {
   event_id: string;
   child_id: string | null;
   is_class_photo: number;
+  /**
+   * When 1, the photo is visible to EVERY family of its event/class (i.e. every
+   * e-mail linked to any child in that event) without needing an explicit
+   * per-e-mail link. Used for group/class photos. Defaults to 0/undefined.
+   */
+  visible_to_event?: number;
   storage_key: string;
   ext: string;
   width: number | null;
@@ -46,6 +52,21 @@ async function linkedChildIds(emailId: string): Promise<string[]> {
     col(COL.emailChildren).where('email_id', '==', emailId),
   );
   return rows.map((r) => r.child_id);
+}
+
+/**
+ * The events/classes a family belongs to, derived from their linked children.
+ * This is the basis for class-wide group photos: a family is a "member" of
+ * every event in which it has at least one child.
+ */
+async function memberEventIds(childIds: string[]): Promise<string[]> {
+  if (childIds.length === 0) return [];
+  const childDocs = await Promise.all(
+    [...new Set(childIds)].map((id) => getById<{ event_id: string }>(COL.children, id)),
+  );
+  const eventIds = new Set<string>();
+  for (const c of childDocs) if (c?.event_id) eventIds.add(c.event_id);
+  return [...eventIds];
 }
 
 async function directPhotoIds(emailId: string): Promise<string[]> {
@@ -100,6 +121,21 @@ export async function getVisiblePhotos(emailId: string): Promise<VisiblePhoto[]>
   );
   for (const d of directDocs) {
     if (d) photos.set(d.id, d);
+  }
+
+  // Class-wide group photos: every photo flagged `visible_to_event` in an event
+  // where this family has a child becomes visible automatically – no per-e-mail
+  // link required. This is the simple "assign the group photo to the whole
+  // class" path. The event-publish gate below still applies.
+  const familyEventIds = await memberEventIds(childIds);
+  for (const part of chunk(familyEventIds)) {
+    if (part.length === 0) continue;
+    const rows = await runQuery<PhotoDoc>(
+      col(COL.photos).where('event_id', 'in', part),
+    );
+    for (const r of rows) {
+      if (Number(r.visible_to_event) === 1) photos.set(r.id, r);
+    }
   }
 
   const livePhotos = [...photos.values()].filter(photoIsLive);

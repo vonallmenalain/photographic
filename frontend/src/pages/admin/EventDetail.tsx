@@ -20,6 +20,7 @@ interface Photo {
   id: string;
   child_id: string | null;
   is_class_photo: number;
+  visible_to_event: number;
   original_filename: string;
   status: string;
   width: number | null;
@@ -142,13 +143,16 @@ export default function EventDetail() {
     setUploadMsg('');
     setError('');
     try {
-      const res = await api<{ assigned: number; ambiguous: number }>(
+      const res = await api<{ assigned: number; ambiguous: number; unmatched: number }>(
         `/api/admin/events/${id}/photos/auto-assign`,
         { method: 'POST', admin: true, body: {} },
       );
       setUploadMsg(
         `${res.assigned} Foto(s) automatisch nach Dateiname zugeordnet.` +
-          (res.ambiguous > 0 ? ` ${res.ambiguous} mehrdeutig – bitte manuell prüfen.` : ''),
+          (res.ambiguous > 0 ? ` ${res.ambiguous} mehrdeutig – bitte manuell prüfen.` : '') +
+          (res.unmatched > 0
+            ? ` ${res.unmatched} ohne Treffer – als Gruppen-/Klassenfoto markieren oder manuell zuordnen.`
+            : ''),
       );
       load();
     } catch (err) {
@@ -234,7 +238,9 @@ export default function EventDetail() {
         <h2>Fotos hochladen</h2>
         <p className="muted" style={{ fontSize: '0.85rem' }}>
           Lade nur die Originale hoch. Thumbnail und Wasserzeichen-Preview werden automatisch erzeugt.
-          Enthält der Dateiname den Namen eines Kindes, wird das Foto automatisch zugeordnet.
+          Enthält der Dateiname den Namen eines Kindes – auch nur den <strong>Vornamen</strong> samt
+          Nummer wie „Elin 1“ –, wird das Foto automatisch zugeordnet. Passt ein Vorname auf mehrere
+          Kinder, bleibt das Foto bewusst unzugeordnet.
         </p>
         {uploadMsg && <Alert kind="success">{uploadMsg}</Alert>}
         <div className="row">
@@ -293,7 +299,11 @@ export default function EventDetail() {
                         onChange={(e) =>
                           patchPhoto(p.id, {
                             is_class_photo: e.target.checked,
+                            // Group/class photos default to "visible to the
+                            // whole class" – the simplest path the photographer
+                            // expects. Unchecking clears both flags.
                             child_id: e.target.checked ? null : p.child_id,
+                            visible_to_event: e.target.checked,
                           })
                         }
                       />
@@ -321,11 +331,32 @@ export default function EventDetail() {
                     )}
 
                     {!!p.is_class_photo && (
+                      <label style={{ margin: 0 }} title="Alle Familien dieses Events/dieser Klasse sehen dieses Foto automatisch">
+                        <input
+                          type="checkbox"
+                          checked={!!p.visible_to_event}
+                          style={{ width: 'auto', marginRight: 6 }}
+                          onChange={(e) =>
+                            patchPhoto(p.id, { visible_to_event: e.target.checked })
+                          }
+                        />
+                        Für die ganze Klasse sichtbar
+                      </label>
+                    )}
+
+                    {!!p.is_class_photo && (
                       <button className="btn secondary small" onClick={() => setEmailModalPhoto(p)}>
-                        E-Mail-Zuordnung verwalten
+                        Einzelne E-Mails …
                       </button>
                     )}
                   </div>
+                  {!!p.is_class_photo && (
+                    <p className="muted" style={{ fontSize: '0.78rem', marginTop: 6, marginBottom: 0 }}>
+                      {p.visible_to_event
+                        ? 'Sichtbar für alle Familien dieses Events (alle E-Mail-Adressen mit einem Kind in dieser Klasse).'
+                        : 'Nur für einzeln zugewiesene E-Mail-Adressen sichtbar.'}
+                    </p>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -477,14 +508,15 @@ function PhotoEmailModal({ photo, onClose }: { photo: Photo; onClose: () => void
         onClick={(e) => e.stopPropagation()}
       >
         <div className="row between">
-          <h2 style={{ marginBottom: 0 }}>E-Mail-Zuordnung (Klassenfoto)</h2>
+          <h2 style={{ marginBottom: 0 }}>Einzelne E-Mail-Zuordnung (Klassenfoto)</h2>
           <button className="btn ghost small" onClick={onClose}>
             Schließen
           </button>
         </div>
         <p className="muted" style={{ fontSize: '0.82rem' }}>
-          Weise dieses Klassenfoto allen berechtigten Familien direkt zu. Jede Familie sieht nur das
-          ihr zugewiesene Foto.
+          Nur nötig für Sonderfälle. Soll das Foto die <strong>ganze Klasse</strong> erreichen, nutze
+          die Option „Für die ganze Klasse sichtbar“. Hier kannst du das Foto zusätzlich einzelnen
+          E-Mail-Adressen zuweisen (z. B. Familien ohne eigenes Kind im Event).
         </p>
         <div className="mb">
           <strong>Zugewiesen ({assigned.length})</strong>
