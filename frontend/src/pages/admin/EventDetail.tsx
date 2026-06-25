@@ -43,6 +43,7 @@ export default function EventDetail() {
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
+  const [duplicateWarning, setDuplicateWarning] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const [emailModalPhoto, setEmailModalPhoto] = useState<Photo | null>(null);
   const [zoomPhoto, setZoomPhoto] = useState<Photo | null>(null);
@@ -76,16 +77,25 @@ export default function EventDetail() {
     const fd = new FormData();
     Array.from(files).forEach((f) => fd.append('photos', f));
     try {
-      const res = await api<{ results: { ok: boolean; matchedChildId?: string }[] }>(
-        `/api/admin/events/${id}/photos`,
-        { method: 'POST', admin: true, formData: fd },
-      );
+      const res = await api<{
+        results: { ok: boolean; matchedChildId?: string; duplicate?: boolean; filename: string }[];
+      }>(`/api/admin/events/${id}/photos`, { method: 'POST', admin: true, formData: fd });
       const ok = res.results.filter((r) => r.ok).length;
       const matched = res.results.filter((r) => r.matchedChildId).length;
+      const dupes = res.results.filter((r) => r.duplicate);
       setUploadMsg(
         `${ok} von ${res.results.length} Fotos hochgeladen und verarbeitet.` +
           (matched > 0 ? ` ${matched} automatisch einem Kind zugeordnet (Dateiname).` : ''),
       );
+      if (dupes.length > 0) {
+        const names = dupes.map((d) => d.filename).join(', ');
+        setDuplicateWarning(
+          `${dupes.length} Foto(s) haben einen Dateinamen, der in diesem Auftrag bereits vorkommt: ${names}. ` +
+            'Bitte prüfe, ob dasselbe Kind doppelt hochgeladen wurde – betroffene Fotos sind unten mit „Doppelter Dateiname“ markiert.',
+        );
+      } else {
+        setDuplicateWarning('');
+      }
       if (fileRef.current) fileRef.current.value = '';
       load();
     } catch (err) {
@@ -162,6 +172,19 @@ export default function EventDetail() {
 
   if (loading) return <Spinner />;
   if (!event) return <Alert kind="error">{error || 'Auftrag nicht gefunden.'}</Alert>;
+
+  // Photos that share an identical file name within this Auftrag/Klasse. These
+  // usually mean the same child was uploaded more than once.
+  const filenameCounts = new Map<string, number>();
+  for (const p of photos) {
+    const key = (p.original_filename || '').trim().toLowerCase();
+    if (key) filenameCounts.set(key, (filenameCounts.get(key) ?? 0) + 1);
+  }
+  const isDuplicateFilename = (p: Photo) => {
+    const key = (p.original_filename || '').trim().toLowerCase();
+    return !!key && (filenameCounts.get(key) ?? 0) > 1;
+  };
+  const duplicateCount = photos.filter(isDuplicateFilename).length;
 
   return (
     <div>
@@ -243,6 +266,7 @@ export default function EventDetail() {
           Kinder, bleibt das Foto bewusst unzugeordnet.
         </p>
         {uploadMsg && <Alert kind="success">{uploadMsg}</Alert>}
+        {duplicateWarning && <Alert kind="error">{duplicateWarning}</Alert>}
         <div className="row">
           <input ref={fileRef} type="file" accept="image/*" multiple style={{ flex: 1 }} />
           <button className="btn" onClick={upload} disabled={uploading}>
@@ -264,6 +288,13 @@ export default function EventDetail() {
       {/* Photos */}
       <div className="card">
         <h2>Fotos &amp; Zuordnung</h2>
+        {duplicateCount > 0 && (
+          <Alert kind="error">
+            {duplicateCount} Foto(s) teilen sich einen Dateinamen mit einem anderen Foto in diesem
+            Auftrag und sind mit „Doppelter Dateiname“ markiert. Bitte prüfen, ob dasselbe Kind
+            doppelt hochgeladen wurde.
+          </Alert>
+        )}
         {photos.length === 0 ? (
           <p className="muted">Noch keine Fotos in diesem Auftrag.</p>
         ) : (
@@ -285,6 +316,14 @@ export default function EventDetail() {
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <StatusBadge status={p.status} />
                     {p.is_class_photo ? <span className="badge class">Klassenfoto</span> : null}
+                    {isDuplicateFilename(p) ? (
+                      <span
+                        className="badge red"
+                        title="Ein weiteres Foto in diesem Auftrag hat denselben Dateinamen. Möglicherweise wurde dasselbe Kind doppelt hochgeladen."
+                      >
+                        Doppelter Dateiname
+                      </span>
+                    ) : null}
                   </div>
                   <div className="muted" style={{ fontSize: '0.8rem', marginTop: 4 }} title={p.original_filename}>
                     {p.original_filename} {p.width ? `· ${p.width}×${p.height}` : ''}

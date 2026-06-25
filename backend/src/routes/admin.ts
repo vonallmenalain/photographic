@@ -553,6 +553,18 @@ router.post(
       ? await runQuery<{ name: string }>(col(COL.children).where('event_id', '==', req.params.id))
       : [];
 
+    // Detect photos that re-use a file name already present in this Auftrag/
+    // Klasse (case-insensitive). This usually means the same child was uploaded
+    // twice, so we flag it back to the admin instead of silently overwriting.
+    const existingPhotos = await runQuery<{ original_filename: string }>(
+      col(COL.photos).where('event_id', '==', req.params.id),
+    );
+    const normalizeFilename = (name: string) => String(name ?? '').trim().toLowerCase();
+    const existingFilenames = new Set(
+      existingPhotos.map((p) => normalizeFilename(p.original_filename)),
+    );
+    const batchFilenames = new Set<string>();
+
     const results: {
       id: string;
       filename: string;
@@ -560,8 +572,13 @@ router.post(
       error?: string;
       matchedChildId?: string;
       matchedChildName?: string;
+      duplicate?: boolean;
     }[] = [];
     for (const file of files) {
+      const normalizedName = normalizeFilename(file.originalname);
+      const isDuplicate =
+        existingFilenames.has(normalizedName) || batchFilenames.has(normalizedName);
+      batchFilenames.add(normalizedName);
       const id = newId('pho');
       const ext = (path.extname(file.originalname).replace('.', '').toLowerCase() || 'jpg').slice(0, 5);
       const storageKey = `${req.params.id}/${id}`;
@@ -581,6 +598,7 @@ router.post(
         bytes: null,
         status: childId ? 'assigned' : 'uploaded',
         processing_error: null,
+        duplicate_filename: isDuplicate ? 1 : 0,
         published: 0,
         sort_order: 0,
         created_at: nowIso(),
@@ -601,17 +619,28 @@ router.post(
           ok: true,
           matchedChildId: childId ?? undefined,
           matchedChildName: childId ? match?.childName : undefined,
+          duplicate: isDuplicate,
         });
       } catch (err) {
         await updateById(COL.photos, id, {
           processing_error: String(err).slice(0, 500),
           updated_at: nowIso(),
         });
-        results.push({ id, filename: file.originalname, ok: false, error: 'Verarbeitung fehlgeschlagen' });
+        results.push({
+          id,
+          filename: file.originalname,
+          ok: false,
+          error: 'Verarbeitung fehlgeschlagen',
+          duplicate: isDuplicate,
+        });
       }
     }
     const matched = results.filter((r) => r.matchedChildId).length;
-    await audit('photo.upload', `${req.params.id}: ${results.length} files, ${matched} auto-assigned`);
+    const duplicates = results.filter((r) => r.duplicate).length;
+    await audit(
+      'photo.upload',
+      `${req.params.id}: ${results.length} files, ${matched} auto-assigned, ${duplicates} duplicate filenames`,
+    );
     res.json({ results });
   }),
 );
@@ -820,16 +849,61 @@ router.get(
   '/emails',
   asyncHandler(async (req, res) => {
     const q = String(req.query.q ?? '').trim().toLowerCase();
-    let rows = await runQuery<{ email: string; name?: string; created_at: string }>(col(COL.parentEmails));
+    // Optional filter: only e-mails linked to this Auftrag (event), either via a
+    // linked child of that event or via a direct photo assignment in that event.
+    const eventId = String(req.query.eventId ?? '').trim();
+
+    const [rows, childLinks, children, photoLinks, photos, events] = await Promise.all([
+      runQuery<{ email: string; name?: string; created_at: string }>(col(COL.parentEmails)),
+      runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
+      runQuery<{ id: string; event_id: string }>(col(COL.children)),
+      runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
+      runQuery<{ id: string; event_id: string }>(col(COL.photos)),
+      runQuery<{ id: string; name: string }>(col(COL.events)),
+    ]);
+
+    const childEvent = new Map<string, string>();
+    for (const c of children) childEvent.set(c.id, c.event_id);
+    const photoEvent = new Map<string, string>();
+    for (const p of photos) photoEvent.set(p.id, p.event_id);
+    const eventName = new Map<string, string>();
+    for (const e of events) eventName.set(e.id, e.name);
+
+    // email_id -> set of event ids the address is connected to
+    const emailEvents = new Map<string, Set<string>>();
+    const addEvent = (emailId: string, evId: string | undefined) => {
+      if (!evId) return;
+      let set = emailEvents.get(emailId);
+      if (!set) {
+        set = new Set<string>();
+        emailEvents.set(emailId, set);
+      }
+      set.add(evId);
+    };
+    for (const link of childLinks) addEvent(link.email_id, childEvent.get(link.child_id));
+    for (const link of photoLinks) addEvent(link.email_id, photoEvent.get(link.photo_id));
+
+    let result = rows.map((r) => {
+      const ids = Array.from(emailEvents.get(r.id) ?? []);
+      const eventList = ids
+        .map((id) => ({ id, name: eventName.get(id) ?? '' }))
+        .filter((e) => e.name)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return { ...r, events: eventList };
+    });
+
     if (q) {
-      rows = rows.filter(
+      result = result.filter(
         (r) =>
           String(r.email).toLowerCase().includes(q) ||
           String(r.name ?? '').toLowerCase().includes(q),
       );
     }
-    rows.sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
-    res.json({ emails: rows.slice(0, 200) });
+    if (eventId) {
+      result = result.filter((r) => r.events.some((e) => e.id === eventId));
+    }
+    result.sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
+    res.json({ emails: result.slice(0, 200) });
   }),
 );
 
