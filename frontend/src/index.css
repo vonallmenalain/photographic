@@ -120,30 +120,116 @@ input:focus, select:focus, textarea:focus {
 }
 .trust .icon { color: var(--primary); flex-shrink: 0; font-size: 1.1rem; }
 
-/* Gallery grid */
-.grid {
-  display: grid; gap: 18px;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+/* Gallery — orientation-aware masonry.
+   Photos flow into balanced columns and keep their natural shape, so portrait
+   and landscape pictures are shown large and uncropped, clearly in the
+   foreground. */
+.gallery-section { margin-bottom: 36px; }
+.gallery-section-head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 14px;
 }
-.photo-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm);
-  display: flex; flex-direction: column;
+.gallery-section-head h2 { margin: 0; }
+.photo-count { font-size: 0.9rem; }
+
+.masonry {
+  column-width: 300px;
+  column-gap: 18px;
 }
+@media (max-width: 560px) {
+  .masonry { column-width: auto; column-count: 1; }
+}
+
+.photo-tile {
+  break-inside: avoid;
+  margin: 0 0 18px;
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.photo-tile:hover { box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18); }
+
+.photo-media {
+  position: relative;
+  display: block;
+  cursor: zoom-in;
+  outline: none;
+}
+.photo-media:focus-visible { box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.55) inset; }
+
+/* The frame matches each photo's true aspect ratio (set inline from the image
+   dimensions), so "contain" fills it edge to edge with no cropping and no
+   letterboxing. Unknown ratios fall back to a gentle portrait shape. */
 .photo-frame {
-  position: relative; aspect-ratio: 4 / 3; background: var(--surface-2);
+  position: relative; aspect-ratio: 4 / 5; background: var(--surface-2);
   display: grid; place-items: center; overflow: hidden;
   user-select: none;
 }
-/* Show the whole photo regardless of its size or orientation. The frame keeps a
-   stable height for the grid while "contain" prevents any cropping; portrait or
-   landscape photos are letterboxed against the neutral frame background. */
 .photo-frame img {
   width: 100%; height: 100%; object-fit: contain;
   -webkit-user-drag: none; user-select: none; pointer-events: none;
+  transition: transform 0.4s ease;
 }
+.photo-tile:hover .photo-frame img { transform: scale(1.045); }
 .photo-frame .overlay { position: absolute; inset: 0; }
-.photo-card .body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+
+/* Corner labels */
+.photo-badges { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 2; }
+.photo-state { position: absolute; top: 10px; right: 10px; z-index: 2; }
+.pill {
+  display: inline-flex; align-items: center;
+  font-size: 0.74rem; font-weight: 600;
+  padding: 4px 10px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92); color: var(--text);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(4px);
+}
+.pill.green { background: rgba(231, 246, 238, 0.95); color: #1b7a52; }
+.pill.blue { background: rgba(234, 241, 253, 0.95); color: #234a9b; }
+
+/* "Ansehen" hint, centered, appears on hover */
+.photo-zoom {
+  position: absolute; top: 12px; left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.78rem; font-weight: 600; color: #fff;
+  background: rgba(15, 23, 42, 0.55); padding: 5px 11px; border-radius: 999px;
+  backdrop-filter: blur(4px);
+  opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none; z-index: 2;
+}
+.photo-tile:hover .photo-zoom { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* Buy action overlaid at the bottom of the photo */
+.photo-actions {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 26px 12px 12px;
+  display: flex; gap: 8px;
+  background: linear-gradient(to top, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0));
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 2;
+}
+.photo-tile:hover .photo-actions { opacity: 1; transform: none; }
+/* Touch devices have no hover — always show the action so buying stays obvious */
+@media (hover: none) {
+  .photo-actions { opacity: 1; transform: none; }
+  .photo-zoom { display: none; }
+}
+.btn.on-photo { background: #fff; color: var(--text); }
+.btn.on-photo:hover { background: var(--surface-2); }
+
+.photo-toast {
+  position: absolute; left: 10px; right: 10px; bottom: 10px;
+  z-index: 3; padding: 9px 12px; border-radius: var(--radius-sm);
+  font-size: 0.82rem; font-weight: 500; text-align: center;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+}
+.photo-toast.success { background: #e7f6ee; color: #1b7a52; }
+.photo-toast.error { background: #fdeaea; color: #9b2c2c; }
 .badge {
   display: inline-block; font-size: 0.72rem; font-weight: 600;
   padding: 3px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-soft);
