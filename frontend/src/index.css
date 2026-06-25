@@ -329,6 +329,23 @@ tr:hover td { background: var(--surface-2); }
 .job-stat-lbl { color: var(--text-muted); font-size: 0.75rem; margin-top: 2px; }
 .job-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
+/* Auswertung (analytics) summary row inside a collapsible Auftrag tile */
+.analytics-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.analytics-stat {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm, 10px);
+  padding: 10px 12px;
+}
+.analytics-stat-num { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
+.analytics-stat-lbl { color: var(--text-muted); font-size: 0.76rem; margin-top: 2px; }
+
 .muted { color: var(--text-muted); }
 .soft { color: var(--text-soft); }
 .center { text-align: center; }

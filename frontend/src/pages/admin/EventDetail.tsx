@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, ApiError, fetchAdminImage } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
+import EventEmails from './EventEmails';
 
 interface EventObj {
   id: string;
@@ -255,6 +256,9 @@ export default function EventDetail() {
           </div>
         )}
       </div>
+
+      {/* E-Mail-Adressen (Eltern) dieses Auftrags */}
+      <EventEmails eventId={event.id} eventChildren={children} />
 
       {/* Upload */}
       <div className="card mb">

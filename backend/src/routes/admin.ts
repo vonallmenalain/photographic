@@ -1239,13 +1239,20 @@ router.get(
     const parentEmail = await getById<{ email: string }>(COL.parentEmails, orderDoc.email_id);
     const order = { ...orderDoc, email: parentEmail?.email ?? '' };
 
-    const rawItems = await runQuery<Record<string, unknown> & { photo_id: string }>(
+    const rawItems = await runQuery<Record<string, unknown> & { photo_id: string; product_id: string }>(
       col(COL.orderItems).where('order_id', '==', req.params.id),
     );
     const items = await Promise.all(
       rawItems.map(async (oi) => {
-        const photo = await getById<{ original_filename: string }>(COL.photos, oi.photo_id);
-        return { ...oi, original_filename: photo?.original_filename ?? '' };
+        const [photo, product] = await Promise.all([
+          getById<{ original_filename: string }>(COL.photos, oi.photo_id),
+          getById<{ type: string }>(COL.products, oi.product_id),
+        ]);
+        return {
+          ...oi,
+          original_filename: photo?.original_filename ?? '',
+          product_type: product?.type ?? 'digital',
+        };
       }),
     );
     res.json({ order, items });
