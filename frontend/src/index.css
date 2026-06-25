@@ -157,11 +157,14 @@ input:focus, select:focus, textarea:focus {
 /* Lightbox */
 .lightbox {
   position: fixed; inset: 0; background: rgba(15, 23, 42, 0.82);
-  display: grid; place-items: center; z-index: 60; padding: 20px;
+  display: flex; z-index: 60; padding: 20px; overflow-y: auto;
 }
-.lightbox .inner { max-width: 92vw; max-height: 88vh; position: relative; }
-.lightbox img { max-width: 92vw; max-height: 78vh; border-radius: 10px; -webkit-user-drag: none; pointer-events: none; }
+.lightbox .inner { max-width: 92vw; margin: auto; position: relative; }
+.lightbox img { display: block; max-width: 92vw; max-height: 70vh; border-radius: 10px; -webkit-user-drag: none; pointer-events: none; }
 .lightbox .lb-actions { display: flex; gap: 10px; justify-content: center; margin-top: 14px; }
+@media (max-height: 640px) {
+  .lightbox img { max-height: 48vh; }
+}
 .lightbox .close { position: absolute; top: -14px; right: -14px; background: #fff; border-radius: 999px; width: 36px; height: 36px; border: none; cursor: pointer; font-size: 18px; }
 
 /* Tables (admin) */
