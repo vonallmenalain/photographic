@@ -82,6 +82,25 @@ async function deleteChildCascade(childId: string): Promise<void> {
 }
 
 // --- Auth ----------------------------------------------------------------
+type AdminUser = { username: string; password_hash: string; email?: string };
+
+/**
+ * Resolves an admin account from the value typed into the "Benutzername /
+ * E-Mail" field. Admin documents are keyed by username, but the e-mail address
+ * may be used interchangeably as a login identifier. We therefore look the
+ * value up as a document id first and fall back to an e-mail match.
+ */
+async function findAdminUser(identifier: string): Promise<(AdminUser & { id: string }) | null> {
+  const trimmed = identifier.trim();
+  if (!trimmed) return null;
+  const byUsername = await getById<AdminUser>(COL.adminUsers, trimmed);
+  if (byUsername) return byUsername;
+  const byEmail = await firstOf<AdminUser>(
+    col(COL.adminUsers).where('email', '==', normalizeEmail(trimmed)),
+  );
+  return byEmail;
+}
+
 router.post(
   '/login',
   adminLoginLimiter,
@@ -90,7 +109,7 @@ router.post(
       z.object({ username: z.string().min(1), password: z.string().min(1) }),
       req.body,
     );
-    const user = await getById<{ username: string; password_hash: string }>(COL.adminUsers, username);
+    const user = await findAdminUser(username);
     if (!user || !bcrypt.compareSync(password, user.password_hash)) {
       throw new ApiError(401, 'Benutzername oder Passwort ist falsch.');
     }
@@ -119,26 +138,27 @@ router.post(
       req.body,
     );
 
-    const user = await getById<{ username: string; email?: string }>(COL.adminUsers, username);
+    const user = await findAdminUser(username);
 
-    if (user?.email) {
-      const token = crypto.randomBytes(32).toString('hex');
-      const tokenHash = hashToken(token);
-      const ttlMs = config.admin.passwordResetTtlMinutes * 60 * 1000;
-      const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-
-      await setById(COL.adminPasswordResets, tokenHash, {
-        username: user.username,
-        token_hash: tokenHash,
-        expires_at: expiresAt,
-        created_at: nowIso(),
-      });
-
-      const link = `${config.publicAppUrl}/admin/passwort-zuruecksetzen?token=${token}`;
-      await sendPasswordResetEmail(user.email, user.username, link, config.admin.passwordResetTtlMinutes);
+    if (!user || !user.email) {
+      throw new ApiError(404, 'Diese E-Mail-Adresse ist nicht registriert.');
     }
 
-    // Immer OK zurückgeben, um keine Benutzernamen-Enumeration zu ermöglichen.
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashToken(token);
+    const ttlMs = config.admin.passwordResetTtlMinutes * 60 * 1000;
+    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+
+    await setById(COL.adminPasswordResets, tokenHash, {
+      username: user.username,
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+      created_at: nowIso(),
+    });
+
+    const link = `${config.publicAppUrl}/admin/passwort-zuruecksetzen?token=${token}`;
+    await sendPasswordResetEmail(user.email, user.username, link, config.admin.passwordResetTtlMinutes);
+
     res.json({ ok: true });
   }),
 );

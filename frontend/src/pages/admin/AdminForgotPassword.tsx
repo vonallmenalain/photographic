@@ -32,13 +32,13 @@ export default function AdminForgotPassword() {
         <div className="hero">
           <div className="lock-big">🔑</div>
           <h1>Passwort vergessen</h1>
-          <p className="soft">Gib deinen Benutzernamen ein. Falls eine E-Mail-Adresse hinterlegt ist, erhältst du einen Link zum Zurücksetzen deines Passworts.</p>
+          <p className="soft">Gib deinen Benutzernamen oder deine E-Mail-Adresse ein. Wir senden dir einen Link zum Zurücksetzen deines Passworts.</p>
         </div>
         <div className="card">
           {sent ? (
             <>
               <Alert kind="success">
-                Falls ein Konto mit diesem Benutzernamen existiert und eine E-Mail-Adresse hinterlegt ist, wurde dir ein Link zugeschickt. Bitte prüfe auch deinen Spam-Ordner.
+                Wir haben dir einen Link zum Zurücksetzen deines Passworts zugeschickt. Bitte prüfe auch deinen Spam-Ordner.
               </Alert>
               <p style={{ marginTop: 16, textAlign: 'center' }}>
                 <Link to="/admin" style={{ color: 'var(--blue, #2f6fed)', fontWeight: 600, textDecoration: 'none' }}>
@@ -51,7 +51,7 @@ export default function AdminForgotPassword() {
               {error && <Alert kind="error">{error}</Alert>}
               <form onSubmit={submit}>
                 <div className="field">
-                  <label htmlFor="u">Benutzername</label>
+                  <label htmlFor="u">Benutzername / E-Mail</label>
                   <input
                     id="u"
                     value={username}
