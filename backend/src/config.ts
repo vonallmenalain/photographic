@@ -118,6 +118,9 @@ export const config = {
     // If no SMTP host is configured we log e-mails to the console (dev mode).
     devLogOnly: !optional('SMTP_HOST'),
     supportEmail: optional('SUPPORT_EMAIL', 'support@example.com'),
+    // Upper bound (ms) for establishing the SMTP connection / waiting on the
+    // server, so a misconfigured host fails fast rather than stalling requests.
+    timeoutMs: int('SMTP_TIMEOUT_MS', 10_000),
   },
 
   // Image variant settings.
