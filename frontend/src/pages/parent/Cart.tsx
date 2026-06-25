@@ -19,13 +19,35 @@ interface CartData {
   items: CartItem[];
 }
 
+interface ShippingForm {
+  firstName: string;
+  lastName: string;
+  street: string;
+  houseNo: string;
+  zip: string;
+  city: string;
+}
+
+const EMPTY_ADDRESS: ShippingForm = {
+  firstName: '',
+  lastName: '',
+  street: '',
+  houseNo: '',
+  zip: '',
+  city: '',
+};
+
 export default function Cart() {
   const [cart, setCart] = useState<CartData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [qtyDraft, setQtyDraft] = useState<Record<string, string>>({});
+  const [address, setAddress] = useState<ShippingForm>(EMPTY_ADDRESS);
   const navigate = useNavigate();
+
+  const hasPrint = !!cart?.items.some((i) => i.productType === 'print');
+  const addressComplete = Object.values(address).every((v) => v.trim().length > 0);
 
   const load = async () => {
     try {
@@ -70,11 +92,18 @@ export default function Cart() {
 
   const checkout = async () => {
     setError('');
+    if (hasPrint && !addressComplete) {
+      setError('Bitte füllen Sie alle Felder der Lieferadresse aus, damit wir die Fotos ausdrucken und versenden können.');
+      return;
+    }
     setBusy(true);
     try {
       const res = await api<{ mode: string; checkoutUrl?: string; orderId: string }>(
         '/api/parent/checkout',
-        { method: 'POST' },
+        {
+          method: 'POST',
+          body: hasPrint ? { shippingAddress: address } : {},
+        },
       );
       if (res.mode === 'stripe' && res.checkoutUrl) {
         window.location.href = res.checkoutUrl;
@@ -175,7 +204,62 @@ export default function Cart() {
             </div>
           </div>
 
-          <button className="btn block mt" onClick={checkout} disabled={busy}>
+          {hasPrint && (
+            <div className="card mt">
+              <h2 style={{ marginTop: 0, fontSize: '1.1rem' }}>Lieferadresse für ausgedruckte Fotos</h2>
+              <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
+                Ihre Bestellung enthält Fotos zum Ausdrucken. Bitte geben Sie an, wohin wir die
+                gedruckten Fotos senden dürfen. Der Versand erfolgt in ca. 3–4 Wochen.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                <AddressField
+                  label="Vorname"
+                  value={address.firstName}
+                  onChange={(v) => setAddress((a) => ({ ...a, firstName: v }))}
+                  autoComplete="given-name"
+                />
+                <AddressField
+                  label="Name"
+                  value={address.lastName}
+                  onChange={(v) => setAddress((a) => ({ ...a, lastName: v }))}
+                  autoComplete="family-name"
+                />
+                <AddressField
+                  label="Strasse"
+                  value={address.street}
+                  onChange={(v) => setAddress((a) => ({ ...a, street: v }))}
+                  autoComplete="address-line1"
+                  grow
+                />
+                <AddressField
+                  label="Nr."
+                  value={address.houseNo}
+                  onChange={(v) => setAddress((a) => ({ ...a, houseNo: v }))}
+                  width={90}
+                />
+                <AddressField
+                  label="PLZ"
+                  value={address.zip}
+                  onChange={(v) => setAddress((a) => ({ ...a, zip: v }))}
+                  autoComplete="postal-code"
+                  width={110}
+                />
+                <AddressField
+                  label="Ort"
+                  value={address.city}
+                  onChange={(v) => setAddress((a) => ({ ...a, city: v }))}
+                  autoComplete="address-level2"
+                  grow
+                />
+              </div>
+            </div>
+          )}
+
+          <button
+            className="btn block mt"
+            onClick={checkout}
+            disabled={busy || (hasPrint && !addressComplete)}
+          >
             {busy ? 'Einen Moment …' : 'Kauf abschliessen'}
           </button>
 
@@ -187,6 +271,35 @@ export default function Cart() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function AddressField({
+  label,
+  value,
+  onChange,
+  autoComplete,
+  width,
+  grow,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete?: string;
+  width?: number;
+  grow?: boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: grow ? '1 1 160px' : '0 0 auto' }}>
+      <label style={{ fontSize: '0.82rem' }}>{label}</label>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        style={{ width: width ?? (grow ? '100%' : 150), padding: '6px 8px' }}
+      />
     </div>
   );
 }

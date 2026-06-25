@@ -5,6 +5,14 @@ import { Alert, Spinner, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
 import { formatPrice, formatDate } from '../../lib/format';
 
+interface ShippingAddress {
+  first_name: string;
+  last_name: string;
+  street: string;
+  house_no: string;
+  zip: string;
+  city: string;
+}
 interface Order {
   id: string;
   email: string;
@@ -14,6 +22,7 @@ interface Order {
   created_at: string;
   payment_provider: string | null;
   payment_ref: string | null;
+  shipping_address?: ShippingAddress | null;
 }
 interface Item {
   id: string;
@@ -90,6 +99,19 @@ export default function AdminOrderDetail() {
           sobald der Druck raus ist. „Storniert“ wird ausschließlich manuell vergeben.
         </p>
       </div>
+
+      {order.shipping_address && (
+        <div className="card mb">
+          <h2>Lieferadresse</h2>
+          <div style={{ lineHeight: 1.6 }}>
+            {order.shipping_address.first_name} {order.shipping_address.last_name}
+            <br />
+            {order.shipping_address.street} {order.shipping_address.house_no}
+            <br />
+            {order.shipping_address.zip} {order.shipping_address.city}
+          </div>
+        </div>
+      )}
 
       {printItems.length > 0 && (
         <div className="card mb">
