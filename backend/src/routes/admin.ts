@@ -20,11 +20,12 @@ import {
 import { config } from '../config';
 import { asyncHandler, ApiError } from '../middleware/errorHandler';
 import { requireAdmin, ADMIN_COOKIE } from '../middleware/adminAuth';
-import { adminLoginLimiter } from '../middleware/rateLimit';
-import { signAdminToken } from '../lib/auth';
+import { adminLoginLimiter, passwordResetLimiter } from '../middleware/rateLimit';
+import { signAdminToken, hashToken } from '../lib/auth';
 import { setAuthCookie, clearAuthCookie } from '../lib/cookies';
 import { newId } from '../lib/ids';
 import { emailSchema, parse, normalizeEmail } from '../lib/validation';
+import crypto from 'crypto';
 import {
   processOriginal,
   reprocessFromOriginal,
@@ -32,6 +33,7 @@ import {
   deleteEventStorage,
   variantPath,
 } from '../lib/images';
+import { sendPasswordResetEmail } from '../lib/email';
 import { requestVerification } from '../services/verification';
 import { EVENT_STATUSES, archiveExpiredEvents, retentionExpiry } from '../services/events';
 import { matchChildByFilename } from '../lib/names';
@@ -106,6 +108,72 @@ router.post('/logout', (_req, res) => {
 router.get('/me', requireAdmin, (req, res) => {
   res.json({ username: req.admin!.username });
 });
+
+// --- Passwort vergessen / zurücksetzen (öffentlich, rate-limited) ----------
+router.post(
+  '/forgot-password',
+  passwordResetLimiter,
+  asyncHandler(async (req, res) => {
+    const { username } = parse(
+      z.object({ username: z.string().min(1) }),
+      req.body,
+    );
+
+    const user = await getById<{ username: string; email?: string }>(COL.adminUsers, username);
+
+    if (user?.email) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const tokenHash = hashToken(token);
+      const ttlMs = config.admin.passwordResetTtlMinutes * 60 * 1000;
+      const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+
+      await setById(COL.adminPasswordResets, tokenHash, {
+        username: user.username,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+        created_at: nowIso(),
+      });
+
+      const link = `${config.publicAppUrl}/admin/passwort-zuruecksetzen?token=${token}`;
+      await sendPasswordResetEmail(user.email, user.username, link, config.admin.passwordResetTtlMinutes);
+    }
+
+    // Immer OK zurückgeben, um keine Benutzernamen-Enumeration zu ermöglichen.
+    res.json({ ok: true });
+  }),
+);
+
+router.post(
+  '/reset-password',
+  passwordResetLimiter,
+  asyncHandler(async (req, res) => {
+    const { token, password } = parse(
+      z.object({ token: z.string().min(1), password: z.string().min(8, 'Das Passwort muss mindestens 8 Zeichen lang sein.') }),
+      req.body,
+    );
+
+    const tokenHash = hashToken(token);
+    const resetDoc = await getById<{ username: string; expires_at: string }>(
+      COL.adminPasswordResets,
+      tokenHash,
+    );
+
+    if (!resetDoc || new Date(resetDoc.expires_at) < new Date()) {
+      throw new ApiError(400, 'Der Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.');
+    }
+
+    const hash = bcrypt.hashSync(password, 10);
+    await updateById(COL.adminUsers, resetDoc.username, {
+      password_hash: hash,
+      updated_at: nowIso(),
+    });
+
+    // Token ungültig machen
+    await deleteById(COL.adminPasswordResets, tokenHash);
+
+    res.json({ ok: true });
+  }),
+);
 
 // All routes below require admin.
 router.use(requireAdmin);

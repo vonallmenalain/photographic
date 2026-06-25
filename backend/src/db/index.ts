@@ -11,6 +11,7 @@ import { db, admin } from '../lib/firebase';
 
 export const COL = {
   adminUsers: 'admin_users',
+  adminPasswordResets: 'admin_password_resets',
   events: 'events',
   children: 'children',
   parentEmails: 'parent_emails',

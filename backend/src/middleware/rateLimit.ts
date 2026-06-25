@@ -24,3 +24,11 @@ export const adminLoginLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Zu viele Anmeldeversuche. Bitte warte einen Moment.' },
 });
+
+export const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Zu viele Anfragen. Bitte versuche es später erneut.' },
+});

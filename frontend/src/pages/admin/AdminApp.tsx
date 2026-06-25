@@ -13,8 +13,10 @@ import Import from './Import';
 import AdminOrders from './AdminOrders';
 import AdminOrderDetail from './AdminOrderDetail';
 import Reports from './Reports';
+import AdminForgotPassword from './AdminForgotPassword';
+import AdminResetPassword from './AdminResetPassword';
 
-export default function AdminApp() {
+function AuthGatedAdmin() {
   const [state, setState] = useState<'loading' | 'in' | 'out'>('loading');
   const [username, setUsername] = useState('');
 
@@ -55,5 +57,15 @@ export default function AdminApp() {
         <Route path="*" element={<Navigate to="dashboard" replace />} />
       </Routes>
     </AdminLayout>
+  );
+}
+
+export default function AdminApp() {
+  return (
+    <Routes>
+      <Route path="passwort-vergessen" element={<AdminForgotPassword />} />
+      <Route path="passwort-zuruecksetzen" element={<AdminResetPassword />} />
+      <Route path="*" element={<AuthGatedAdmin />} />
+    </Routes>
   );
 }

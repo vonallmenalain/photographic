@@ -54,21 +54,24 @@ async function ensureDefaultProducts(): Promise<void> {
 }
 
 async function ensureAdminFromEnv(): Promise<void> {
-  const { username, passwordHash, plainPassword } = config.admin;
+  const { username, passwordHash, plainPassword, email } = config.admin;
   if (!passwordHash && !plainPassword) return; // nothing configured yet
 
   const hash = passwordHash || bcrypt.hashSync(plainPassword, 10);
   // Admin user documents are keyed by username for a stable, unique identity.
   const existing = await getById<{ username: string }>(COL.adminUsers, username);
+  const emailUpdate = email ? { email } : {};
   if (existing) {
     await updateById(COL.adminUsers, username, {
       password_hash: hash,
+      ...emailUpdate,
       updated_at: nowIso(),
     });
   } else {
     await setById(COL.adminUsers, username, {
       username,
       password_hash: hash,
+      ...emailUpdate,
       created_at: nowIso(),
       updated_at: nowIso(),
     });
