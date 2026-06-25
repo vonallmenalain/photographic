@@ -25,8 +25,54 @@ export async function migrate(): Promise<void> {
   await ensureAdminFromEnv();
   await ensureAdminEmail();
   await dedupeAdminAccounts();
+  await normalizeOrderStatuses();
   // eslint-disable-next-line no-console
   console.log(`[migrate] Firestore ready (project=${config.firebase.projectId})`);
+}
+
+/**
+ * Selbstheilend: bringt bestehende Bestellungen auf den vereinfachten
+ * Status-Lebenszyklus (pending / completed / cancelled). Frühere Stati wie
+ * `paid`, `fulfilled`, `failed` oder `refunded` werden einmalig umgeschrieben.
+ *
+ *  - `fulfilled`            → `completed`
+ *  - `paid`                 → `pending`, falls die Bestellung ein Druckprodukt
+ *                             enthält, sonst `completed`
+ *  - `failed` / `refunded`  → `cancelled`
+ *
+ * `cart` und `checkout_started` bleiben als interne Zustände des Kaufflusses
+ * unangetastet, ebenso bereits vereinfachte Bestellungen.
+ */
+async function normalizeOrderStatuses(): Promise<void> {
+  const orders = await runQuery<{ status: string }>(col(COL.orders));
+  const legacy = orders.filter((o) =>
+    ['paid', 'fulfilled', 'failed', 'refunded'].includes(o.status),
+  );
+  if (legacy.length === 0) return;
+
+  const products = await runQuery<{ id: string; type: string }>(col(COL.products));
+  const productType = new Map(products.map((p) => [p.id, p.type]));
+
+  let updated = 0;
+  for (const order of legacy) {
+    let next: string;
+    if (order.status === 'fulfilled') {
+      next = 'completed';
+    } else if (order.status === 'failed' || order.status === 'refunded') {
+      next = 'cancelled';
+    } else {
+      // paid – depends on whether a print product is part of the order.
+      const items = await runQuery<{ product_id: string }>(
+        col(COL.orderItems).where('order_id', '==', order.id),
+      );
+      const hasPrint = items.some((it) => productType.get(it.product_id) === 'print');
+      next = hasPrint ? 'pending' : 'completed';
+    }
+    await updateById(COL.orders, order.id, { status: next, updated_at: nowIso() });
+    updated += 1;
+  }
+  // eslint-disable-next-line no-console
+  console.log(`[migrate] normalised ${updated} legacy order status(es)`);
 }
 
 async function ensureDefaultProducts(): Promise<void> {

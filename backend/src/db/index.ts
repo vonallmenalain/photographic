@@ -25,6 +25,7 @@ export const COL = {
   orderItems: 'order_items',
   downloadGrants: 'download_grants',
   reports: 'reports',
+  reminders: 'reminders',
   auditLog: 'audit_log',
 } as const;
 
