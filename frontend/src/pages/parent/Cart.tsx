@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError, imageUrl } from '../../api/client';
 import { Alert, Spinner, TrustNote } from '../../components/common';
+import { useCart } from '../../context/Cart';
 import { formatPrice } from '../../lib/format';
 
 interface CartItem {
@@ -45,6 +46,7 @@ export default function Cart() {
   const [qtyDraft, setQtyDraft] = useState<Record<string, string>>({});
   const [address, setAddress] = useState<ShippingForm>(EMPTY_ADDRESS);
   const navigate = useNavigate();
+  const { refresh: refreshCart } = useCart();
 
   const hasPrint = !!cart?.items.some((i) => i.productType === 'print');
   const addressComplete = Object.values(address).every((v) => v.trim().length > 0);
@@ -54,6 +56,7 @@ export default function Cart() {
       const res = await api<{ cart: CartData }>('/api/parent/cart');
       setCart(res.cart);
       setQtyDraft({});
+      refreshCart();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Warenkorb konnte nicht geladen werden.');
     } finally {

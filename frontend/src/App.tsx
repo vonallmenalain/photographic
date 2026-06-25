@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ParentAuthProvider, useParentAuth } from './context/ParentAuth';
+import { CartProvider } from './context/Cart';
 import { Layout } from './components/Layout';
 import { Spinner } from './components/common';
 
@@ -25,20 +26,22 @@ function RequireParent({ children }: { children: JSX.Element }) {
 function ParentRoutes() {
   return (
     <ParentAuthProvider>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/verifizieren" element={<Verify />} />
-          <Route path="/galerie" element={<RequireParent><GalleryPreview /></RequireParent>} />
-          <Route path="/galerie/fotos" element={<RequireParent><Gallery /></RequireParent>} />
-          <Route path="/warenkorb" element={<RequireParent><Cart /></RequireParent>} />
-          <Route path="/bestellungen" element={<RequireParent><Orders /></RequireParent>} />
-          <Route path="/bestellung/:id" element={<RequireParent><OrderDetail /></RequireParent>} />
-          <Route path="/hilfe" element={<Help />} />
-          <Route path="/datenschutz" element={<Privacy />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Layout>
+      <CartProvider>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/verifizieren" element={<Verify />} />
+            <Route path="/galerie" element={<RequireParent><GalleryPreview /></RequireParent>} />
+            <Route path="/galerie/fotos" element={<RequireParent><Gallery /></RequireParent>} />
+            <Route path="/warenkorb" element={<RequireParent><Cart /></RequireParent>} />
+            <Route path="/bestellungen" element={<RequireParent><Orders /></RequireParent>} />
+            <Route path="/bestellung/:id" element={<RequireParent><OrderDetail /></RequireParent>} />
+            <Route path="/hilfe" element={<Help />} />
+            <Route path="/datenschutz" element={<Privacy />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Layout>
+      </CartProvider>
     </ParentAuthProvider>
   );
 }
