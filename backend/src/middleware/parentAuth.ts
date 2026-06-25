@@ -44,7 +44,7 @@ export async function requireParent(req: Request, _res: Response, next: NextFunc
   try {
     const parent = await loadParent(req);
     if (!parent) {
-      throw new ApiError(401, 'Bitte bestätige zuerst deine E-Mail-Adresse.');
+      throw new ApiError(401, 'Bitte bestätigen Sie zuerst Ihre E-Mail-Adresse.');
     }
     req.parent = parent;
     next();

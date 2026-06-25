@@ -57,6 +57,7 @@ interface ProductDoc {
 interface PhotoLite {
   storage_key: string;
   ext: string;
+  child_id?: string | null;
 }
 
 async function getOrCreateCart(emailId: string): Promise<string> {
@@ -118,7 +119,7 @@ export async function addToCart(
 ): Promise<void> {
   if (!(await canEmailSeePhoto(emailId, photoId))) {
     // Do not reveal whether the photo exists.
-    throw new ApiError(403, 'Dieses Foto ist für dich nicht verfügbar.');
+    throw new ApiError(403, 'Dieses Foto ist für Sie nicht verfügbar.');
   }
   const product = await getById<ProductDoc>(COL.products, productId);
   if (!product || product.active !== 1) {
@@ -156,7 +157,7 @@ export async function updateCartItemQty(
   const cartId = await getOrCreateCart(emailId);
   const item = await getById<OrderItemDoc>(COL.orderItems, itemId);
   if (!item || item.order_id !== cartId) {
-    throw new ApiError(404, 'Dieser Artikel ist nicht in deinem Warenkorb.');
+    throw new ApiError(404, 'Dieser Artikel ist nicht in Ihrem Warenkorb.');
   }
   await updateById(COL.orderItems, itemId, { qty });
   await recalcTotal(cartId);
@@ -188,7 +189,7 @@ export async function beginCheckout(
   emailId: string,
 ): Promise<{ orderId: string; total_cents: number; currency: string }> {
   const cart = await getCart(emailId);
-  if (cart.items.length === 0) throw new ApiError(400, 'Dein Warenkorb ist leer.');
+  if (cart.items.length === 0) throw new ApiError(400, 'Ihr Warenkorb ist leer.');
   await updateById(COL.orders, cart.id, { status: 'checkout_started', updated_at: nowIso() });
   return { orderId: cart.id, total_cents: cart.total_cents, currency: cart.currency };
 }
@@ -240,6 +241,7 @@ export interface OrderDetail {
     photo_id: string;
     product_name: string;
     product_type: string;
+    child_name: string | null;
     qty: number;
     unit_price_cents: number;
     storage_key: string;
@@ -264,10 +266,14 @@ export async function getOrderForEmail(emailId: string, orderId: string): Promis
           .where('photo_id', '==', oi.photo_id),
       ),
     ]);
+    const child = photo?.child_id
+      ? await getById<{ name: string }>(COL.children, photo.child_id)
+      : null;
     items.push({
       photo_id: oi.photo_id,
       product_name: oi.product_name,
       product_type: product?.type ?? 'digital',
+      child_name: child?.name ?? null,
       qty: oi.qty,
       unit_price_cents: oi.unit_price_cents,
       storage_key: photo?.storage_key ?? '',

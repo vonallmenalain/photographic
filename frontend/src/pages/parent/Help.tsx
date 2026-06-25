@@ -42,14 +42,14 @@ export default function Help() {
     <div className="narrow" style={{ margin: '0 auto' }}>
       <h1>Hilfe &amp; Kontakt</h1>
       <p className="soft">
-        Du findest keine Fotos, die hinterlegte E-Mail-Adresse stimmt nicht, oder etwas funktioniert
-        nicht? Schreib uns kurz – wir kümmern uns darum.
+        Sie finden keine Fotos, die hinterlegte E-Mail-Adresse stimmt nicht, oder etwas funktioniert
+        nicht? Schreiben Sie uns kurz – wir kümmern uns darum.
       </p>
 
       <div className="card">
         {sent ? (
           <Alert kind="success">
-            Danke, deine Meldung ist bei uns eingegangen. Wir melden uns bei dir.
+            Danke, Ihre Meldung ist bei uns eingegangen. Wir melden uns bei Ihnen.
           </Alert>
         ) : (
           <form onSubmit={submit}>
@@ -65,7 +65,7 @@ export default function Help() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="email">Deine E-Mail-Adresse (für unsere Antwort)</label>
+              <label htmlFor="email">Ihre E-Mail-Adresse (für unsere Antwort)</label>
               <input
                 id="email"
                 type="email"
@@ -81,7 +81,7 @@ export default function Help() {
                 rows={5}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Beschreibe kurz dein Anliegen …"
+                placeholder="Beschreiben Sie kurz Ihr Anliegen …"
                 required
               />
             </div>
@@ -95,7 +95,7 @@ export default function Help() {
       <div style={{ marginTop: 18 }}>
         <TrustNote>
           Aus Sicherheitsgründen verraten wir nicht, ob eine bestimmte E-Mail-Adresse hinterlegt ist.
-          Wenn deine Adresse freigeschaltet ist, erhältst du immer einen Zugangscode.
+          Wenn Ihre Adresse freigeschaltet ist, erhalten Sie immer einen Zugangscode.
         </TrustNote>
       </div>
     </div>

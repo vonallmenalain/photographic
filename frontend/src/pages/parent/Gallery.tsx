@@ -49,7 +49,7 @@ export default function Gallery() {
     })();
   }, []);
 
-  if (loading) return <Spinner label="Deine Fotos werden geladen …" />;
+  if (loading) return <Spinner label="Fotos werden geladen …" />;
 
   const totalPhotos = events.reduce((n, e) => n + e.photos.length, 0);
 
@@ -57,9 +57,9 @@ export default function Gallery() {
     <div>
       <div className="row between mb">
         <div>
-          <h1>Deine Fotos</h1>
+          <h1>Fotos</h1>
           <p className="soft" style={{ marginBottom: 0 }}>
-            Du siehst ausschließlich Fotos, die deiner E-Mail-Adresse zugeordnet wurden.
+            Es sind ausschliesslich Fotos ersichtlich, die Ihrer E-Mail Adresse zugeordnet wurden.
           </p>
         </div>
       </div>
@@ -70,8 +70,8 @@ export default function Gallery() {
         <div className="card">
           <h2>Aktuell sind keine Fotos verfügbar</h2>
           <p className="soft">
-            Mögliche Gründe: Die Fotos sind noch nicht freigegeben, deine E-Mail-Adresse wurde anders
-            geschrieben, oder die Zuordnung fehlt noch. Wir helfen dir gerne weiter.
+            Mögliche Gründe: Die Fotos sind noch nicht freigegeben, die E-Mail-Adresse wurde anders
+            geschrieben, oder die Zuordnung fehlt noch. Wir helfen Ihnen gerne weiter.
           </p>
           <Link to="/hilfe" className="btn secondary">
             Problem melden
@@ -103,7 +103,7 @@ export default function Gallery() {
       {totalPhotos > 0 && (
         <TrustNote>
           Vorschaubilder sind aus Datenschutz- und Urheberrechtsgründen mit Wasserzeichen versehen.
-          Die hochwertige Originaldatei erhältst du erst nach dem Kauf.
+          Die hochwertige Originaldatei erhalten Sie erst nach dem Kauf.
         </TrustNote>
       )}
 
@@ -158,7 +158,7 @@ function Lightbox({
   return (
     <div className="lightbox" onClick={onClose}>
       <div className="inner" onClick={(e) => e.stopPropagation()}>
-        <button className="close" onClick={onClose} aria-label="Schließen">
+        <button className="close" onClick={onClose} aria-label="Schliessen">
           ×
         </button>
         <img

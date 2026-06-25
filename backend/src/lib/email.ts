@@ -48,25 +48,25 @@ const wrap = (title: string, body: string) => `
       ${body}
     </div>
     <p style="text-align:center;color:#9aa5b1;font-size:12px;margin-top:24px;">
-      Diese Nachricht schützt Kinderfotos. Bitte gib deinen Code oder Link nicht weiter.
+      Diese Nachricht schützt Kinderfotos. Bitte geben Sie Ihren Code oder Link nicht weiter.
     </p>
   </div>
 </body></html>`;
 
 export async function sendVerificationEmail(to: string, code: string, link: string) {
-  const subject = 'Dein Zugangscode für die Foto-Galerie';
+  const subject = 'Ihr Zugangscode für die Foto-Galerie';
   const html = wrap(
-    'Dein Zugang zur Foto-Galerie',
-    `<p style="font-size:15px;line-height:1.6;">Damit deine Kinderfotos geschützt bleiben, bestätige bitte deine E-Mail-Adresse.</p>
-     <p style="font-size:15px;line-height:1.6;">Dein Bestätigungscode lautet:</p>
+    'Ihr Zugang zur Foto-Galerie',
+    `<p style="font-size:15px;line-height:1.6;">Damit Ihre Kinderfotos geschützt bleiben, bestätigen Sie bitte Ihre E-Mail-Adresse.</p>
+     <p style="font-size:15px;line-height:1.6;">Ihr Bestätigungscode lautet:</p>
      <p style="font-size:34px;letter-spacing:8px;font-weight:700;text-align:center;background:#f0f4f8;border-radius:12px;padding:18px 0;margin:18px 0;">${code}</p>
-     <p style="font-size:15px;line-height:1.6;">Oder bestätige direkt mit einem Klick:</p>
+     <p style="font-size:15px;line-height:1.6;">Oder bestätigen Sie direkt mit einem Klick:</p>
      <p style="text-align:center;margin:20px 0;">
        <a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:600;">E-Mail bestätigen</a>
      </p>
-     <p style="font-size:13px;color:#7b8794;line-height:1.6;">Der Code ist ${config.verification.codeTtlMinutes} Minuten gültig. Wenn du das nicht angefragt hast, kannst du diese E-Mail ignorieren.</p>`,
+     <p style="font-size:13px;color:#7b8794;line-height:1.6;">Der Code ist ${config.verification.codeTtlMinutes} Minuten gültig. Wenn Sie das nicht angefragt haben, können Sie diese E-Mail ignorieren.</p>`,
   );
-  const text = `Dein Bestätigungscode: ${code}\n\nOder bestätige per Link: ${link}\n\nDer Code ist ${config.verification.codeTtlMinutes} Minuten gültig.`;
+  const text = `Ihr Bestätigungscode: ${code}\n\nOder bestätigen Sie per Link: ${link}\n\nDer Code ist ${config.verification.codeTtlMinutes} Minuten gültig.`;
   await sendMail({ to, subject, html, text });
 }
 
@@ -86,16 +86,16 @@ export async function sendPasswordResetEmail(to: string, username: string, link:
 }
 
 export async function sendOrderConfirmation(to: string, orderId: string, summary: string, link: string) {
-  const subject = 'Deine Bestellung ist bestätigt';
+  const subject = 'Ihre Bestellung ist bestätigt';
   const html = wrap(
-    'Vielen Dank für deine Bestellung',
-    `<p style="font-size:15px;line-height:1.6;">Wir haben deine Bestellung erhalten und bestätigt.</p>
+    'Vielen Dank für Ihre Bestellung',
+    `<p style="font-size:15px;line-height:1.6;">Wir haben Ihre Bestellung erhalten und bestätigt.</p>
      <pre style="font-size:14px;background:#f0f4f8;border-radius:12px;padding:16px;white-space:pre-wrap;">${summary}</pre>
      <p style="text-align:center;margin:20px 0;">
        <a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:600;">Bestellung & Downloads ansehen</a>
      </p>
      <p style="font-size:13px;color:#7b8794;">Bestellnummer: ${orderId}</p>`,
   );
-  const text = `Vielen Dank für deine Bestellung (Nr. ${orderId}).\n\n${summary}\n\nBestellung & Downloads: ${link}`;
+  const text = `Vielen Dank für Ihre Bestellung (Nr. ${orderId}).\n\n${summary}\n\nBestellung & Downloads: ${link}`;
   await sendMail({ to, subject, html, text });
 }

@@ -7,6 +7,7 @@ import { formatPrice, formatDate } from '../../lib/format';
 interface Item {
   productName: string;
   productType: string;
+  childName: string | null;
   qty: number;
   unitPriceCents: number;
   thumbUrl: string;
@@ -42,7 +43,7 @@ export default function OrderDetail() {
       <div className="narrow" style={{ margin: '0 auto' }}>
         <Alert kind="error">{error || 'Bestellung nicht gefunden.'}</Alert>
         <Link to="/bestellungen" className="btn secondary">
-          Zu deinen Bestellungen
+          Zu den Bestellungen
         </Link>
       </div>
     );
@@ -53,7 +54,7 @@ export default function OrderDetail() {
     <div className="narrow" style={{ margin: '0 auto' }}>
       {justPaid && isDone && (
         <Alert kind="success">
-          Vielen Dank! Deine Bestellung war erfolgreich. Eine Bestätigung wurde an deine
+          Vielen Dank! Ihre Bestellung war erfolgreich. Eine Bestätigung wurde an Ihre
           E-Mail-Adresse gesendet.
         </Alert>
       )}
@@ -106,21 +107,25 @@ export default function OrderDetail() {
 
       {isDone && (
         <div className="card">
-          <h2>Downloads &amp; Nächste Schritte</h2>
+          <h2>Downloads</h2>
           {order.items.some((i) => i.downloadUrl) ? (
             <ul className="list-reset">
               {order.items
                 .filter((i) => i.downloadUrl)
                 .map((i, idx) => (
                   <li key={idx} style={{ marginBottom: 10 }}>
-                    <DownloadLink url={i.downloadUrl!} label={i.productName} />
+                    <DownloadLink
+                      url={i.downloadUrl!}
+                      thumbUrl={i.thumbUrl}
+                      label={i.childName || i.productName}
+                    />
                   </li>
                 ))}
             </ul>
           ) : (
             <p className="soft">
-              Deine Bestellung enthält gedruckte Produkte. Wir bereiten den Druckauftrag vor und
-              melden uns bei dir.
+              Ihre Bestellung enthält gedruckte Produkte. Wir bereiten den Druckauftrag vor und
+              melden uns bei Ihnen.
             </p>
           )}
         </div>
@@ -129,12 +134,26 @@ export default function OrderDetail() {
   );
 }
 
-function DownloadLink({ url, label }: { url: string; label: string }) {
+function DownloadLink({ url, thumbUrl, label }: { url: string; thumbUrl: string; label: string }) {
   // Downloads require the parent session cookie; a plain link sends it because
   // the file route is same-origin to the API and uses credentials via browser.
   return (
-    <a className="btn secondary" href={`${API_BASE}${url}`} rel="noreferrer">
-      ⬇︎ {label} herunterladen
+    <a
+      className="btn secondary"
+      href={`${API_BASE}${url}`}
+      rel="noreferrer"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}
+    >
+      <img
+        src={imageUrl(thumbUrl)}
+        alt=""
+        width={40}
+        height={40}
+        style={{ borderRadius: 6, objectFit: 'cover' }}
+        draggable={false}
+      />
+      <span>{label}</span>
+      <span aria-hidden="true">⬇︎</span>
     </a>
   );
 }
