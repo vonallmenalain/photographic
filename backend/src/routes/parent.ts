@@ -36,7 +36,7 @@ const router = Router();
 
 // Neutral message that never reveals whether an address exists.
 const NEUTRAL_MESSAGE =
-  'Falls diese E-Mail-Adresse für Fotos freigeschaltet ist, senden wir dir einen Zugangslink und einen Code.';
+  'Falls diese E-Mail-Adresse für Fotos freigeschaltet ist, senden wir Ihnen einen Zugangslink und einen Code.';
 
 interface ProductDoc {
   name: string;
@@ -304,6 +304,7 @@ router.get(
         items: order.items.map((i) => ({
           productName: i.product_name,
           productType: i.product_type,
+          childName: i.child_name,
           qty: i.qty,
           unitPriceCents: i.unit_price_cents,
           thumbUrl: `/files/preview-image?token=${signFileToken(i.photo_id, 'thumb', 3600)}`,
@@ -338,7 +339,7 @@ router.post(
       status: 'open',
       created_at: nowIso(),
     });
-    res.json({ message: 'Danke, deine Meldung ist bei uns eingegangen. Wir melden uns bei dir.' });
+    res.json({ message: 'Danke, Ihre Meldung ist bei uns eingegangen. Wir melden uns bei Ihnen.' });
   }),
 );
 

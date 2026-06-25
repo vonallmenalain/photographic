@@ -129,7 +129,7 @@ export default function Verify() {
     try {
       if (firebaseEnabled) {
         await sendParentSignInLink(email);
-        setResent('Wir haben dir erneut einen Anmeldelink an deine E-Mail-Adresse gesendet.');
+        setResent('Wir haben Ihnen erneut einen Anmeldelink an Ihre E-Mail-Adresse gesendet.');
         return;
       }
       const res = await api<{ message: string }>('/api/parent/request-code', {
@@ -138,14 +138,14 @@ export default function Verify() {
       });
       setResent(res.message);
     } catch {
-      setResent('Falls die Adresse freigeschaltet ist, haben wir dir erneut eine Nachricht gesendet.');
+      setResent('Falls die Adresse freigeschaltet ist, haben wir Ihnen erneut eine Nachricht gesendet.');
     }
   };
 
   if ((linkToken || isFirebaseLink) && busy) {
     return (
       <div className="narrow" style={{ margin: '0 auto' }}>
-        <Spinner label="Wir bestätigen deine E-Mail-Adresse …" />
+        <Spinner label="Wir bestätigen Ihre E-Mail-Adresse …" />
       </div>
     );
   }
@@ -160,8 +160,8 @@ export default function Verify() {
           <h1>E-Mail bestätigen</h1>
           <p className="soft">
             {needsEmailForLink
-              ? 'Bitte bestätige deine E-Mail-Adresse, um die Anmeldung abzuschließen.'
-              : 'Wir haben dir einen Anmeldelink an deine E-Mail-Adresse gesendet. Bitte öffne die E-Mail und klicke auf den Link.'}
+              ? 'Bitte bestätigen Sie Ihre E-Mail-Adresse, um die Anmeldung abzuschliessen.'
+              : 'Wir haben Ihnen einen Anmeldelink an Ihre E-Mail-Adresse gesendet. Bitte öffnen Sie die E-Mail und klicken Sie auf den Link.'}
           </p>
         </div>
 
@@ -184,7 +184,7 @@ export default function Verify() {
               {busy
                 ? 'Wird geprüft …'
                 : needsEmailForLink
-                  ? 'Anmeldung abschließen'
+                  ? 'Anmeldung abschliessen'
                   : 'Anmeldelink erneut senden'}
             </button>
           </form>
@@ -192,8 +192,8 @@ export default function Verify() {
 
         <div style={{ marginTop: 18 }}>
           <TrustNote>
-            Der Link ist nur kurze Zeit gültig. Bitte gib ihn nicht weiter – er schützt den Zugang zu
-            deinen Fotos.
+            Der Link ist nur kurze Zeit gültig. Bitte geben Sie ihn nicht weiter – er schützt den
+            Zugang zu Ihren Fotos.
           </TrustNote>
         </div>
       </div>
@@ -207,7 +207,8 @@ export default function Verify() {
         <div className="lock-big">✉️</div>
         <h1>E-Mail bestätigen</h1>
         <p className="soft">
-          Wir haben dir einen 6-stelligen Code an deine E-Mail-Adresse gesendet. Gib ihn hier ein.
+          Wir haben Ihnen einen 6-stelligen Code an Ihre E-Mail-Adresse gesendet. Geben Sie ihn hier
+          ein.
         </p>
       </div>
 
@@ -254,8 +255,8 @@ export default function Verify() {
 
       <div style={{ marginTop: 18 }}>
         <TrustNote>
-          Der Code ist nur kurze Zeit gültig. Bitte gib ihn nicht weiter – er schützt den Zugang zu
-          deinen Fotos.
+          Der Code ist nur kurze Zeit gültig. Bitte geben Sie ihn nicht weiter – er schützt den
+          Zugang zu Ihren Fotos.
         </TrustNote>
       </div>
     </div>

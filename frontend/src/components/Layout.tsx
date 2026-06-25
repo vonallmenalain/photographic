@@ -34,7 +34,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="container page-pad">{children}</main>
       <footer className="footer">
         <div className="container">
-          Diese App schützt Kinderfotos bewusst. Deine Fotos sind nur nach Bestätigung deiner
+          Diese App schützt Kinderfotos bewusst. Die Fotos sind nur nach Bestätigung Ihrer
           E-Mail-Adresse sichtbar. · <Link to="/datenschutz">Datenschutz</Link> ·{' '}
           <Link to="/hilfe">Hilfe & Kontakt</Link>
         </div>

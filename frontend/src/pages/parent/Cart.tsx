@@ -99,7 +99,7 @@ export default function Cart() {
 
       {!cart || cart.items.length === 0 ? (
         <div className="card center">
-          <p className="soft">Dein Warenkorb ist leer.</p>
+          <p className="soft">Der Warenkorb ist leer.</p>
           <Link to="/galerie" className="btn">
             Zur Galerie
           </Link>
@@ -176,13 +176,13 @@ export default function Cart() {
           </div>
 
           <button className="btn block mt" onClick={checkout} disabled={busy}>
-            {busy ? 'Einen Moment …' : 'Kauf abschließen'}
+            {busy ? 'Einen Moment …' : 'Kauf abschliessen'}
           </button>
 
           <div style={{ marginTop: 18 }}>
             <TrustNote>
-              Der Kauf ist nur mit deiner bestätigten E-Mail-Adresse möglich. Nach dem Kauf erhältst
-              du eine Bestätigung und – bei digitalen Produkten – deine Download-Dateien.
+              Der Kauf ist nur mit Ihrer bestätigten E-Mail-Adresse möglich. Nach dem Kauf erhalten
+              Sie eine Bestätigung und – bei digitalen Produkten – Ihre Download-Dateien.
             </TrustNote>
           </div>
         </>

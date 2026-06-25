@@ -28,7 +28,7 @@ export default function Landing() {
         await sendParentSignInLink(email);
         sessionStorage.setItem('pending_email', email.trim().toLowerCase());
         setMessage(
-          'Wir haben dir einen Anmeldelink an deine E-Mail-Adresse gesendet. Bitte öffne die E-Mail und klicke auf den Link, um deine Fotos zu sehen.',
+          'Wir haben Ihnen einen Anmeldelink an Ihre E-Mail-Adresse gesendet. Bitte öffnen Sie die E-Mail und klicken Sie auf den Link, um Ihre Fotos zu sehen.',
         );
       } else {
         const res = await api<{ message: string }>('/api/parent/request-code', {
@@ -51,11 +51,11 @@ export default function Landing() {
     <div className="narrow" style={{ margin: '0 auto' }}>
       <div className="hero">
         <div className="lock-big">🔒</div>
-        <h1>Deine Kinderfotos – sicher &amp; geschützt</h1>
+        <h1>Ihre Kinderfotos – sicher &amp; geschützt</h1>
         <p className="soft">
-          Gib deine E-Mail-Adresse ein. Wir senden dir{' '}
-          {firebaseEnabled ? 'einen sicheren Anmeldelink' : 'einen Zugangscode'}, damit nur du deine
-          zugeordneten Fotos sehen kannst.
+          Geben Sie Ihre E-Mail-Adresse ein. Wir senden Ihnen{' '}
+          {firebaseEnabled ? 'einen sicheren Anmeldelink' : 'einen Zugangscode'}, damit nur Sie Ihre
+          zugeordneten Fotos sehen können.
         </p>
       </div>
 
@@ -91,7 +91,7 @@ export default function Landing() {
 
       <div style={{ marginTop: 18 }}>
         <TrustNote>
-          <strong>Warum eine Bestätigung?</strong> Wir zeigen Fotos erst nach Bestätigung deiner
+          <strong>Warum eine Bestätigung?</strong> Wir zeigen Fotos erst nach Bestätigung Ihrer
           E-Mail-Adresse an. So sehen nur berechtigte Personen die Bilder. Es gibt keine offenen
           Galerien und keine erratbaren Links.
         </TrustNote>

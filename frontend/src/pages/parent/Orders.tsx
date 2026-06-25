@@ -26,10 +26,10 @@ export default function Orders() {
 
   return (
     <div className="narrow" style={{ margin: '0 auto' }}>
-      <h1>Deine Bestellungen</h1>
+      <h1>Bestellungen</h1>
       {orders.length === 0 ? (
         <div className="card center">
-          <p className="soft">Du hast noch keine Bestellungen.</p>
+          <p className="soft">Es sind noch keine Bestellungen vorhanden.</p>
           <Link to="/galerie" className="btn">
             Zur Galerie
           </Link>
