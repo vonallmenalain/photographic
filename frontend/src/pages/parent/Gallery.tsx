@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, ApiError, imageUrl } from '../../api/client';
 import { Alert, Spinner, TrustNote } from '../../components/common';
 import { ProtectedImage } from '../../components/ProtectedImage';
+import { useCart } from '../../context/Cart';
 import { formatPrice } from '../../lib/format';
 
 interface Photo {
@@ -39,6 +40,7 @@ export default function Gallery() {
   // owned or already in the cart so the same photo can't be added twice.
   const [purchasedIds, setPurchasedIds] = useState<Set<string>>(new Set());
   const [cartIds, setCartIds] = useState<Set<string>>(new Set());
+  const { refresh: refreshCart } = useCart();
 
   useEffect(() => {
     (async () => {
@@ -149,6 +151,7 @@ export default function Gallery() {
                     inCart={inCart}
                     onAdded={(photoId, productType) => {
                       if (productType === 'digital') markInCart(photoId);
+                      refreshCart();
                     }}
                   />
                 </figure>
@@ -173,6 +176,7 @@ export default function Gallery() {
           inCart={cartIds.has(active.id)}
           onAdded={(photoId, productType) => {
             if (productType === 'digital') markInCart(photoId);
+            refreshCart();
           }}
           onClose={() => setActive(null)}
         />

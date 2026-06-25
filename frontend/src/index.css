@@ -52,15 +52,92 @@ p { margin: 0 0 1rem; }
   justify-content: space-between;
   height: 64px;
 }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text); }
 .brand:hover { text-decoration: none; }
-.brand .lock {
-  width: 30px; height: 30px; border-radius: 9px;
+.brand-mark {
+  font-family: 'Permanent Marker', 'Segoe UI', cursive;
+  font-size: 1.85rem;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  color: var(--text);
   background: linear-gradient(135deg, var(--primary), #5b8def);
-  display: grid; place-items: center; color: #fff; font-size: 15px;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
-.nav-actions { display: flex; align-items: center; gap: 14px; }
+.nav-actions { display: flex; align-items: center; gap: 12px; }
 .nav-actions .muted { color: var(--text-soft); font-size: 0.9rem; }
+.nav-link { color: var(--text-soft); font-weight: 600; font-size: 0.95rem; }
+.nav-link:hover { color: var(--primary); text-decoration: none; }
+
+/* Round icon buttons in the app header (cart + profile) */
+.icon-btn {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 42px; height: 42px; padding: 0;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); color: var(--text-soft);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+.icon-btn:hover {
+  background: var(--surface-2); border-color: var(--primary);
+  color: var(--primary); text-decoration: none; transform: translateY(-1px);
+}
+.icon-btn:focus-visible {
+  outline: none; box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.25);
+}
+
+/* Cart icon + count badge */
+.cart-btn .cart-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: var(--primary); color: #fff;
+  font-size: 0.7rem; font-weight: 700; line-height: 1;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* Profile icon + dropdown */
+.profile-menu { position: relative; display: inline-flex; }
+.profile-btn[aria-expanded='true'] {
+  background: var(--surface-2); border-color: var(--primary); color: var(--primary);
+}
+.profile-status {
+  position: absolute; bottom: 1px; right: 1px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--success); border: 2px solid var(--surface);
+}
+.profile-dropdown {
+  position: absolute; top: calc(100% + 10px); right: 0;
+  min-width: 230px; padding: 6px; z-index: 50;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  animation: modal-pop 0.14s ease-out;
+}
+.profile-dropdown-header {
+  padding: 10px 12px 8px; display: flex; flex-direction: column; gap: 2px;
+}
+.profile-dropdown-label {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted); font-weight: 700;
+}
+.profile-dropdown-email {
+  font-size: 0.85rem; font-weight: 600; color: var(--text); word-break: break-all;
+}
+.profile-dropdown-divider { height: 1px; margin: 4px 6px; background: var(--border); }
+.profile-dropdown-item {
+  appearance: none; display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 12px; background: transparent; color: var(--text);
+  border: none; border-radius: 9px; font: inherit; font-size: 0.92rem; font-weight: 600;
+  cursor: pointer; text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.profile-dropdown-item:hover { background: var(--surface-2); color: var(--primary); text-decoration: none; }
+.profile-dropdown-item-danger:hover { background: #fdeaea; color: var(--danger); }
+.profile-dropdown-icon { font-size: 1rem; line-height: 1; width: 18px; text-align: center; }
 
 /* Cards */
 .card {
