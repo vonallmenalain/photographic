@@ -24,12 +24,14 @@ export default function Cart() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [qtyDraft, setQtyDraft] = useState<Record<string, string>>({});
   const navigate = useNavigate();
 
   const load = async () => {
     try {
       const res = await api<{ cart: CartData }>('/api/parent/cart');
       setCart(res.cart);
+      setQtyDraft({});
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Warenkorb konnte nicht geladen werden.');
     } finally {
@@ -44,6 +46,26 @@ export default function Cart() {
   const remove = async (id: string) => {
     await api(`/api/parent/cart/${id}`, { method: 'DELETE' });
     load();
+  };
+
+  const commitQty = async (item: CartItem) => {
+    const raw = qtyDraft[item.id];
+    if (raw === undefined) return;
+    const qty = Math.min(99, Math.max(1, Math.floor(Number(raw) || 1)));
+    if (qty === item.qty) {
+      setQtyDraft((d) => {
+        const next = { ...d };
+        delete next[item.id];
+        return next;
+      });
+      return;
+    }
+    try {
+      await api(`/api/parent/cart/${item.id}`, { method: 'PATCH', body: { qty } });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Menge konnte nicht geändert werden.');
+    }
   };
 
   const checkout = async () => {
@@ -107,11 +129,34 @@ export default function Cart() {
                   />
                   <div style={{ flex: 1 }}>
                     <strong>{item.productName}</strong>
-                    <div className="muted" style={{ fontSize: '0.85rem' }}>
-                      {item.productType === 'digital'
-                        ? 'Digitaler Download'
-                        : `Druck · Menge ${item.qty}`}
-                    </div>
+                    {item.productType === 'digital' ? (
+                      <div className="muted" style={{ fontSize: '0.85rem' }}>
+                        Digitaler Download
+                      </div>
+                    ) : (
+                      <div
+                        className="muted"
+                        style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}
+                      >
+                        <label htmlFor={`qty-${item.id}`}>Menge</label>
+                        <input
+                          id={`qty-${item.id}`}
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          max={99}
+                          value={qtyDraft[item.id] ?? String(item.qty)}
+                          onChange={(e) =>
+                            setQtyDraft((d) => ({ ...d, [item.id]: e.target.value }))
+                          }
+                          onBlur={() => commitQty(item)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                          }}
+                          style={{ width: 64, padding: '4px 8px' }}
+                        />
+                      </div>
+                    )}
                   </div>
                   <div style={{ fontWeight: 600 }}>
                     {formatPrice(item.unitPriceCents * item.qty, cart.currency)}

@@ -148,6 +148,20 @@ export async function addToCart(
   await recalcTotal(cartId);
 }
 
+export async function updateCartItemQty(
+  emailId: string,
+  itemId: string,
+  qty: number,
+): Promise<void> {
+  const cartId = await getOrCreateCart(emailId);
+  const item = await getById<OrderItemDoc>(COL.orderItems, itemId);
+  if (!item || item.order_id !== cartId) {
+    throw new ApiError(404, 'Dieser Artikel ist nicht in deinem Warenkorb.');
+  }
+  await updateById(COL.orderItems, itemId, { qty });
+  await recalcTotal(cartId);
+}
+
 export async function removeFromCart(emailId: string, itemId: string): Promise<void> {
   const cartId = await getOrCreateCart(emailId);
   const item = await getById<OrderItemDoc>(COL.orderItems, itemId);

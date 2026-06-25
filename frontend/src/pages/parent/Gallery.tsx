@@ -124,17 +124,18 @@ function Lightbox({
   onClose: () => void;
 }) {
   const [productId, setProductId] = useState(products[0]?.id ?? '');
-  const [qty, setQty] = useState(1);
+  const [qty, setQty] = useState('1');
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const [error, setError] = useState('');
 
   const selectedProduct = products.find((p) => p.id === productId);
   const isPrint = selectedProduct?.type === 'print';
+  const qtyNum = Math.min(99, Math.max(1, Math.floor(Number(qty) || 1)));
 
   const handleProductChange = (id: string) => {
     setProductId(id);
-    setQty(1);
+    setQty('1');
     setAdded(false);
   };
 
@@ -144,7 +145,7 @@ function Lightbox({
     try {
       await api('/api/parent/cart', {
         method: 'POST',
-        body: { photoId: photo.id, productId, qty: isPrint ? qty : 1 },
+        body: { photoId: photo.id, productId, qty: isPrint ? qtyNum : 1 },
       });
       setAdded(true);
     } catch (err) {
@@ -182,17 +183,16 @@ function Lightbox({
               <label htmlFor="lb-qty" style={{ display: 'block', marginBottom: 4, fontSize: '0.9rem' }}>
                 Menge
               </label>
-              <select
+              <input
                 id="lb-qty"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={99}
                 value={qty}
-                onChange={(e) => setQty(Number(e.target.value))}
-              >
-                {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                onChange={(e) => setQty(e.target.value)}
+                onBlur={() => setQty(String(qtyNum))}
+              />
             </div>
           )}
           {added ? (
