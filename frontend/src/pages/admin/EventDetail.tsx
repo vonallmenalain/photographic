@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, ApiError, fetchAdminImage } from '../../api/client';
-import { Alert, Spinner, StatusBadge } from '../../components/common';
+import { Alert, Modal, Spinner, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
 import EventEmails from './EventEmails';
 
@@ -48,6 +48,7 @@ export default function EventDetail() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [emailModalPhoto, setEmailModalPhoto] = useState<Photo | null>(null);
   const [zoomPhoto, setZoomPhoto] = useState<Photo | null>(null);
+  const [showAddChild, setShowAddChild] = useState(false);
 
   const load = async () => {
     try {
@@ -137,11 +138,9 @@ export default function EventDetail() {
     load();
   };
 
-  const addChild = async () => {
-    const name = prompt('Name des Kindes (nur intern sichtbar):');
-    if (!name) return;
+  const addChild = async (name: string) => {
     await api(`/api/admin/events/${id}/children`, { method: 'POST', admin: true, body: { name } });
-    load();
+    await load();
   };
 
   const deleteChild = async (childId: string) => {
@@ -234,7 +233,7 @@ export default function EventDetail() {
       <div className="card mb">
         <div className="row between">
           <h2 style={{ marginBottom: 0 }}>Kinder</h2>
-          <button className="btn secondary small" onClick={addChild}>
+          <button className="btn secondary small" onClick={() => setShowAddChild(true)}>
             + Kind anlegen
           </button>
         </div>
@@ -436,6 +435,16 @@ export default function EventDetail() {
         </div>
       </div>
 
+      {showAddChild && (
+        <AddChildModal
+          onClose={() => setShowAddChild(false)}
+          onCreate={async (name) => {
+            await addChild(name);
+            setShowAddChild(false);
+          }}
+        />
+      )}
+
       {emailModalPhoto && (
         <PhotoEmailModal photo={emailModalPhoto} onClose={() => setEmailModalPhoto(null)} />
       )}
@@ -501,6 +510,66 @@ function AdminPhotoLightbox({ photo, onClose }: { photo: Photo; onClose: () => v
         </div>
       </div>
     </div>
+  );
+}
+
+function AddChildModal({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (name: string) => Promise<void>;
+}) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setError('');
+    setBusy(true);
+    try {
+      await onCreate(trimmed);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Konnte nicht angelegt werden.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Kind anlegen"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
+            Abbrechen
+          </button>
+          <button type="submit" form="add-child-form" className="btn" disabled={busy}>
+            {busy ? 'Wird angelegt …' : 'Kind anlegen'}
+          </button>
+        </>
+      }
+    >
+      <form id="add-child-form" onSubmit={submit}>
+        {error && <Alert kind="error">{error}</Alert>}
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label>Name des Kindes</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="z. B. Alain"
+            autoFocus
+            required
+          />
+          <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
+            Der Name ist nur intern sichtbar – Eltern sehen ihn nie.
+          </p>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

@@ -152,6 +152,7 @@ function EventCard({
             value={`${ev.email_verified} von ${ev.email_total}`}
           />
           <SummaryStat label="Reminder verschickt" value={String(ev.reminders.length)} />
+          <OrderableUntilStat status={ev.status} expiresAt={ev.expires_at} />
         </div>
       </button>
 
@@ -211,6 +212,46 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
     <div className="analytics-stat">
       <span className="analytics-stat-num">{value}</span>
       <span className="analytics-stat-lbl">{label}</span>
+    </div>
+  );
+}
+
+/**
+ * Zeigt bereits im eingeklappten Zustand, bis wann der Auftrag aktiv ist – also
+ * wie lange Eltern noch bestellen können. Archivierte oder abgelaufene Aufträge
+ * werden klar als nicht mehr bestellbar gekennzeichnet.
+ */
+function OrderableUntilStat({
+  status,
+  expiresAt,
+}: {
+  status: string;
+  expiresAt: string | null;
+}) {
+  let value = '—';
+  let hint = 'Kein Enddatum';
+
+  if (status === 'archived') {
+    value = expiresAt ? formatDateShort(expiresAt) : 'Archiviert';
+    hint = 'Archiviert – nicht mehr bestellbar';
+  } else if (expiresAt) {
+    const end = new Date(expiresAt);
+    value = formatDateShort(expiresAt);
+    if (!isNaN(end.getTime())) {
+      const days = Math.ceil((end.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+      if (days < 0) hint = 'Abgelaufen – nicht mehr bestellbar';
+      else if (days === 0) hint = 'Läuft heute ab';
+      else hint = `Noch ${days} ${days === 1 ? 'Tag' : 'Tage'} bestellbar`;
+    }
+  }
+
+  return (
+    <div className="analytics-stat">
+      <span className="analytics-stat-num">{value}</span>
+      <span className="analytics-stat-lbl">Bestellbar bis</span>
+      <span className="analytics-stat-lbl" style={{ marginTop: 0 }}>
+        {hint}
+      </span>
     </div>
   );
 }

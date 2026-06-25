@@ -253,6 +253,39 @@ input:focus, select:focus, textarea:focus {
 }
 .lightbox .close { position: absolute; top: -14px; right: -14px; background: #fff; border-radius: 999px; width: 36px; height: 36px; border: none; cursor: pointer; font-size: 18px; }
 
+/* Modal dialog (forms such as "Kind anlegen" / "E-Mail anlegen") */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 6vh 18px 24px; z-index: 70; overflow-y: auto;
+  backdrop-filter: blur(2px);
+}
+.modal-card {
+  width: 100%; background: var(--surface, #fff);
+  border-radius: 16px; box-shadow: 0 24px 60px rgba(15, 27, 45, 0.28);
+  overflow: hidden; animation: modal-pop 0.16s ease-out;
+}
+@keyframes modal-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 18px 22px; border-bottom: 1px solid var(--border);
+}
+.modal-head h2 { margin: 0; font-size: 1.15rem; }
+.modal-close {
+  background: var(--surface-2); border: none; cursor: pointer;
+  width: 32px; height: 32px; border-radius: 999px; font-size: 20px; line-height: 1;
+  color: var(--text-muted); flex: none;
+}
+.modal-close:hover { background: var(--border); color: var(--text); }
+.modal-body { padding: 20px 22px; }
+.modal-foot {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 16px 22px; border-top: 1px solid var(--border); background: var(--surface-2);
+}
+
 /* Tables (admin) */
 table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border); }
@@ -260,8 +293,12 @@ th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 tr:hover td { background: var(--surface-2); }
 
 /* Admin layout */
-.admin-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
-.admin-side { background: #0f1b2d; color: #cbd5e1; padding: 22px 16px; }
+.admin-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; align-items: start; }
+.admin-side {
+  background: #0f1b2d; color: #cbd5e1; padding: 22px 16px;
+  position: sticky; top: 0; align-self: start;
+  height: 100vh; overflow-y: auto;
+}
 .admin-side .logo { color: #fff; font-weight: 700; margin-bottom: 24px; display: flex; gap: 8px; align-items: center; }
 .admin-side a, .admin-side .side-action {
   display: block; width: 100%; text-align: left; color: #cbd5e1;
@@ -376,7 +413,10 @@ tr:hover td { background: var(--surface-2); }
 
 @media (max-width: 760px) {
   .admin-shell { grid-template-columns: 1fr; }
-  .admin-side { display: flex; flex-wrap: wrap; gap: 6px; }
+  .admin-side {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    position: sticky; top: 0; height: auto; overflow: visible; z-index: 40;
+  }
   .admin-side .logo { width: 100%; margin-bottom: 10px; }
   .admin-side a { margin: 0; }
   .admin-side .spacer { display: none; }
