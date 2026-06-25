@@ -22,8 +22,25 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID ?? '1:83987903614:web:f5fd8aadc4638eec87942f',
 };
 
-/** Firebase parent authentication is enabled whenever we have an API key. */
-export const firebaseEnabled = Boolean(firebaseConfig.apiKey);
+/**
+ * Explicit on/off switch for the Firebase parent login. When
+ * `VITE_FIREBASE_PARENT_AUTH` is set to a falsy value ("false", "0", "no",
+ * "off") the app uses its own SMTP-based verification flow (6-digit code +
+ * one-click magic link) instead of Firebase's built-in e-mail. This must mirror
+ * the backend's `FIREBASE_PARENT_AUTH` flag so both sides agree on the flow.
+ *
+ * Defaults to enabled when the variable is absent, preserving prior behaviour.
+ */
+const parentAuthFlag = import.meta.env.VITE_FIREBASE_PARENT_AUTH;
+const parentAuthDisabled =
+  parentAuthFlag !== undefined &&
+  ['false', '0', 'no', 'off'].includes(String(parentAuthFlag).trim().toLowerCase());
+
+/**
+ * Firebase parent authentication is enabled when it is not explicitly switched
+ * off and we have an API key.
+ */
+export const firebaseEnabled = !parentAuthDisabled && Boolean(firebaseConfig.apiKey);
 
 const EMAIL_STORAGE_KEY = 'firebase_email_for_signin';
 
