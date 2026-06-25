@@ -33,17 +33,24 @@ function escapeXml(s: string): string {
  * deter printing/screenshots but light enough to still judge the photo.
  */
 function watermarkSvg(width: number, height: number, text: string): Buffer {
-  const safe = escapeXml(text);
   // Doubled again on request so the "Vorschau" watermark is even more prominent.
   const fontSize = Math.max(64, Math.round(width / 5.5));
-  // Estimate the rendered text width and add a gap so tiled repetitions of the
-  // word sit next to each other instead of overlapping.
-  const approxTextWidth = fontSize * 0.62 * text.length;
-  const stepX = approxTextWidth + fontSize * 1.6;
   // Vertical gap between tiled rows. Reduced (~63% tighter than the previous
   // 3.5) on request so the "Vorschau" rows sit closer together — more text,
   // smaller spacing — without changing the font size.
   const stepY = fontSize * 1.3;
+  // Each row is a single, continuously repeated string ("Vorschau · Vorschau …")
+  // so the whole image is filled instead of showing isolated words. The
+  // separator is a vertically centred middle dot (·, U+00B7) as requested.
+  const separator = ' \u00b7 ';
+  const unit = text + separator;
+  // Estimate how many repetitions are needed to span the (rotated) width. We
+  // tile from -width to 2*width, i.e. a 3*width span, and add a little headroom.
+  const approxUnitWidth = fontSize * 0.62 * unit.length;
+  const repeats = Math.max(1, Math.ceil((width * 3) / approxUnitWidth) + 1);
+  // Build the line and drop the trailing separator so it ends on the word.
+  const line = unit.repeat(repeats).slice(0, -separator.length);
+  const safeLine = escapeXml(line);
   // Use font families that are actually installed in the runtime image
   // (see backend/Dockerfile). librsvg only renders text when it can resolve a
   // font; "Liberation Sans"/"DejaVu Sans" are the metric-compatible packages we
@@ -51,11 +58,9 @@ function watermarkSvg(width: number, height: number, text: string): Buffer {
   const fontFamily = "'Liberation Sans', 'DejaVu Sans', Arial, Helvetica, sans-serif";
   const texts: string[] = [];
   for (let y = -height; y < height * 2; y += stepY) {
-    for (let x = -width; x < width * 2; x += stepX) {
-      texts.push(
-        `<text x="${x}" y="${y}" font-family="${fontFamily}" font-size="${fontSize}" font-weight="700" fill="#ffffff" fill-opacity="0.34" stroke="#000000" stroke-opacity="0.12" stroke-width="0.6">${safe}</text>`,
-      );
-    }
+    texts.push(
+      `<text x="${-width}" y="${y}" font-family="${fontFamily}" font-size="${fontSize}" font-weight="700" fill="#ffffff" fill-opacity="0.34" stroke="#000000" stroke-opacity="0.12" stroke-width="0.6">${safeLine}</text>`,
+    );
   }
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
     <g transform="rotate(-30 ${width / 2} ${height / 2})">${texts.join('')}</g>
