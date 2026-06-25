@@ -315,30 +315,39 @@ input:focus, select:focus, textarea:focus {
 .gp-outer::before { left: 0; background: linear-gradient(to right, rgba(5, 5, 9, 0.65), transparent); }
 .gp-outer::after { right: 0; background: linear-gradient(to left, rgba(5, 5, 9, 0.65), transparent); }
 
-/* Native scroll viewport — the browser handles touch physics + momentum. */
+/* Perspective stage — the carousel is driven purely by GPU transforms in a
+   continuous requestAnimationFrame loop (no native scroll), which keeps the
+   motion perfectly fluid. */
 .gp-viewport {
   position: relative;
   height: 100%;
-  overflow-x: auto; overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
+  perspective: 1700px;
+  perspective-origin: 50% 50%;
+  overflow: visible;
   outline: none;
-  contain: paint;
+  touch-action: pan-y;
+  user-select: none; -webkit-user-select: none;
+  cursor: grab;
 }
-.gp-viewport::-webkit-scrollbar { display: none; }
+.gp-viewport:active { cursor: grabbing; }
 
-.gp-track { display: flex; align-items: center; height: 100%; gap: 26px; }
+/* All cards are absolutely stacked at the centre; transforms fan them out. */
+.gp-track {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
 
 .gp-slide {
-  flex-shrink: 0;
+  position: absolute;
   width: var(--gp-slide-w, 60vh);
   height: var(--gp-slide-h, 80vh);
-  scroll-snap-align: center;
   display: flex; align-items: center; justify-content: center;
-  will-change: transform, opacity;
+  pointer-events: none; /* the viewport handles drag; photos aren't clickable */
+  will-change: transform, opacity, filter;
   backface-visibility: hidden; -webkit-backface-visibility: hidden;
-  transition: opacity 0.45s ease;
+  transform-style: preserve-3d;
 }
 .gp-slide img {
   max-width: 100%; max-height: 100%;
@@ -414,7 +423,6 @@ input:focus, select:focus, textarea:focus {
 .spinner.light { border-color: rgba(255, 255, 255, 0.22); border-top-color: #fff; }
 
 @media (prefers-reduced-motion: reduce) {
-  .gp-viewport { scroll-behavior: auto; }
   .gp-ambient img { transition: opacity 0.4s ease; }
 }
 

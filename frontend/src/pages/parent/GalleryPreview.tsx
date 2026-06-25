@@ -24,23 +24,45 @@ function shuffle<T>(input: T[]): T[] {
   return arr;
 }
 
-/** Wrap any signed index into [0, total). */
-function wrapIdx(i: number, total: number): number {
-  return ((i % total) + total) % total;
+/** Real modulo (always non-negative). */
+function mod(a: number, n: number): number {
+  return ((a % n) + n) % n;
+}
+
+/** Decode an image fully so it never has to load/decode mid-animation. */
+function preload(src: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const done = () => resolve();
+    img.onload = () => {
+      // `decode()` guarantees the bitmap is ready to paint — no first-paint jank.
+      if (typeof img.decode === 'function') img.decode().then(done, done);
+      else done();
+    };
+    img.onerror = done;
+    img.src = src;
+  });
 }
 
 /**
  * Galerie-Vorschau — an immersive, text-free "wow" showcase shown when the
- * gallery is opened. Modelled on the 3-D coverflow carousel from the DreamTeam
- * project: the photos sit on a horizontal, snap-scrolling track; the photo in
- * the centre stands full-height while its neighbours recede with a slight
- * rotation and fade. An ambient blur of the centred photo tints the stage. The
- * photos themselves are not clickable — a single glass button at the bottom
- * lets the parent switch over to the shopping gallery.
+ * gallery is opened. Modelled on the buttery-smooth 3-D coverflow carousel from
+ * the DreamTeam project: the photos are *not* a native scroll list. Instead they
+ * are absolutely-stacked cards driven by a single continuous requestAnimationFrame
+ * momentum loop, each transformed with translate3d + rotateY in a shared
+ * perspective. The centre photo stands forward while its neighbours tuck slightly
+ * behind it (closer together, partly overlapped) and recede in depth with a touch
+ * of rotation, fade and blur — a genuine 3-D carousel.
+ *
+ * Because every frame is pure GPU transform work (no layout, no scroll events,
+ * no lazy image loads), the motion stays perfectly fluid. All hero images are
+ * fully preloaded/decoded *before* the stage is revealed, so there is never any
+ * stutter or pop-in once the carousel is on screen.
  */
 export default function GalleryPreview() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false); // all hero images decoded
   const [failed, setFailed] = useState(false);
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -66,29 +88,45 @@ export default function GalleryPreview() {
   // Pick the carousel rotation once, shuffled for variety.
   const heroPhotos = useMemo(() => shuffle(photos).slice(0, HERO_COUNT), [photos]);
 
-  // For an endless loop we render three back-to-back copies of the photos and
-  // silently recentre onto the middle copy whenever scrolling drifts too far.
-  const isInfinite = heroPhotos.length > 1;
-  const copies = isInfinite ? 3 : 1;
-  const real = heroPhotos.length;
-  const offset = isInfinite ? real : 0; // first slide of the middle copy
-  const slides = useMemo(() => {
-    const out: Photo[] = [];
-    for (let c = 0; c < copies; c++) out.push(...heroPhotos);
-    return out;
-  }, [heroPhotos, copies]);
-
-  // ── Carousel engine (ported from the DreamTeam coverflow) ─────────────────
+  // ── Preload every hero image up-front ────────────────────────────────────
+  // Highest priority for this view: no stutter, no pop-in. We decode all the
+  // photos (and therefore warm the ambient backdrop, which reuses the same
+  // URLs) before the stage appears. A safety timeout keeps a flaky image from
+  // blocking the reveal forever.
   useEffect(() => {
+    if (heroPhotos.length === 0) return;
+    let cancelled = false;
+    setReady(false);
+    const urls = heroPhotos.map((p) => imageUrl(p.previewUrl));
+    const safety = window.setTimeout(() => {
+      if (!cancelled) setReady(true);
+    }, 7000);
+    Promise.all(urls.map(preload)).then(() => {
+      if (!cancelled) {
+        window.clearTimeout(safety);
+        setReady(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+      window.clearTimeout(safety);
+    };
+  }, [heroPhotos]);
+
+  // ── 3-D coverflow engine (transform + momentum, ported from DreamTeam) ────
+  useEffect(() => {
+    if (!ready) return;
     const viewport = viewportRef.current;
     const track = trackRef.current;
-    if (!viewport || !track || real === 0) return;
+    if (!viewport || !track) return;
+
+    const n = heroPhotos.length;
+    if (n === 0) return;
 
     const abort = new AbortController();
     const { signal } = abort;
-    const totalSlides = slides.length;
 
-    let slideEls = Array.from(track.querySelectorAll<HTMLElement>('.gp-slide'));
+    const cards = Array.from(track.querySelectorAll<HTMLElement>('.gp-slide'));
     const ambientEls = ambientRef.current
       ? Array.from(ambientRef.current.querySelectorAll<HTMLElement>('img'))
       : [];
@@ -96,162 +134,167 @@ export default function GalleryPreview() {
       ? Array.from(dotsRef.current.querySelectorAll<HTMLElement>('.gp-dot'))
       : [];
 
-    let lastRealIdx = -1;
-
-    // Size each slide so a landscape photo can fill (almost) the full stage
-    // height, then centre the track so the middle slide sits in the viewport.
-    function sizeSlides() {
-      const h = viewport!.clientHeight;
-      const slideH = Math.round(h * 0.9);
-      const slideW = Math.round(Math.min(slideH * 1.4, viewport!.clientWidth * 0.84));
-      track!.style.setProperty('--gp-slide-w', slideW + 'px');
-      track!.style.setProperty('--gp-slide-h', slideH + 'px');
-      return slideW;
+    // ── Geometry ───────────────────────────────────────────────────────────
+    // `gap` is the horizontal distance between two neighbouring card centres.
+    // Keeping it well below the card width is what makes the neighbours sit
+    // close and tuck partly behind the centred photo (the "näher nebeneinander"
+    // / slightly-overlapped look).
+    let gap = 200;
+    function sizeCards() {
+      const vw = viewport!.clientWidth;
+      const vh = viewport!.clientHeight;
+      const cardH = Math.round(vh * 0.82);
+      const cardW = Math.round(Math.min(cardH * 1.35, vw * 0.66));
+      track!.style.setProperty('--gp-slide-w', cardW + 'px');
+      track!.style.setProperty('--gp-slide-h', cardH + 'px');
+      // Closer + overlapped: neighbour centres sit at ~52% of the card width.
+      gap = Math.max(120, cardW * 0.52);
     }
 
-    function setPadding(slideW: number) {
-      const P = Math.max(0, (viewport!.clientWidth - slideW) / 2);
-      track!.style.paddingLeft = P + 'px';
-      const existing = track!.querySelector('.gp-track-spacer');
-      if (existing) existing.remove();
-      const spacer = document.createElement('div');
-      spacer.className = 'gp-track-spacer';
-      spacer.style.cssText = `flex-shrink:0;width:${P}px;min-width:${P}px;pointer-events:none;`;
-      track!.appendChild(spacer);
-    }
+    // ── Engine state ─────────────────────────────────────────────────────────
+    const state = {
+      pos: 0, // fractional index currently centred
+      vel: 0,
+      drag: false,
+      snapTo: null as number | null, // target index (may be outside [0,n))
+      lastX: 0,
+      lastT: 0,
+    };
 
-    // Content-space centre of a slide (its midpoint within the track).
-    function slideCenter(i: number) {
-      const s = slideEls[i];
-      return s.offsetLeft + s.offsetWidth / 2;
-    }
+    const CLAMP = 4; // how many neighbours fan out before being capped
+    let lastActive = -1;
 
-    // Even spacing between consecutive slide centres (all slides equal width).
-    function getUnit() {
-      if (slideEls.length < 2) return 1;
-      return slideCenter(1) - slideCenter(0) || 1;
-    }
-
-    // Fractional index of the slide whose centre sits at the viewport centre.
-    function getCenterFloat() {
-      if (slideEls.length === 0) return 0;
-      const viewCenter = viewport!.scrollLeft + viewport!.clientWidth / 2;
-      return (viewCenter - slideCenter(0)) / getUnit();
-    }
-
-    // Scroll so that slide `slideIdx` is exactly centred in the viewport.
-    function scrollToSlideIdx(slideIdx: number, behavior: ScrollBehavior) {
-      if (!slideEls.length) return;
-      const idx = Math.max(0, Math.min(slideEls.length - 1, slideIdx));
-      const left = slideCenter(idx) - viewport!.clientWidth / 2;
-      if (behavior === 'auto') viewport!.scrollLeft = left;
-      else viewport!.scrollTo({ left, behavior });
-    }
-
-    function scrollToReal(realIdx: number, behavior: ScrollBehavior) {
-      scrollToSlideIdx(offset + wrapIdx(realIdx, real), behavior);
-    }
-
-    // 3-D coverflow: scale, rotate and fade each slide by its distance from
-    // the current centre. The centred slide stands tall and straight.
-    function apply3D() {
-      const cf = getCenterFloat();
-      const nearest = Math.max(0, Math.min(totalSlides - 1, Math.round(cf)));
-      for (let i = 0; i < totalSlides; i++) {
-        const slide = slideEls[i];
-        if (!slide) continue;
-        const dist = i - cf;
-        const a = Math.abs(dist);
-        const scale = Math.max(0.7, 1 - a * 0.14);
-        const ry = Math.max(-22, Math.min(22, -dist * 15));
-        const op = Math.max(0.32, 1 - a * 0.34);
-        const isC = i === nearest;
-        if (isC !== slide.classList.contains('is-center')) {
-          slide.classList.toggle('is-center', isC);
-        }
-        slide.style.transform = `perspective(1200px) rotateY(${ry.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
-        slide.style.opacity = op.toFixed(3);
-        slide.style.zIndex = String(Math.round(10 - a * 2));
-      }
-      updateCenter(nearest);
-    }
-
-    // Reflect the centred photo in the ambient backdrop and the dots.
-    function updateCenter(nearestSlideIdx: number) {
-      const realIdx = isInfinite
-        ? wrapIdx(nearestSlideIdx - offset, real)
-        : Math.max(0, Math.min(real - 1, nearestSlideIdx));
-      if (realIdx === lastRealIdx) return;
-      lastRealIdx = realIdx;
-      ambientEls.forEach((el, i) => el.classList.toggle('on', i === realIdx));
+    function setActive(idx: number) {
+      if (idx === lastActive) return;
+      lastActive = idx;
+      ambientEls.forEach((el, i) => el.classList.toggle('on', i === idx));
       dotEls.forEach((dot, i) => {
-        const active = i === realIdx;
-        dot.classList.toggle('on', active);
-        dot.setAttribute('aria-selected', active ? 'true' : 'false');
+        const on = i === idx;
+        dot.classList.toggle('on', on);
+        dot.setAttribute('aria-selected', on ? 'true' : 'false');
       });
     }
 
-    function recenterIfNeeded() {
-      if (!isInfinite) return;
-      const cf = getCenterFloat();
-      const jump = real * getUnit();
-      if (cf >= offset + real) viewport!.scrollLeft -= jump;
-      else if (cf < offset) viewport!.scrollLeft += jump;
-    }
+    function render() {
+      for (let i = 0; i < n; i++) {
+        const card = cards[i];
+        if (!card) continue;
+        // Signed distance from the centred position, wrapped into [-n/2, n/2]
+        // so the loop is seamless in both directions.
+        let delta = i - state.pos;
+        delta = mod(delta + n / 2, n) - n / 2;
 
-    // ── Scroll lifecycle (single passive listener + rAF) ──
-    let rafPending = false;
-    let scrollTimer: number | null = null;
-    let isScrolling = false;
-    const supportsScrollEnd = 'onscrollend' in window;
+        const abs = Math.abs(delta);
+        const clamped = Math.min(abs, CLAMP);
+        const dirClamped = Math.max(-CLAMP, Math.min(CLAMP, delta));
 
-    function onScrollFrame() {
-      rafPending = false;
-      apply3D();
-    }
+        const x = delta * gap;
+        const z = -clamped * 130; // neighbours recede behind the centre photo
+        const scale = 1 - clamped * 0.12;
+        const rotY = -dirClamped * 11;
+        const y = clamped * 7;
+        const op = Math.max(0, 1 - clamped * 0.2);
+        const blur = Math.max(0, clamped - 1.5) * 1.1;
 
-    function onScrollEnd() {
-      isScrolling = false;
-      viewport!.classList.remove('is-scrolling');
-      recenterIfNeeded();
-      const nearest = Math.round(getCenterFloat());
-      const target = slideCenter(nearest) - viewport!.clientWidth / 2;
-      if (Math.abs(viewport!.scrollLeft - target) > 4) {
-        viewport!.scrollTo({ left: target, behavior: 'smooth' });
+        card.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, ${z.toFixed(2)}px) rotateY(${rotY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+        card.style.opacity = op.toFixed(3);
+        card.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : 'none';
+        card.style.zIndex = String(Math.round(1000 - clamped * 100));
+        const isCenter = abs < 0.5;
+        if (isCenter !== card.classList.contains('is-center')) {
+          card.classList.toggle('is-center', isCenter);
+        }
       }
-      requestAnimationFrame(apply3D);
+      setActive(mod(Math.round(state.pos), n));
     }
+
+    // ── Continuous momentum loop ─────────────────────────────────────────────
+    let raf = 0;
+    function tick() {
+      if (state.drag) {
+        // position is updated directly by the pointer handler
+      } else if (state.snapTo !== null) {
+        // Smoothly ease toward an explicit target (arrows / dots / keys).
+        state.pos += (state.snapTo - state.pos) * 0.16;
+        if (Math.abs(state.snapTo - state.pos) < 0.001) {
+          state.pos = state.snapTo;
+          state.snapTo = null;
+        }
+      } else {
+        state.pos += state.vel;
+        state.vel *= 0.92;
+        if (Math.abs(state.vel) < 0.0006) {
+          state.vel = 0;
+          // gently settle on the nearest photo
+          const target = Math.round(state.pos);
+          state.pos += (target - state.pos) * 0.12;
+          if (Math.abs(target - state.pos) < 0.001) state.pos = target;
+        }
+      }
+
+      // Keep `pos` in a sane numeric range while idle (render uses mod anyway).
+      if (!state.drag && state.snapTo === null) {
+        if (state.pos >= n) state.pos -= n;
+        else if (state.pos < 0) state.pos += n;
+      }
+
+      render();
+      raf = requestAnimationFrame(tick);
+    }
+
+    // ── Interaction ──────────────────────────────────────────────────────────
+    function goTo(index: number) {
+      // Choose the nearest equivalent target so we never spin the long way.
+      let delta = index - state.pos;
+      delta = mod(delta + n / 2, n) - n / 2;
+      state.vel = 0;
+      state.snapTo = state.pos + delta;
+    }
+    function step(dir: number) {
+      state.vel = 0;
+      state.snapTo = Math.round(state.snapTo ?? state.pos) + dir;
+    }
+
+    function onPointerDown(e: PointerEvent) {
+      viewport!.setPointerCapture(e.pointerId);
+      state.drag = true;
+      state.snapTo = null;
+      state.vel = 0;
+      state.lastX = e.clientX;
+      state.lastT = performance.now();
+    }
+    function onPointerMove(e: PointerEvent) {
+      if (!state.drag) return;
+      const now = performance.now();
+      const dx = e.clientX - state.lastX;
+      const dt = Math.max(8, now - state.lastT);
+      const units = dx / gap;
+      state.pos -= units;
+      // Blend velocity for a natural fling on release.
+      state.vel = state.vel * 0.6 + (-units / dt) * 16 * 0.4;
+      state.lastX = e.clientX;
+      state.lastT = now;
+    }
+    function onPointerUp() {
+      state.drag = false;
+    }
+
+    viewport.addEventListener('pointerdown', onPointerDown, { signal });
+    viewport.addEventListener('pointermove', onPointerMove, { signal });
+    viewport.addEventListener('pointerup', onPointerUp, { signal });
+    viewport.addEventListener('pointercancel', onPointerUp, { signal });
+    viewport.addEventListener('lostpointercapture', onPointerUp, { signal });
 
     viewport.addEventListener(
-      'scroll',
-      () => {
-        if (!isScrolling) {
-          isScrolling = true;
-          viewport.classList.add('is-scrolling');
-        }
-        if (!rafPending) {
-          rafPending = true;
-          requestAnimationFrame(onScrollFrame);
-        }
-        if (!supportsScrollEnd) {
-          if (scrollTimer) clearTimeout(scrollTimer);
-          scrollTimer = window.setTimeout(onScrollEnd, 120);
-        }
+      'wheel',
+      (e) => {
+        const d = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+        e.preventDefault();
+        state.snapTo = null;
+        state.vel += d * 0.0015;
       },
-      { passive: true, signal }
+      { passive: false, signal }
     );
-    if (supportsScrollEnd) {
-      viewport.addEventListener('scrollend', onScrollEnd, { passive: true, signal });
-    }
-
-    // ── Arrow, wheel & keyboard nav ──
-    function step(dir: number) {
-      const nearest = Math.round(getCenterFloat());
-      const targetSlideIdx = isInfinite
-        ? nearest + dir
-        : Math.max(0, Math.min(totalSlides - 1, nearest + dir));
-      scrollToSlideIdx(targetSlideIdx, 'smooth');
-    }
 
     viewport.setAttribute('tabindex', '0');
     viewport.addEventListener(
@@ -262,71 +305,41 @@ export default function GalleryPreview() {
       },
       { signal }
     );
-    viewport.addEventListener(
-      'wheel',
-      (e) => {
-        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // already horizontal
-        e.preventDefault();
-        step(e.deltaY > 0 ? 1 : -1);
-      },
-      { passive: false, signal }
-    );
 
-    // ── Dot taps ──
     dotEls.forEach((dot) => {
       const idx = Number(dot.dataset.dot);
-      dot.addEventListener('click', () => scrollToReal(idx, 'smooth'), { signal });
+      dot.addEventListener('click', () => goTo(idx), { signal });
     });
+    document.getElementById('gp-prev')?.addEventListener('click', () => step(-1), { signal });
+    document.getElementById('gp-next')?.addEventListener('click', () => step(1), { signal });
 
-    // ── Initial layout & resize ──
-    // `targetIdx` keeps the same slide centred across re-layouts. Re-sizing the
-    // slides and the centring padding together (against the *current* viewport
-    // width) keeps all geometry consistent.
-    function layout(targetIdx: number) {
-      const slideW = sizeSlides();
-      setPadding(slideW);
-      slideEls = Array.from(track!.querySelectorAll<HTMLElement>('.gp-slide'));
-      scrollToSlideIdx(targetIdx, 'auto');
-      apply3D();
-    }
-
-    // A ResizeObserver fires once the viewport has its real width — avoiding the
-    // race where slides get sized against a stale measurement — and again on
-    // any later width change, re-laying-out around the currently centred slide.
-    let didInit = false;
+    // ── Layout + lifecycle ───────────────────────────────────────────────────
     let lastW = 0;
-    let resizeT: number | null = null;
     const ro = new ResizeObserver(() => {
       const w = viewport.clientWidth;
-      if (w === 0) return;
-      if (!didInit) {
-        didInit = true;
-        lastW = w;
-        layout(offset);
-        return;
-      }
-      if (Math.abs(w - lastW) < 1) return; // height-only change → ignore
+      if (w === 0 || Math.abs(w - lastW) < 1) return;
       lastW = w;
-      if (resizeT) clearTimeout(resizeT);
-      resizeT = window.setTimeout(() => layout(Math.round(getCenterFloat())), 120);
+      sizeCards();
+      render();
     });
     ro.observe(viewport);
 
-    // Provide nav buttons a way to drive the engine.
-    const prev = document.getElementById('gp-prev');
-    const next = document.getElementById('gp-next');
-    prev?.addEventListener('click', () => step(-1), { signal });
-    next?.addEventListener('click', () => step(1), { signal });
+    sizeCards();
+    render();
+    // The carousel never autoplays — it only moves on user input — so a single
+    // continuous loop is fine even with prefers-reduced-motion.
+    raf = requestAnimationFrame(tick);
 
     return () => {
+      cancelAnimationFrame(raf);
       ro.disconnect();
-      if (resizeT) clearTimeout(resizeT);
-      if (scrollTimer) clearTimeout(scrollTimer);
       abort.abort();
     };
-  }, [slides, real, offset, isInfinite]);
+  }, [ready, heroPhotos]);
 
-  if (loading) {
+  // Loading: wait for both the photo list *and* full image decode before we
+  // reveal the stage, so the first frame is already perfect.
+  if (loading || (!ready && !failed && photos.length > 0)) {
     return (
       <div className="gp-stage is-loading">
         <span className="spinner light" />
@@ -371,7 +384,7 @@ export default function GalleryPreview() {
         <div className="gp-outer">
           <div className="gp-viewport" ref={viewportRef} aria-label="Fotovorschau">
             <div className="gp-track" ref={trackRef}>
-              {slides.map((p, i) => (
+              {heroPhotos.map((p, i) => (
                 <div className="gp-slide" key={`${p.id}-${i}`} aria-hidden="true">
                   <img
                     src={imageUrl(p.previewUrl)}
