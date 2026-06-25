@@ -8,6 +8,8 @@ import { formatPrice } from '../../lib/format';
 interface Photo {
   id: string;
   isClassPhoto: boolean;
+  width: number | null;
+  height: number | null;
   thumbUrl: string;
   previewUrl: string;
   purchased: boolean;
@@ -132,48 +134,81 @@ export default function Gallery() {
       )}
 
       {events.map((ev) => (
-        <section key={ev.id} style={{ marginBottom: 32 }}>
-          <h2>{ev.name}</h2>
-          <div className="grid">
+        <section key={ev.id} className="gallery-section">
+          <div className="gallery-section-head">
+            <h2>{ev.name}</h2>
+            <span className="soft photo-count">
+              {ev.photos.length} {ev.photos.length === 1 ? 'Foto' : 'Fotos'}
+            </span>
+          </div>
+          <div className="masonry">
             {ev.photos.map((p) => {
               const purchased = purchasedIds.has(p.id);
               const inCart = cartIds.has(p.id);
               const fb = feedback[p.id];
+              const ratio = p.width && p.height ? p.width / p.height : undefined;
               return (
-                <div className="photo-card" key={p.id}>
-                  <div onClick={() => setActive(p)} style={{ cursor: 'zoom-in' }}>
-                    <ProtectedImage src={p.thumbUrl} />
-                  </div>
-                  <div className="body">
-                    {p.isClassPhoto && <span className="badge class">Gruppen-/Klassenfoto</span>}
-                    <button className="btn secondary small" onClick={() => setActive(p)}>
-                      Ansehen &amp; auswählen
-                    </button>
-                    {digitalProduct &&
-                      (purchased ? (
-                        <Link to="/bestellungen" className="btn ghost small" style={{ textAlign: 'center' }}>
-                          ✓ Bereits gekauft
-                        </Link>
-                      ) : inCart ? (
-                        <Link to="/warenkorb" className="btn ghost small" style={{ textAlign: 'center' }}>
-                          ✓ Im Warenkorb
-                        </Link>
-                      ) : (
-                        <button
-                          className="btn small"
-                          onClick={() => quickAdd(p)}
-                          disabled={addingId === p.id}
-                        >
-                          {addingId === p.id ? 'Wird hinzugefügt …' : 'In den Warenkorb'}
-                        </button>
-                      ))}
+                <figure className="photo-tile" key={p.id}>
+                  <div
+                    className="photo-media"
+                    onClick={() => setActive(p)}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Foto ansehen und auswählen"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setActive(p);
+                      }
+                    }}
+                  >
+                    <ProtectedImage src={p.thumbUrl} ratio={ratio} />
+                    <span className="photo-zoom" aria-hidden="true">
+                      ⤢ Ansehen
+                    </span>
+
+                    {p.isClassPhoto && (
+                      <div className="photo-badges">
+                        <span className="badge class">Gruppenfoto</span>
+                      </div>
+                    )}
+                    {(purchased || inCart) && (
+                      <div className="photo-state">
+                        <span className={`pill ${purchased ? 'green' : 'blue'}`}>
+                          {purchased ? '✓ Gekauft' : '✓ Im Warenkorb'}
+                        </span>
+                      </div>
+                    )}
+
+                    {digitalProduct && (
+                      <div className="photo-actions" onClick={(e) => e.stopPropagation()}>
+                        {purchased ? (
+                          <Link to="/bestellungen" className="btn on-photo block small">
+                            ✓ Bereits gekauft
+                          </Link>
+                        ) : inCart ? (
+                          <Link to="/warenkorb" className="btn on-photo block small">
+                            Zum Warenkorb
+                          </Link>
+                        ) : (
+                          <button
+                            className="btn block small"
+                            onClick={() => quickAdd(p)}
+                            disabled={addingId === p.id}
+                          >
+                            {addingId === p.id ? 'Wird hinzugefügt …' : 'In den Warenkorb'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {fb && (
-                      <div className={`alert ${fb.kind}`} style={{ margin: 0, fontSize: '0.82rem' }}>
+                      <div className={`photo-toast ${fb.kind}`} onClick={(e) => e.stopPropagation()}>
                         {fb.msg}
                       </div>
                     )}
                   </div>
-                </div>
+                </figure>
               );
             })}
           </div>

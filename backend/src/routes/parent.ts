@@ -169,6 +169,10 @@ router.get(
       eventsMap.get(p.event_id)!.photos.push({
         id: p.id,
         isClassPhoto: !!p.is_class_photo,
+        // Original pixel dimensions so the gallery can present each photo in its
+        // true orientation (portrait/landscape) without cropping or layout jumps.
+        width: p.width ?? null,
+        height: p.height ?? null,
         // Short-lived signed URLs to watermarked variants only. No IDs/paths leak.
         thumbUrl: `/files/preview-image?token=${signFileToken(p.id, 'thumb', 3600)}`,
         previewUrl: `/files/preview-image?token=${signFileToken(p.id, 'preview', 3600)}`,
