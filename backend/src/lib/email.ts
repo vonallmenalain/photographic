@@ -103,17 +103,64 @@ export async function sendPasswordResetEmail(to: string, username: string, link:
   await sendMail({ to, subject, html, text });
 }
 
-export async function sendOrderConfirmation(to: string, orderId: string, summary: string, link: string) {
-  const subject = 'Ihre Bestellung ist bestätigt';
+export interface OrderConfirmationAddress {
+  first_name: string;
+  last_name: string;
+  street: string;
+  house_no: string;
+  zip: string;
+  city: string;
+}
+
+export async function sendOrderConfirmation(
+  to: string,
+  orderId: string,
+  summary: string,
+  link: string,
+  opts: { hasPrint?: boolean; shippingAddress?: OrderConfirmationAddress | null } = {},
+) {
+  const { hasPrint = false, shippingAddress = null } = opts;
+
+  // Orders with a printed product get extra information about shipping time and,
+  // when available, the delivery address the customer entered at checkout.
+  const printHtml = hasPrint
+    ? `<p style="font-size:15px;line-height:1.6;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 16px;">
+         <strong>Hinweis zu Ihren ausgedruckten Fotos:</strong><br />
+         Ihre bestellten Fotos zum Ausdrucken werden in ca. <strong>3–4 Wochen</strong> an die unten angegebene Adresse versandt.
+       </p>${
+         shippingAddress
+           ? `<p style="font-size:14px;line-height:1.6;">
+                <strong>Lieferadresse</strong><br />
+                ${shippingAddress.first_name} ${shippingAddress.last_name}<br />
+                ${shippingAddress.street} ${shippingAddress.house_no}<br />
+                ${shippingAddress.zip} ${shippingAddress.city}
+              </p>`
+           : ''
+       }`
+    : '';
+
   const html = wrap(
     'Vielen Dank für Ihre Bestellung',
     `<p style="font-size:15px;line-height:1.6;">Wir haben Ihre Bestellung erhalten und bestätigt.</p>
      <pre style="font-size:14px;background:#f0f4f8;border-radius:12px;padding:16px;white-space:pre-wrap;">${summary}</pre>
+     ${printHtml}
      <p style="text-align:center;margin:20px 0;">
        <a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:600;">Bestellung & Downloads ansehen</a>
      </p>
      <p style="font-size:13px;color:#7b8794;">Bestellnummer: ${orderId}</p>`,
   );
-  const text = `Vielen Dank für Ihre Bestellung (Nr. ${orderId}).\n\n${summary}\n\nBestellung & Downloads: ${link}`;
+
+  const printText = hasPrint
+    ? `\n\nHinweis: Ihre bestellten Fotos zum Ausdrucken werden in ca. 3–4 Wochen an die angegebene Adresse versandt.${
+        shippingAddress
+          ? `\n\nLieferadresse:\n${shippingAddress.first_name} ${shippingAddress.last_name}\n${shippingAddress.street} ${shippingAddress.house_no}\n${shippingAddress.zip} ${shippingAddress.city}`
+          : ''
+      }`
+    : '';
+
+  const subject = hasPrint
+    ? 'Ihre Bestellung ist bestätigt – Druck folgt'
+    : 'Ihre Bestellung ist bestätigt';
+  const text = `Vielen Dank für Ihre Bestellung (Nr. ${orderId}).\n\n${summary}${printText}\n\nBestellung & Downloads: ${link}`;
   await sendMail({ to, subject, html, text });
 }

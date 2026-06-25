@@ -26,6 +26,15 @@ export interface CartLine {
   ext: string;
 }
 
+export interface ShippingAddress {
+  first_name: string;
+  last_name: string;
+  street: string;
+  house_no: string;
+  zip: string;
+  city: string;
+}
+
 interface OrderDoc {
   email_id: string;
   status: string;
@@ -33,8 +42,22 @@ interface OrderDoc {
   total_cents: number;
   payment_provider?: string;
   payment_ref?: string;
+  shipping_address?: ShippingAddress | null;
   created_at: string;
   updated_at: string;
+}
+
+/** A shipping address is only usable when every field is filled in. */
+export function isCompleteAddress(a?: ShippingAddress | null): a is ShippingAddress {
+  if (!a) return false;
+  return (
+    !!a.first_name?.trim() &&
+    !!a.last_name?.trim() &&
+    !!a.street?.trim() &&
+    !!a.house_no?.trim() &&
+    !!a.zip?.trim() &&
+    !!a.city?.trim()
+  );
 }
 
 interface OrderItemDoc {
@@ -269,11 +292,44 @@ async function recalcTotal(orderId: string): Promise<void> {
 /** Transitions the cart into a real order ready for payment. */
 export async function beginCheckout(
   emailId: string,
+  shippingAddress?: ShippingAddress | null,
 ): Promise<{ orderId: string; total_cents: number; currency: string }> {
   const cart = await getCart(emailId);
   if (cart.items.length === 0) throw new ApiError(400, 'Ihr Warenkorb ist leer.');
-  await updateById(COL.orders, cart.id, { status: 'checkout_started', updated_at: nowIso() });
+
+  const update: Record<string, unknown> = {
+    status: 'checkout_started',
+    updated_at: nowIso(),
+  };
+
+  // Orders containing a print product require a complete delivery address so the
+  // printed photos can be shipped. Digital-only orders never need one.
+  const hasPrint = cart.items.some((i) => i.product_type === 'print');
+  if (hasPrint) {
+    if (!isCompleteAddress(shippingAddress)) {
+      throw new ApiError(
+        400,
+        'Für Fotos zum Ausdrucken wird eine vollständige Lieferadresse benötigt.',
+      );
+    }
+    update.shipping_address = normalizeAddress(shippingAddress);
+  } else if (isCompleteAddress(shippingAddress)) {
+    update.shipping_address = normalizeAddress(shippingAddress);
+  }
+
+  await updateById(COL.orders, cart.id, update);
   return { orderId: cart.id, total_cents: cart.total_cents, currency: cart.currency };
+}
+
+function normalizeAddress(a: ShippingAddress): ShippingAddress {
+  return {
+    first_name: a.first_name.trim(),
+    last_name: a.last_name.trim(),
+    street: a.street.trim(),
+    house_no: a.house_no.trim(),
+    zip: a.zip.trim(),
+    city: a.city.trim(),
+  };
 }
 
 /**
@@ -339,6 +395,7 @@ export interface OrderDetail {
   currency: string;
   total_cents: number;
   created_at: string;
+  shipping_address: ShippingAddress | null;
   items: {
     photo_id: string;
     product_name: string;
@@ -390,6 +447,7 @@ export async function getOrderForEmail(emailId: string, orderId: string): Promis
     currency: order.currency,
     total_cents: order.total_cents,
     created_at: order.created_at,
+    shipping_address: order.shipping_address ?? null,
     items,
   };
 }

@@ -31,10 +31,33 @@ import {
   purchasedDigitalPhotoIds,
   cartDigitalPhotoIds,
 } from '../services/orders';
+import type { ShippingAddress } from '../services/orders';
 import { createCheckoutSession } from '../services/payments';
 import { sendOrderConfirmation } from '../lib/email';
 
 const router = Router();
+
+// Delivery address for orders that include a print product. Every field is
+// required so the printed photos can actually be shipped.
+const shippingAddressSchema = z.object({
+  firstName: z.string().trim().min(1).max(120),
+  lastName: z.string().trim().min(1).max(120),
+  street: z.string().trim().min(1).max(200),
+  houseNo: z.string().trim().min(1).max(40),
+  zip: z.string().trim().min(1).max(20),
+  city: z.string().trim().min(1).max(120),
+});
+
+function toShippingAddress(input: z.infer<typeof shippingAddressSchema>): ShippingAddress {
+  return {
+    first_name: input.firstName,
+    last_name: input.lastName,
+    street: input.street,
+    house_no: input.houseNo,
+    zip: input.zip,
+    city: input.city,
+  };
+}
 
 // Neutral message that never reveals whether an address exists.
 const NEUTRAL_MESSAGE =
@@ -261,13 +284,20 @@ router.post(
     // from status "cart" to "checkout_started". Otherwise getCart would no
     // longer find a cart and silently create a new, empty one, so the Stripe
     // session would be created without line_items.
+    const { shippingAddress } = parse(
+      z.object({ shippingAddress: shippingAddressSchema.optional() }),
+      req.body ?? {},
+    );
     const cart = await getCart(req.parent!.emailId);
     const lines = cart.items.map((i) => ({
       name: `${i.product_name}`,
       amountCents: i.unit_price_cents,
       qty: i.qty,
     }));
-    const { orderId } = await beginCheckout(req.parent!.emailId);
+    const { orderId } = await beginCheckout(
+      req.parent!.emailId,
+      shippingAddress ? toShippingAddress(shippingAddress) : undefined,
+    );
 
     const url = await createCheckoutSession({ orderId, email: req.parent!.email, lines });
     if (url) {
@@ -319,6 +349,7 @@ router.get(
         currency: order.currency,
         total_cents: order.total_cents,
         created_at: order.created_at,
+        shippingAddress: order.shipping_address,
         items: order.items.map((i) => ({
           productName: i.product_name,
           productType: i.product_type,
@@ -376,8 +407,12 @@ async function sendConfirmationEmail(email: string, order: NonNullable<Awaited<R
     .map((i) => `• ${i.qty}× ${i.product_name} – ${formatMoney(i.unit_price_cents, order.currency)}`)
     .join('\n');
   const link = `${config.publicAppUrl}/bestellung/${order.id}`;
+  const hasPrint = order.items.some((i) => i.product_type === 'print');
   try {
-    await sendOrderConfirmation(email, order.id, summary, link);
+    await sendOrderConfirmation(email, order.id, summary, link, {
+      hasPrint,
+      shippingAddress: order.shipping_address,
+    });
   } catch {
     /* non fatal */
   }
