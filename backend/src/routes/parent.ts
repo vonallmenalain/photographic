@@ -28,6 +28,8 @@ import {
   markOrderPaid,
   getOrderForEmail,
   listOrdersForEmail,
+  purchasedDigitalPhotoIds,
+  cartDigitalPhotoIds,
 } from '../services/orders';
 import { createCheckoutSession } from '../services/payments';
 import { sendOrderConfirmation } from '../lib/email';
@@ -153,7 +155,11 @@ router.get(
   '/photos',
   requireParent,
   asyncHandler(async (req, res) => {
-    const photos = await getVisiblePhotos(req.parent!.emailId);
+    const [photos, purchased, inCart] = await Promise.all([
+      getVisiblePhotos(req.parent!.emailId),
+      purchasedDigitalPhotoIds(req.parent!.emailId),
+      cartDigitalPhotoIds(req.parent!.emailId),
+    ]);
     // Group by event for a calm presentation.
     const eventsMap = new Map<string, { id: string; name: string; photos: unknown[] }>();
     for (const p of photos) {
@@ -166,6 +172,10 @@ router.get(
         // Short-lived signed URLs to watermarked variants only. No IDs/paths leak.
         thumbUrl: `/files/preview-image?token=${signFileToken(p.id, 'thumb', 3600)}`,
         previewUrl: `/files/preview-image?token=${signFileToken(p.id, 'preview', 3600)}`,
+        // Whether the digital download is already owned / already in the cart, so
+        // the UI can prevent buying the same photo a second time.
+        purchased: purchased.has(p.id),
+        inCart: inCart.has(p.id),
       });
     }
     res.json({ events: Array.from(eventsMap.values()) });

@@ -111,6 +111,32 @@ export async function getCart(
   return { id: cartId, items, total_cents: total, currency: order?.currency ?? 'chf' };
 }
 
+/**
+ * Whether the e-mail already owns a digital download for this photo. A download
+ * grant is created the moment a digital item is paid, so its existence means the
+ * photo can already be downloaded under "Bestellungen".
+ */
+export async function hasDigitalPurchase(emailId: string, photoId: string): Promise<boolean> {
+  const grant = await firstOf(
+    col(COL.downloadGrants)
+      .where('email_id', '==', emailId)
+      .where('photo_id', '==', photoId),
+  );
+  return !!grant;
+}
+
+/** Whether the given cart already contains a digital download line for this photo. */
+async function cartHasDigitalForPhoto(cartId: string, photoId: string): Promise<boolean> {
+  const lines = await runQuery<OrderItemDoc>(
+    col(COL.orderItems).where('order_id', '==', cartId).where('photo_id', '==', photoId),
+  );
+  for (const line of lines) {
+    const product = await getById<ProductDoc>(COL.products, line.product_id);
+    if (product?.type === 'digital') return true;
+  }
+  return false;
+}
+
 export async function addToCart(
   emailId: string,
   photoId: string,
@@ -127,6 +153,37 @@ export async function addToCart(
   }
 
   const cartId = await getOrCreateCart(emailId);
+
+  // A digital download is unique per photo: it can be bought at most once and
+  // never added twice. Block when the photo was already purchased (downloadable
+  // under "Bestellungen") or is already sitting in the cart as a download.
+  if (product.type === 'digital') {
+    if (await hasDigitalPurchase(emailId, photoId)) {
+      throw new ApiError(
+        409,
+        'Dieses Foto haben Sie bereits als digitalen Download gekauft. Sie finden es unter „Bestellungen“.',
+      );
+    }
+    if (await cartHasDigitalForPhoto(cartId, photoId)) {
+      throw new ApiError(
+        409,
+        'Dieses Foto liegt bereits als digitaler Download in Ihrem Warenkorb.',
+      );
+    }
+    await setById(COL.orderItems, newId('oi'), {
+      order_id: cartId,
+      photo_id: photoId,
+      product_id: productId,
+      qty: 1,
+      unit_price_cents: product.price_cents,
+      product_name: product.name,
+      created_at: nowIso(),
+    });
+    await recalcTotal(cartId);
+    return;
+  }
+
+  // Non-digital products (e.g. prints) may be ordered in multiples; merge.
   const existing = await firstOf<OrderItemDoc>(
     col(COL.orderItems)
       .where('order_id', '==', cartId)
@@ -147,6 +204,31 @@ export async function addToCart(
     });
   }
   await recalcTotal(cartId);
+}
+
+/** Photo ids the e-mail already owns as a digital download (download grants). */
+export async function purchasedDigitalPhotoIds(emailId: string): Promise<Set<string>> {
+  const grants = await runQuery<{ photo_id: string }>(
+    col(COL.downloadGrants).where('email_id', '==', emailId),
+  );
+  return new Set(grants.map((g) => g.photo_id));
+}
+
+/** Photo ids currently in the e-mail's cart as a digital download. */
+export async function cartDigitalPhotoIds(emailId: string): Promise<Set<string>> {
+  const cart = await firstOf<OrderDoc>(
+    col(COL.orders).where('email_id', '==', emailId).where('status', '==', 'cart'),
+  );
+  if (!cart) return new Set();
+  const lines = await runQuery<OrderItemDoc>(
+    col(COL.orderItems).where('order_id', '==', cart.id),
+  );
+  const ids = new Set<string>();
+  for (const line of lines) {
+    const product = await getById<ProductDoc>(COL.products, line.product_id);
+    if (product?.type === 'digital') ids.add(line.photo_id);
+  }
+  return ids;
 }
 
 export async function updateCartItemQty(
