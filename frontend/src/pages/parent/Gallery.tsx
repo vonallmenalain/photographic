@@ -10,6 +10,8 @@ interface Photo {
   isClassPhoto: boolean;
   thumbUrl: string;
   previewUrl: string;
+  purchased: boolean;
+  inCart: boolean;
 }
 interface EventGroup {
   id: string;
@@ -25,12 +27,20 @@ interface Product {
   currency: string;
 }
 
+type Feedback = { kind: 'error' | 'success'; msg: string };
+
 export default function Gallery() {
   const [events, setEvents] = useState<EventGroup[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [active, setActive] = useState<Photo | null>(null);
+  // Digital downloads can only be bought once. Track which photos are already
+  // owned or already in the cart so the same photo can't be added twice.
+  const [purchasedIds, setPurchasedIds] = useState<Set<string>>(new Set());
+  const [cartIds, setCartIds] = useState<Set<string>>(new Set());
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
 
   useEffect(() => {
     (async () => {
@@ -41,6 +51,16 @@ export default function Gallery() {
         ]);
         setEvents(photoRes.events);
         setProducts(prodRes.products);
+        const purchased = new Set<string>();
+        const inCart = new Set<string>();
+        for (const ev of photoRes.events) {
+          for (const p of ev.photos) {
+            if (p.purchased) purchased.add(p.id);
+            if (p.inCart) inCart.add(p.id);
+          }
+        }
+        setPurchasedIds(purchased);
+        setCartIds(inCart);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Fotos konnten nicht geladen werden.');
       } finally {
@@ -48,6 +68,38 @@ export default function Gallery() {
       }
     })();
   }, []);
+
+  const digitalProduct = products.find((p) => p.type === 'digital');
+
+  const markInCart = (photoId: string) => setCartIds((prev) => new Set(prev).add(photoId));
+
+  const quickAdd = async (photo: Photo) => {
+    if (!digitalProduct) return;
+    setAddingId(photo.id);
+    setFeedback((f) => {
+      const next = { ...f };
+      delete next[photo.id];
+      return next;
+    });
+    try {
+      await api('/api/parent/cart', {
+        method: 'POST',
+        body: { photoId: photo.id, productId: digitalProduct.id, qty: 1 },
+      });
+      markInCart(photo.id);
+      setFeedback((f) => ({ ...f, [photo.id]: { kind: 'success', msg: 'Zum Warenkorb hinzugefügt.' } }));
+    } catch (err) {
+      setFeedback((f) => ({
+        ...f,
+        [photo.id]: {
+          kind: 'error',
+          msg: err instanceof ApiError ? err.message : 'Konnte nicht hinzugefügt werden.',
+        },
+      }));
+    } finally {
+      setAddingId(null);
+    }
+  };
 
   if (loading) return <Spinner label="Fotos werden geladen …" />;
 
@@ -83,19 +135,47 @@ export default function Gallery() {
         <section key={ev.id} style={{ marginBottom: 32 }}>
           <h2>{ev.name}</h2>
           <div className="grid">
-            {ev.photos.map((p) => (
-              <div className="photo-card" key={p.id}>
-                <div onClick={() => setActive(p)} style={{ cursor: 'zoom-in' }}>
-                  <ProtectedImage src={p.thumbUrl} />
+            {ev.photos.map((p) => {
+              const purchased = purchasedIds.has(p.id);
+              const inCart = cartIds.has(p.id);
+              const fb = feedback[p.id];
+              return (
+                <div className="photo-card" key={p.id}>
+                  <div onClick={() => setActive(p)} style={{ cursor: 'zoom-in' }}>
+                    <ProtectedImage src={p.thumbUrl} />
+                  </div>
+                  <div className="body">
+                    {p.isClassPhoto && <span className="badge class">Gruppen-/Klassenfoto</span>}
+                    <button className="btn secondary small" onClick={() => setActive(p)}>
+                      Ansehen &amp; auswählen
+                    </button>
+                    {digitalProduct &&
+                      (purchased ? (
+                        <Link to="/bestellungen" className="btn ghost small" style={{ textAlign: 'center' }}>
+                          ✓ Bereits gekauft
+                        </Link>
+                      ) : inCart ? (
+                        <Link to="/warenkorb" className="btn ghost small" style={{ textAlign: 'center' }}>
+                          ✓ Im Warenkorb
+                        </Link>
+                      ) : (
+                        <button
+                          className="btn small"
+                          onClick={() => quickAdd(p)}
+                          disabled={addingId === p.id}
+                        >
+                          {addingId === p.id ? 'Wird hinzugefügt …' : 'In den Warenkorb'}
+                        </button>
+                      ))}
+                    {fb && (
+                      <div className={`alert ${fb.kind}`} style={{ margin: 0, fontSize: '0.82rem' }}>
+                        {fb.msg}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="body">
-                  {p.isClassPhoto && <span className="badge class">Gruppen-/Klassenfoto</span>}
-                  <button className="btn secondary small" onClick={() => setActive(p)}>
-                    Ansehen &amp; auswählen
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       ))}
@@ -108,7 +188,16 @@ export default function Gallery() {
       )}
 
       {active && (
-        <Lightbox photo={active} products={products} onClose={() => setActive(null)} />
+        <Lightbox
+          photo={active}
+          products={products}
+          purchased={purchasedIds.has(active.id)}
+          inCart={cartIds.has(active.id)}
+          onAdded={(photoId, productType) => {
+            if (productType === 'digital') markInCart(photoId);
+          }}
+          onClose={() => setActive(null)}
+        />
       )}
     </div>
   );
@@ -117,29 +206,40 @@ export default function Gallery() {
 function Lightbox({
   photo,
   products,
+  purchased,
+  inCart,
+  onAdded,
   onClose,
 }: {
   photo: Photo;
   products: Product[];
+  purchased: boolean;
+  inCart: boolean;
+  onAdded: (photoId: string, productType: string) => void;
   onClose: () => void;
 }) {
   const [productId, setProductId] = useState(products[0]?.id ?? '');
   const [qty, setQty] = useState('1');
   const [adding, setAdding] = useState(false);
-  const [added, setAdded] = useState(false);
   const [error, setError] = useState('');
 
   const selectedProduct = products.find((p) => p.id === productId);
   const isPrint = selectedProduct?.type === 'print';
+  const isDigital = selectedProduct?.type === 'digital';
   const qtyNum = Math.min(99, Math.max(1, Math.floor(Number(qty) || 1)));
+
+  // A digital download that is already owned or already in the cart cannot be
+  // bought a second time.
+  const digitalBlocked = isDigital && (purchased || inCart);
 
   const handleProductChange = (id: string) => {
     setProductId(id);
     setQty('1');
-    setAdded(false);
+    setError('');
   };
 
   const addToCart = async () => {
+    if (digitalBlocked) return;
     setError('');
     setAdding(true);
     try {
@@ -147,7 +247,9 @@ function Lightbox({
         method: 'POST',
         body: { photoId: photo.id, productId, qty: isPrint ? qtyNum : 1 },
       });
-      setAdded(true);
+      onAdded(photo.id, selectedProduct?.type ?? '');
+      // Close the preview and return to the photo selection right away.
+      onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Konnte nicht hinzugefügt werden.');
     } finally {
@@ -195,15 +297,17 @@ function Lightbox({
               />
             </div>
           )}
-          {added ? (
-            <div style={{ display: 'flex', gap: 10 }}>
-              <Link to="/warenkorb" className="btn block">
-                Zum Warenkorb
+          {digitalBlocked ? (
+            <>
+              <Alert kind="info">
+                {purchased
+                  ? 'Dieses Foto haben Sie bereits als digitalen Download gekauft. Sie finden es unter „Bestellungen“.'
+                  : 'Dieses Foto liegt bereits als digitaler Download in Ihrem Warenkorb.'}
+              </Alert>
+              <Link to={purchased ? '/bestellungen' : '/warenkorb'} className="btn block">
+                {purchased ? 'Zu den Bestellungen' : 'Zum Warenkorb'}
               </Link>
-              <button className="btn secondary" onClick={() => setAdded(false)}>
-                Weiter
-              </button>
-            </div>
+            </>
           ) : (
             <button className="btn block" onClick={addToCart} disabled={adding || !productId}>
               {adding ? 'Wird hinzugefügt …' : 'In den Warenkorb'}
