@@ -21,6 +21,7 @@ import { getVisiblePhotos } from '../services/access';
 import {
   getCart,
   addToCart,
+  updateCartItemQty,
   removeFromCart,
   clearCart,
   beginCheckout,
@@ -201,10 +202,20 @@ router.post(
   requireParent,
   asyncHandler(async (req, res) => {
     const { photoId, productId, qty } = parse(
-      z.object({ photoId: z.string(), productId: z.string(), qty: z.number().int().min(1).max(20).default(1) }),
+      z.object({ photoId: z.string(), productId: z.string(), qty: z.number().int().min(1).max(99).default(1) }),
       req.body,
     );
     await addToCart(req.parent!.emailId, photoId, productId, qty);
+    res.json({ ok: true });
+  }),
+);
+
+router.patch(
+  '/cart/:itemId',
+  requireParent,
+  asyncHandler(async (req, res) => {
+    const { qty } = parse(z.object({ qty: z.number().int().min(1).max(99) }), req.body);
+    await updateCartItemQty(req.parent!.emailId, req.params.itemId, qty);
     res.json({ ok: true });
   }),
 );
@@ -331,9 +342,19 @@ router.post(
   }),
 );
 
+function formatMoney(cents: number, currency: string): string {
+  const code = currency.toUpperCase();
+  if (code === 'CHF') {
+    const hasRappen = Math.round(cents) % 100 !== 0;
+    const francs = Math.round(cents) / 100;
+    return hasRappen ? `${francs.toFixed(2)} CHF` : `${Math.round(francs)}.- CHF`;
+  }
+  return `${(cents / 100).toFixed(2)} ${code}`;
+}
+
 async function sendConfirmationEmail(email: string, order: NonNullable<Awaited<ReturnType<typeof getOrderForEmail>>>) {
   const summary = order.items
-    .map((i) => `• ${i.qty}× ${i.product_name} – ${(i.unit_price_cents / 100).toFixed(2)} ${order.currency.toUpperCase()}`)
+    .map((i) => `• ${i.qty}× ${i.product_name} – ${formatMoney(i.unit_price_cents, order.currency)}`)
     .join('\n');
   const link = `${config.publicAppUrl}/bestellung/${order.id}`;
   try {
