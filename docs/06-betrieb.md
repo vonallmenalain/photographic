@@ -14,12 +14,12 @@
    - Einzelfoto → Kind über das Dropdown zuordnen.
    - **Klassen-/Gruppenfoto** → Häkchen „Gruppen-/Klassenfoto“ setzen und über
      „E-Mail-Zuordnung verwalten“ den berechtigten Familien direkt zuweisen.
-4. **Fotos veröffentlichen** (Button „Veröffentlichen“ je Foto). Erst dann sind
-   sie – nach E-Mail-Verifizierung – für Eltern sichtbar.
-5. **E-Mail-Adressen** anlegen (Adminbereich → „E-Mail-Adressen“) und mit Kindern
+4. **E-Mail-Adressen** anlegen (Adminbereich → „E-Mail-Adressen“) und mit Kindern
    verknüpfen (n:m: Mutter+Vater, mehrere Kinder).
-6. **Event-Status auf „published“** setzen. (Foto sichtbar = Event published
-   **und** Foto published **und** Zuordnung vorhanden **und** E-Mail verifiziert.)
+5. **Event-Status auf „published“** setzen. Erst dann sind die zugeordneten Fotos
+   – nach E-Mail-Verifizierung – für Eltern sichtbar. (Foto sichtbar = Event
+   published **und** Foto nicht gesperrt **und** Zuordnung vorhanden **und**
+   E-Mail verifiziert.) Ein eigenes Veröffentlichen je Foto gibt es nicht mehr.
 
 ## 6.1a Schnell-Import & automatische Zuordnung
 
@@ -81,12 +81,12 @@ automatisch an der verknüpften E-Mail – die Familie sieht das Foto also sofor
   **„Vorhandene Fotos automatisch zuordnen (nach Dateiname)“** nutzen.
 
 > Empfohlener Ablauf: Event anlegen → **Import** (E-Mails + Kinder) → Fotos mit
-> sprechenden Dateinamen hochladen → kurz prüfen → veröffentlichen.
+> sprechenden Dateinamen hochladen → kurz prüfen → Event veröffentlichen.
 
 ### Prüfschritt vor Veröffentlichung (empfohlen)
 Bevor du ein Event auf „published“ setzt:
 - Stimmt jede Zuordnung (Kind ↔ Foto, E-Mail ↔ Kind)?
-- Sind nur die gewünschten Fotos „veröffentlicht“?
+- Sind nur die gewünschten Fotos im Event (nicht gewünschte löschen/deaktivieren)?
 - Sind Previews korrekt mit Wasserzeichen erzeugt (Thumbnails im Admin sichtbar)?
 
 ## 6.2 Statuswerte (wie im Konzept)
@@ -103,10 +103,9 @@ Bevor du ein Event auf „published“ setzt:
 - **Mehrere Eltern (Mutter+Vater):** beide Adressen anlegen, beide mit demselben
   Kind verknüpfen.
 - **Mehrere Kinder:** eine Adresse mit mehreren Kindern verknüpfen.
-- **Falsch zugeordnetes Foto:** Foto „Zurückziehen“ (Veröffentlichung aufheben),
-  Zuordnung ändern oder Foto deaktivieren/löschen.
+- **Falsch zugeordnetes Foto:** Zuordnung ändern oder Foto deaktivieren/löschen.
 - **Eltern finden keine Fotos:** prüfen, ob (a) Adresse exakt stimmt, (b) Kind
-  verknüpft, (c) Foto veröffentlicht, (d) Event „published“.
+  verknüpft, (c) Foto nicht deaktiviert, (d) Event „published“.
 - **Meldungen der Eltern:** Adminbereich → „Meldungen“ (Status pflegen).
 
 ## 6.4 Aufbewahrung (Standard 30 Tage)

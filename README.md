@@ -78,7 +78,7 @@ optional SMTP/Stripe), ist Schritt für Schritt in [`docs/`](docs/) beschrieben.
 | Nur ein Original hochladen | `sharp` erzeugt Admin-Thumb, Eltern-Thumb, Preview automatisch |
 | Familienlogik | E-Mail ↔ Kind als n:m (Mutter+Vater, mehrere Kinder, Geschwister) |
 | Klassenfotos | Foto ohne Kind-Bezug, direkt einzelnen E-Mails zugewiesen |
-| Veröffentlichungs-Workflow | Status für Events & Fotos; sichtbar erst bei „published“ + freigegeben |
+| Veröffentlichungs-Workflow | Event-Status steuert die Sichtbarkeit; zugeordnete Fotos werden sichtbar, sobald das Event „published“ ist |
 | Warenkorb & Kauf | Produkte (digital/Print), Warenkorb, Checkout (Stripe-ready oder manuell), Bestellstatus |
 | Nach dem Kauf | Bestellübersicht, Download-Links, Bestätigungs-E-Mail |
 | Aufbewahrung 30 Tage | `expires_at` je Event (Standard 30 Tage), nach Ablauf nicht mehr sichtbar |
@@ -135,7 +135,7 @@ Typischer erster Durchlauf:
    Schritt an). Alternativ einzeln unter **E-Mail-Adressen** / im Event anlegen.
 3. **Fotos** hochladen – Fotos, deren Dateiname den Kindnamen enthält
    (z. B. `Lena_Mueller_01.jpg`), werden automatisch zugeordnet.
-4. Fotos **veröffentlichen**, Event-Status auf **„published“** setzen.
+4. Event-Status auf **„published“** setzen – die zugeordneten Fotos werden dadurch sichtbar.
 5. Eltern-App: Adresse eingeben → Anmeldelink öffnen (Auth-Emulator-UI) → Galerie sehen → kaufen.
 
 > Mehr zum Schnell-Import und zur automatischen Foto-Zuordnung:

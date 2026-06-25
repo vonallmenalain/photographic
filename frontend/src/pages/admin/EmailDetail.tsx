@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
 import { formatPrice, formatDate } from '../../lib/format';
@@ -45,6 +45,7 @@ const EMAIL_STATUSES = [
 
 export default function EmailDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState<{
     email: EmailObj;
     children: LinkedChild[];
@@ -107,6 +108,21 @@ export default function EmailDetail() {
   const resend = async () => {
     await api(`/api/admin/emails/${id}/resend-verification`, { method: 'POST', admin: true });
     setMsg('Eine neue Bestätigungs-E-Mail wurde ausgelöst.');
+  };
+  const remove = async () => {
+    if (
+      !confirm(
+        'Diese E-Mail-Adresse wirklich löschen? Verknüpfungen, Sitzungen und Bestätigungs-Tokens dieser Adresse werden mit entfernt. Dies kann nicht rückgängig gemacht werden.',
+      )
+    )
+      return;
+    setError('');
+    try {
+      await api(`/api/admin/emails/${id}`, { method: 'DELETE', admin: true });
+      navigate('/admin/emails');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'E-Mail-Adresse konnte nicht gelöscht werden.');
+    }
   };
 
   if (loading) return <Spinner />;
@@ -235,6 +251,22 @@ export default function EmailDetail() {
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* Danger zone */}
+      <div className="card mb" style={{ marginTop: 16, borderColor: 'var(--danger, #e5484d)' }}>
+        <div className="row between">
+          <div>
+            <h2 style={{ marginBottom: 4 }}>E-Mail-Adresse löschen</h2>
+            <p className="muted" style={{ fontSize: '0.82rem', margin: 0 }}>
+              Entfernt diese Adresse samt aller Verknüpfungen, Sitzungen und Bestätigungs-Tokens. Dies
+              kann nicht rückgängig gemacht werden.
+            </p>
+          </div>
+          <button className="btn danger" onClick={remove}>
+            E-Mail-Adresse löschen
+          </button>
+        </div>
       </div>
     </div>
   );

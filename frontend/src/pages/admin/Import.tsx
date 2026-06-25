@@ -73,6 +73,7 @@ export default function Import() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<CommitResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
 
   // target event selection
   const [targetMode, setTargetMode] = useState<'existing' | 'new'>('existing');
@@ -85,6 +86,27 @@ export default function Import() {
       .then((r) => setEvents(r.events))
       .catch(() => undefined);
   }, []);
+
+  const scrollToTop = () => {
+    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Reset the whole import page back to its initial (empty) state.
+  const resetImport = () => {
+    setText('');
+    setRows([]);
+    setPreview(null);
+    setResult(null);
+    setError('');
+    setLoading(false);
+    setCommitting(false);
+    setTargetMode('existing');
+    setDefaultEventId('');
+    setDefaultEventName('');
+    setCreateMissingEvents(true);
+    if (fileRef.current) fileRef.current.value = '';
+    scrollToTop();
+  };
 
   const runPreview = async (
     rowsArg: string[][],
@@ -149,10 +171,12 @@ export default function Import() {
     if (!preview) return;
     if (targetMode === 'existing' && !defaultEventId) {
       setError('Bitte ein Ziel-Event wählen oder ein neues anlegen.');
+      scrollToTop();
       return;
     }
     if (targetMode === 'new' && !defaultEventName.trim()) {
       setError('Bitte einen Namen für das neue Event eingeben.');
+      scrollToTop();
       return;
     }
     setCommitting(true);
@@ -180,6 +204,7 @@ export default function Import() {
         .catch(() => undefined);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Import fehlgeschlagen.');
+      scrollToTop();
     } finally {
       setCommitting(false);
     }
@@ -189,6 +214,7 @@ export default function Import() {
 
   return (
     <div>
+      <div ref={topRef} />
       <h1>Import</h1>
       <p className="soft">
         Lege E-Mail-Adressen, Kinder und ihre Verknüpfungen in einem Schritt an – per Kopieren &amp;
@@ -408,9 +434,20 @@ export default function Import() {
                 angezeigt. Es werden alle Zeilen importiert.
               </p>
             )}
-            <button className="btn" onClick={commit} disabled={committing} style={{ marginTop: 12 }}>
-              {committing ? 'Import läuft …' : 'Jetzt importieren'}
-            </button>
+            <div className="row" style={{ marginTop: 12 }}>
+              <button className="btn" onClick={commit} disabled={committing}>
+                {committing ? 'Import läuft …' : 'Jetzt importieren'}
+              </button>
+              <button
+                className="btn secondary"
+                type="button"
+                onClick={resetImport}
+                disabled={committing}
+                title="Alle eingetragenen Daten verwerfen und die Seite zurücksetzen"
+              >
+                Import abbrechen
+              </button>
+            </div>
           </div>
         </>
       )}

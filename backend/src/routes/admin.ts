@@ -318,7 +318,6 @@ router.get(
       events,
       publishedEvents,
       photos,
-      publishedPhotos,
       emails,
       verifiedEmails,
       orders,
@@ -327,13 +326,12 @@ router.get(
       countQuery(col(COL.events)),
       countQuery(col(COL.events).where('status', '==', 'published')),
       countQuery(col(COL.photos)),
-      countQuery(col(COL.photos).where('published', '==', 1)),
       countQuery(col(COL.parentEmails)),
       countQuery(col(COL.parentEmails).where('status', '==', 'verified')),
       countQuery(col(COL.orders).where('status', '!=', 'cart')),
       countQuery(col(COL.reports).where('status', '==', 'open')),
     ]);
-    res.json({ events, publishedEvents, photos, publishedPhotos, emails, verifiedEmails, orders, openReports });
+    res.json({ events, publishedEvents, photos, emails, verifiedEmails, orders, openReports });
   }),
 );
 
@@ -403,7 +401,6 @@ router.get(
         is_class_photo: number;
         original_filename: string;
         status: string;
-        published: number;
         sort_order: number;
         width: number | null;
         height: number | null;
@@ -417,7 +414,6 @@ router.get(
         is_class_photo: p.is_class_photo,
         original_filename: p.original_filename,
         status: p.status,
-        published: p.published,
         sort_order: p.sort_order,
         width: p.width ?? null,
         height: p.height ?? null,
@@ -701,7 +697,6 @@ router.patch(
       z.object({
         child_id: z.string().nullable().optional(),
         is_class_photo: z.boolean().optional(),
-        published: z.boolean().optional(),
         status: z.enum(PHOTO_STATUSES).optional(),
         sort_order: z.number().int().optional(),
       }),
@@ -712,7 +707,6 @@ router.patch(
     const map: Record<string, unknown> = {};
     if (data.child_id !== undefined) map.child_id = data.child_id;
     if (data.is_class_photo !== undefined) map.is_class_photo = data.is_class_photo ? 1 : 0;
-    if (data.published !== undefined) map.published = data.published ? 1 : 0;
     if (data.status !== undefined) map.status = data.status;
     if (data.sort_order !== undefined) map.sort_order = data.sort_order;
     if (Object.keys(map).length) {
