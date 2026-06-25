@@ -47,7 +47,7 @@ alias('first_name', ['vorname', 'first name', 'firstname', 'first', 'rufname']);
 alias('last_name', ['nachname', 'last name', 'lastname', 'surname', 'familienname']);
 alias('name', ['name', 'elternname', 'eltern', 'parent', 'parent name', 'kontakt', 'kontaktname']);
 alias('child', ['kind', 'kinder', 'child', 'children', 'kindname', 'kindername', 'schueler', 'schuelerin', 'schuelername', 'student']);
-alias('event', ['event', 'veranstaltung', 'klasse', 'class', 'gruppe', 'group', 'kindergarten', 'schule', 'set', 'fotoset', 'galerie', 'gallery']);
+alias('event', ['auftrag', 'auftraege', 'event', 'veranstaltung', 'klasse', 'class', 'gruppe', 'group', 'kindergarten', 'schule', 'set', 'fotoset', 'galerie', 'gallery']);
 alias('note', ['notiz', 'note', 'bemerkung', 'info', 'kommentar', 'comment', 'hinweis']);
 
 function roleForHeader(header: string): Exclude<ImportRole, 'ignore'> | null {

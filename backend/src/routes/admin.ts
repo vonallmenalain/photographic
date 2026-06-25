@@ -341,21 +341,39 @@ router.get(
   asyncHandler(async (_req, res) => {
     // Keep statuses current (auto-archive expired galleries) before listing.
     await archiveExpiredEvents();
-    const [events, photos, children] = await Promise.all([
+    const [events, photos, children, emailLinks] = await Promise.all([
       runQuery<Record<string, unknown>>(col(COL.events)),
       runQuery<{ event_id: string }>(col(COL.photos)),
-      runQuery<{ event_id: string }>(col(COL.children)),
+      runQuery<{ id: string; event_id: string }>(col(COL.children)),
+      runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
     ]);
     const photoCounts = new Map<string, number>();
     for (const p of photos) photoCounts.set(p.event_id, (photoCounts.get(p.event_id) ?? 0) + 1);
     const childCounts = new Map<string, number>();
     for (const c of children) childCounts.set(c.event_id, (childCounts.get(c.event_id) ?? 0) + 1);
 
+    // Distinct e-mail addresses per event: resolve every child→event link and
+    // collect the unique e-mail ids that point at any child of that event.
+    const childEvent = new Map<string, string>();
+    for (const c of children) childEvent.set(c.id, c.event_id);
+    const emailsByEvent = new Map<string, Set<string>>();
+    for (const link of emailLinks) {
+      const eventId = childEvent.get(link.child_id);
+      if (!eventId) continue;
+      let set = emailsByEvent.get(eventId);
+      if (!set) {
+        set = new Set<string>();
+        emailsByEvent.set(eventId, set);
+      }
+      set.add(link.email_id);
+    }
+
     const result = events
       .map((e) => ({
         ...e,
         photo_count: photoCounts.get(e.id) ?? 0,
         child_count: childCounts.get(e.id) ?? 0,
+        email_count: emailsByEvent.get(e.id)?.size ?? 0,
       }))
       .sort((a, b) =>
         String((b as Record<string, unknown>).created_at ?? '').localeCompare(

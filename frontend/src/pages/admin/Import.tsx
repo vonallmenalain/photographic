@@ -12,7 +12,7 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: 'first_name', label: 'Vorname' },
   { value: 'last_name', label: 'Nachname' },
   { value: 'child', label: 'Kind' },
-  { value: 'event', label: 'Event / Klasse' },
+  { value: 'event', label: 'Auftrag / Klasse' },
   { value: 'note', label: 'Notiz' },
 ];
 
@@ -59,7 +59,7 @@ interface EventRow {
   name: string;
 }
 
-const EXAMPLE = `E-Mail\tVorname\tNachname\tKind\tEvent
+const EXAMPLE = `E-Mail\tVorname\tNachname\tKind\tAuftrag
 anna@beispiel.de\tAnna\tMüller\tLena Müller\tKlasse 3b
 paul@beispiel.de\tPaul\tWeber\tTim Weber, Lisa Weber\tKlasse 3b`;
 
@@ -170,12 +170,12 @@ export default function Import() {
   const commit = async () => {
     if (!preview) return;
     if (targetMode === 'existing' && !defaultEventId) {
-      setError('Bitte ein Ziel-Event wählen oder ein neues anlegen.');
+      setError('Bitte einen Ziel-Auftrag wählen oder einen neuen anlegen.');
       scrollToTop();
       return;
     }
     if (targetMode === 'new' && !defaultEventName.trim()) {
-      setError('Bitte einen Namen für das neue Event eingeben.');
+      setError('Bitte einen Namen für den neuen Auftrag eingeben.');
       scrollToTop();
       return;
     }
@@ -230,7 +230,7 @@ export default function Import() {
             <li>{result.emailsCreated} E-Mail-Adressen neu angelegt ({result.emailsExisting} bereits vorhanden)</li>
             <li>{result.childrenCreated} Kinder neu angelegt ({result.childrenExisting} bereits vorhanden)</li>
             <li>{result.linksCreated} Verknüpfungen erstellt ({result.linksExisting} bereits vorhanden)</li>
-            {result.eventsCreated > 0 && <li>{result.eventsCreated} Event(s) neu angelegt</li>}
+            {result.eventsCreated > 0 && <li>{result.eventsCreated} Auftrag/Aufträge neu angelegt</li>}
             {result.rowsSkipped > 0 && <li>{result.rowsSkipped} Zeile(n) übersprungen</li>}
           </ul>
           {result.warnings.length > 0 && (
@@ -251,7 +251,7 @@ export default function Import() {
         <h2>1. Daten einfügen oder Datei hochladen</h2>
         <p className="muted" style={{ fontSize: '0.85rem' }}>
           Empfohlene Spalten: <strong>E-Mail</strong>, <strong>Vorname</strong>,
-          {' '}<strong>Nachname</strong>, <strong>Kind</strong>, optional <strong>Event</strong> und
+          {' '}<strong>Nachname</strong>, <strong>Kind</strong>, optional <strong>Auftrag</strong> und
           {' '}<strong>Notiz</strong>. Die Reihenfolge und Schreibweise der Spalten ist egal – sie
           werden automatisch erkannt und lassen sich unten anpassen.
         </p>
@@ -328,10 +328,10 @@ export default function Import() {
           </div>
 
           <div className="card mb">
-            <h2>3. Ziel-Event</h2>
+            <h2>3. Ziel-Auftrag</h2>
             <p className="muted" style={{ fontSize: '0.85rem' }}>
-              Kinder gehören immer zu einem Event. Zeilen mit eigener Event-Spalte werden dorthin
-              einsortiert; alle übrigen landen im hier gewählten Ziel-Event.
+              Kinder gehören immer zu einem Auftrag. Zeilen mit eigener Auftrag-Spalte werden dorthin
+              einsortiert; alle übrigen landen im hier gewählten Ziel-Auftrag.
             </p>
             <div className="row">
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -342,7 +342,7 @@ export default function Import() {
                   style={{ width: 'auto' }}
                   onChange={() => setTargetMode('existing')}
                 />
-                Bestehendes Event
+                Bestehender Auftrag
               </label>
               <select
                 disabled={targetMode !== 'existing'}
@@ -350,7 +350,7 @@ export default function Import() {
                 onChange={(e) => setDefaultEventId(e.target.value)}
                 style={{ width: 260 }}
               >
-                <option value="">— Event wählen —</option>
+                <option value="">— Auftrag wählen —</option>
                 {events.map((ev) => (
                   <option key={ev.id} value={ev.id}>{ev.name}</option>
                 ))}
@@ -365,7 +365,7 @@ export default function Import() {
                   style={{ width: 'auto' }}
                   onChange={() => setTargetMode('new')}
                 />
-                Neues Event anlegen
+                Neuen Auftrag anlegen
               </label>
               <input
                 disabled={targetMode !== 'new'}
@@ -382,7 +382,7 @@ export default function Import() {
                 style={{ width: 'auto' }}
                 onChange={(e) => setCreateMissingEvents(e.target.checked)}
               />
-              Events aus der Event-Spalte automatisch anlegen, falls sie noch nicht existieren
+              Aufträge aus der Auftrag-Spalte automatisch anlegen, falls sie noch nicht existieren
             </label>
           </div>
 
@@ -409,7 +409,7 @@ export default function Import() {
                     <th>E-Mail</th>
                     <th>Name</th>
                     <th>Kind(er)</th>
-                    <th>Event</th>
+                    <th>Auftrag</th>
                     <th>Hinweis</th>
                   </tr>
                 </thead>

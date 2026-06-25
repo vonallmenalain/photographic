@@ -10,6 +10,7 @@ interface EventRow {
   status: string;
   photo_count: number;
   child_count: number;
+  email_count: number;
   expires_at: string | null;
   created_at: string;
 }
@@ -45,10 +46,12 @@ export default function Events() {
     }
   };
 
-  const remove = async (ev: EventRow) => {
+  const remove = async (e: React.MouseEvent, ev: EventRow) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (
       !confirm(
-        `Event „${ev.name}“ wirklich löschen? Alle Fotos, Kinder und Zuordnungen werden unwiderruflich entfernt.`,
+        `Auftrag „${ev.name}“ wirklich löschen? Alle Fotos, Kinder und Zuordnungen werden unwiderruflich entfernt.`,
       )
     )
       return;
@@ -57,7 +60,7 @@ export default function Events() {
       await api(`/api/admin/events/${ev.id}`, { method: 'DELETE', admin: true });
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Event konnte nicht gelöscht werden.');
+      setError(err instanceof ApiError ? err.message : 'Auftrag konnte nicht gelöscht werden.');
     }
   };
 
@@ -65,69 +68,66 @@ export default function Events() {
 
   return (
     <div>
-      <h1>Events / Foto-Sets</h1>
+      <h1>Aufträge</h1>
       <div className="card mb">
         {error && <Alert kind="error">{error}</Alert>}
         <form onSubmit={create} className="row">
           <div style={{ flex: 1, minWidth: 220 }}>
             <input
-              placeholder="Name des Events (z. B. Kindergarten Sonnenschein, Klasse 3b)"
+              placeholder="Titel des Auftrags (z. B. Kindergarten Sonnenschein, Klasse 3b)"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
             />
           </div>
           <button className="btn" disabled={busy || !name.trim()}>
-            Event anlegen
+            Auftrag anlegen
           </button>
         </form>
       </div>
 
       {events.length === 0 ? (
-        <p className="muted">Noch keine Events. Lege oben dein erstes Foto-Set an.</p>
+        <p className="muted">Noch keine Aufträge. Lege oben deinen ersten Auftrag an.</p>
       ) : (
-        <div className="card">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Fotos</th>
-                <th>Kinder</th>
-                <th>Verfügbar bis</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((ev) => (
-                <tr key={ev.id}>
-                  <td>
-                    <Link to={ev.id}>
-                      <strong>{ev.name}</strong>
-                    </Link>
-                  </td>
-                  <td>
-                    <StatusBadge status={ev.status} />
-                  </td>
-                  <td>{ev.photo_count}</td>
-                  <td>{ev.child_count}</td>
-                  <td>{ev.expires_at ? formatDateShort(ev.expires_at) : '—'}</td>
-                  <td>
-                    <div className="row" style={{ gap: 12, justifyContent: 'flex-end' }}>
-                      <Link to={ev.id}>Verwalten</Link>
-                      <button
-                        className="btn ghost small"
-                        style={{ color: 'var(--danger)' }}
-                        onClick={() => remove(ev)}
-                      >
-                        Löschen
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="job-grid">
+          {events.map((ev) => (
+            <Link key={ev.id} to={ev.id} className="job-card">
+              <div className="job-card-head">
+                <strong className="job-card-title" title={ev.name}>
+                  {ev.name}
+                </strong>
+                <StatusBadge status={ev.status} />
+              </div>
+
+              <div className="job-card-stats">
+                <div className="job-stat">
+                  <span className="job-stat-num">{ev.photo_count}</span>
+                  <span className="job-stat-lbl">Fotos</span>
+                </div>
+                <div className="job-stat">
+                  <span className="job-stat-num">{ev.child_count}</span>
+                  <span className="job-stat-lbl">Kinder</span>
+                </div>
+                <div className="job-stat">
+                  <span className="job-stat-num">{ev.email_count}</span>
+                  <span className="job-stat-lbl">E-Mails</span>
+                </div>
+              </div>
+
+              <div className="job-card-foot">
+                <span className="muted" style={{ fontSize: '0.78rem' }}>
+                  {ev.expires_at ? `Verfügbar bis ${formatDateShort(ev.expires_at)}` : 'Ohne Ablaufdatum'}
+                </span>
+                <button
+                  className="btn ghost small"
+                  style={{ color: 'var(--danger)' }}
+                  onClick={(e) => remove(e, ev)}
+                >
+                  Löschen
+                </button>
+              </div>
+            </Link>
+          ))}
         </div>
       )}
     </div>

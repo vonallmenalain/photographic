@@ -57,7 +57,7 @@ export default function EventDetail() {
       setChildren(res.children);
       setPhotos(res.photos);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Event konnte nicht geladen werden.');
+      setError(err instanceof ApiError ? err.message : 'Auftrag konnte nicht geladen werden.');
     } finally {
       setLoading(false);
     }
@@ -103,7 +103,7 @@ export default function EventDetail() {
   const deleteEvent = async () => {
     if (
       !confirm(
-        'Dieses Event wirklich löschen? Alle Fotos, Kinder und Zuordnungen dieses Events werden unwiderruflich entfernt.',
+        'Diesen Auftrag wirklich löschen? Alle Fotos, Kinder und Zuordnungen dieses Auftrags werden unwiderruflich entfernt.',
       )
     )
       return;
@@ -111,7 +111,7 @@ export default function EventDetail() {
       await api(`/api/admin/events/${id}`, { method: 'DELETE', admin: true });
       navigate('/admin/events');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Event konnte nicht gelöscht werden.');
+      setError(err instanceof ApiError ? err.message : 'Auftrag konnte nicht gelöscht werden.');
     }
   };
 
@@ -161,12 +161,12 @@ export default function EventDetail() {
   };
 
   if (loading) return <Spinner />;
-  if (!event) return <Alert kind="error">{error || 'Event nicht gefunden.'}</Alert>;
+  if (!event) return <Alert kind="error">{error || 'Auftrag nicht gefunden.'}</Alert>;
 
   return (
     <div>
       <p>
-        <Link to="/admin/events">← Alle Events</Link>
+        <Link to="/admin/events">← Alle Aufträge</Link>
       </p>
       <div className="row between">
         <h1 style={{ marginBottom: 4 }}>{event.name}</h1>
@@ -174,11 +174,11 @@ export default function EventDetail() {
       </div>
       {error && <Alert kind="error">{error}</Alert>}
 
-      {/* Event settings */}
+      {/* Auftrag settings */}
       <div className="card mb">
         <div className="row between">
           <div>
-            <label>Status des Events</label>
+            <label>Status des Auftrags</label>
             <select
               value={event.status}
               onChange={(e) => patchEvent({ status: e.target.value })}
@@ -265,7 +265,7 @@ export default function EventDetail() {
       <div className="card">
         <h2>Fotos &amp; Zuordnung</h2>
         {photos.length === 0 ? (
-          <p className="muted">Noch keine Fotos in diesem Event.</p>
+          <p className="muted">Noch keine Fotos in diesem Auftrag.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {photos.map((p) => (
@@ -331,7 +331,7 @@ export default function EventDetail() {
                     )}
 
                     {!!p.is_class_photo && (
-                      <label style={{ margin: 0 }} title="Alle Familien dieses Events/dieser Klasse sehen dieses Foto automatisch">
+                      <label style={{ margin: 0 }} title="Alle Familien dieses Auftrags/dieser Klasse sehen dieses Foto automatisch">
                         <input
                           type="checkbox"
                           checked={!!p.visible_to_event}
@@ -353,7 +353,7 @@ export default function EventDetail() {
                   {!!p.is_class_photo && (
                     <p className="muted" style={{ fontSize: '0.78rem', marginTop: 6, marginBottom: 0 }}>
                       {p.visible_to_event
-                        ? 'Sichtbar für alle Familien dieses Events (alle E-Mail-Adressen mit einem Kind in dieser Klasse).'
+                        ? 'Sichtbar für alle Familien dieses Auftrags (alle E-Mail-Adressen mit einem Kind in dieser Klasse).'
                         : 'Nur für einzeln zugewiesene E-Mail-Adressen sichtbar.'}
                     </p>
                   )}
@@ -381,14 +381,14 @@ export default function EventDetail() {
       <div className="card mb" style={{ marginTop: 16, borderColor: 'var(--danger, #e5484d)' }}>
         <div className="row between">
           <div>
-            <h2 style={{ marginBottom: 4 }}>Event löschen</h2>
+            <h2 style={{ marginBottom: 4 }}>Auftrag löschen</h2>
             <p className="muted" style={{ fontSize: '0.82rem', margin: 0 }}>
-              Entfernt das Event samt aller Fotos, Kinder und Zuordnungen. Dies kann nicht rückgängig
-              gemacht werden.
+              Entfernt den Auftrag samt aller Fotos, Kinder und Zuordnungen. Dies kann nicht
+              rückgängig gemacht werden.
             </p>
           </div>
           <button className="btn danger" onClick={deleteEvent}>
-            Event löschen
+            Auftrag löschen
           </button>
         </div>
       </div>
@@ -516,7 +516,7 @@ function PhotoEmailModal({ photo, onClose }: { photo: Photo; onClose: () => void
         <p className="muted" style={{ fontSize: '0.82rem' }}>
           Nur nötig für Sonderfälle. Soll das Foto die <strong>ganze Klasse</strong> erreichen, nutze
           die Option „Für die ganze Klasse sichtbar“. Hier kannst du das Foto zusätzlich einzelnen
-          E-Mail-Adressen zuweisen (z. B. Familien ohne eigenes Kind im Event).
+          E-Mail-Adressen zuweisen (z. B. Familien ohne eigenes Kind im Auftrag).
         </p>
         <div className="mb">
           <strong>Zugewiesen ({assigned.length})</strong>
