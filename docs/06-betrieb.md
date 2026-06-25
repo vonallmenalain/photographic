@@ -17,8 +17,11 @@
      Events (jede E-Mail mit einem Kind in der Klasse) sehen es, ohne dass du
      einzeln zuweisen musst. Für Sonderfälle kannst du das Häkchen entfernen und
      das Foto über „Einzelne E-Mails …“ gezielt einzelnen Adressen zuweisen.
-4. **E-Mail-Adressen** anlegen (Adminbereich → „E-Mail-Adressen“) und mit Kindern
-   verknüpfen (n:m: Mutter+Vater, mehrere Kinder).
+4. **E-Mail-Adressen** anlegen – direkt **im Auftrag** in der Kachel
+   „E-Mail-Adressen“ (unterhalb von „Kinder“) – und mit Kindern verknüpfen
+   (n:m: Mutter+Vater, mehrere Kinder). Eine auftragsübergreifende Auswertung mit
+   Umsatz, verifizierten Adressen und Verlaufsgrafik findest du unter
+   **„Auswertung“**.
 5. **Event-Status auf „published“** setzen. Erst dann sind die zugeordneten Fotos
    – nach E-Mail-Verifizierung – für Eltern sichtbar. (Foto sichtbar = Event
    published **und** Foto nicht gesperrt **und** Zuordnung vorhanden **und**
@@ -103,7 +106,10 @@ Bevor du ein Event auf „published“ setzt:
 
 - **Fotos:** hochgeladen → verarbeitet → zugeordnet · (deaktiviert)
 - **E-Mails:** angelegt → nicht verifiziert → Verifizierung gesendet → verifiziert · (deaktiviert / Support)
-- **Bestellungen:** Warenkorb → Kauf gestartet → bezahlt → abgeschlossen → bereitgestellt · (fehlgeschlagen / storniert / rückerstattet)
+- **Bestellungen (vereinfacht):** **Pendent** (Bestellung mit Druck, muss noch
+  versendet werden – automatisch) · **Abgeschlossen** (digitale Bestellung bezahlt
+  oder Druck manuell als erledigt markiert) · **Storniert** (nur manuell).
+  „Warenkorb“ / „Kauf gestartet“ sind nur interne Zwischenzustände des Kaufflusses.
 - **Events:** Entwurf → in Bearbeitung → bereit → veröffentlicht → archiviert · (deaktiviert)
 
 ## 6.3 Supportfälle
