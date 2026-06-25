@@ -63,6 +63,17 @@ const EXAMPLE = `E-Mail\tVorname\tNachname\tKind\tAuftrag
 anna@beispiel.de\tAnna\tMüller\tLena Müller\tKlasse 3b
 paul@beispiel.de\tPaul\tWeber\tTim Weber, Lisa Weber\tKlasse 3b`;
 
+/** Mirrors the backend `normalizeName`: lowercases, strips accents/ß, collapses whitespace. */
+function normalizeName(input: string): string {
+  return String(input ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ß/g, 'ss')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export default function Import() {
   const [text, setText] = useState('');
   const [rows, setRows] = useState<string[][]>([]);
@@ -169,15 +180,19 @@ export default function Import() {
 
   const commit = async () => {
     if (!preview) return;
-    if (targetMode === 'existing' && !defaultEventId) {
-      setError('Bitte einen Ziel-Auftrag wählen oder einen neuen anlegen.');
-      scrollToTop();
-      return;
-    }
-    if (targetMode === 'new' && !defaultEventName.trim()) {
-      setError('Bitte einen Namen für den neuen Auftrag eingeben.');
-      scrollToTop();
-      return;
+    // A fallback target is only required when at least one row has no order of
+    // its own. Rows that carry an "Auftrag" value are assigned automatically.
+    if (needsTarget) {
+      if (targetMode === 'existing' && !defaultEventId) {
+        setError('Bitte einen Ziel-Auftrag für die nicht zugewiesenen Zeilen wählen oder einen neuen anlegen.');
+        scrollToTop();
+        return;
+      }
+      if (targetMode === 'new' && !defaultEventName.trim()) {
+        setError('Bitte einen Namen für den neuen Auftrag eingeben.');
+        scrollToTop();
+        return;
+      }
     }
     setCommitting(true);
     setError('');
@@ -189,8 +204,8 @@ export default function Import() {
           rows,
           mapping: preview.mapping,
           hasHeader: preview.hasHeader,
-          defaultEventId: targetMode === 'existing' ? defaultEventId : undefined,
-          defaultEventName: targetMode === 'new' ? defaultEventName.trim() : undefined,
+          defaultEventId: needsTarget && targetMode === 'existing' ? defaultEventId : undefined,
+          defaultEventName: needsTarget && targetMode === 'new' ? defaultEventName.trim() : undefined,
           createMissingEvents,
         },
       });
@@ -211,6 +226,23 @@ export default function Import() {
   };
 
   const warningRows = preview?.plan.rows.filter((r) => r.warnings.length > 0) ?? [];
+
+  // Orders the import file already assigns per row (via the "Auftrag" column).
+  // These are handled automatically – the admin does not have to choose anything.
+  const planRows = preview?.plan.rows ?? [];
+  const assignedNames = Array.from(
+    new Map(
+      planRows
+        .map((r) => r.eventName.trim())
+        .filter((n) => n !== '')
+        .map((n) => [normalizeName(n), n] as const),
+    ).values(),
+  );
+  // Rows without an "Auftrag" value cannot be auto-assigned and need a target.
+  const unassignedCount = planRows.filter((r) => !r.eventName.trim()).length;
+  const needsTarget = unassignedCount > 0;
+  const existingNames = new Set(events.map((e) => normalizeName(e.name)));
+  const orderIsNew = (name: string) => !existingNames.has(normalizeName(name));
 
   return (
     <div>
@@ -329,61 +361,89 @@ export default function Import() {
 
           <div className="card mb">
             <h2>3. Ziel-Auftrag</h2>
-            <p className="muted" style={{ fontSize: '0.85rem' }}>
-              Kinder gehören immer zu einem Auftrag. Zeilen mit eigener Auftrag-Spalte werden dorthin
-              einsortiert; alle übrigen landen im hier gewählten Ziel-Auftrag.
-            </p>
-            <div className="row">
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  type="radio"
-                  name="target"
-                  checked={targetMode === 'existing'}
-                  style={{ width: 'auto' }}
-                  onChange={() => setTargetMode('existing')}
-                />
-                Bestehender Auftrag
-              </label>
-              <select
-                disabled={targetMode !== 'existing'}
-                value={defaultEventId}
-                onChange={(e) => setDefaultEventId(e.target.value)}
-                style={{ width: 260 }}
-              >
-                <option value="">— Auftrag wählen —</option>
-                {events.map((ev) => (
-                  <option key={ev.id} value={ev.id}>{ev.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="row" style={{ marginTop: 10 }}>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  type="radio"
-                  name="target"
-                  checked={targetMode === 'new'}
-                  style={{ width: 'auto' }}
-                  onChange={() => setTargetMode('new')}
-                />
-                Neuen Auftrag anlegen
-              </label>
-              <input
-                disabled={targetMode !== 'new'}
-                value={defaultEventName}
-                onChange={(e) => setDefaultEventName(e.target.value)}
-                placeholder="z. B. Kindergarten Sonnenschein"
-                style={{ width: 260 }}
-              />
-            </div>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-              <input
-                type="checkbox"
-                checked={createMissingEvents}
-                style={{ width: 'auto' }}
-                onChange={(e) => setCreateMissingEvents(e.target.checked)}
-              />
-              Aufträge aus der Auftrag-Spalte automatisch anlegen, falls sie noch nicht existieren
-            </label>
+
+            {assignedNames.length > 0 && (
+              <div style={{ marginBottom: needsTarget ? 18 : 0 }}>
+                <p style={{ margin: '0 0 6px', fontWeight: 600 }}>Auftrag gemäss Importdatei</p>
+                <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
+                  Diese {assignedNames.length === 1 ? 'Zuordnung wurde' : 'Zuordnungen wurden'} automatisch
+                  aus der Auftrag-Spalte erkannt – hier ist keine Auswahl nötig:
+                </p>
+                <ul style={{ margin: '6px 0 0', lineHeight: 1.7 }}>
+                  {assignedNames.map((name) => (
+                    <li key={name}>
+                      {name}
+                      {orderIsNew(name) && (
+                        <span className="muted" style={{ fontSize: '0.8rem' }}>
+                          {' '}— {createMissingEvents ? 'wird neu angelegt' : 'noch nicht vorhanden'}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={createMissingEvents}
+                    style={{ width: 'auto' }}
+                    onChange={(e) => setCreateMissingEvents(e.target.checked)}
+                  />
+                  Aufträge aus der Auftrag-Spalte automatisch anlegen, falls sie noch nicht existieren
+                </label>
+              </div>
+            )}
+
+            {needsTarget && (
+              <div>
+                <p className="muted" style={{ fontSize: '0.85rem', marginTop: assignedNames.length > 0 ? 0 : undefined }}>
+                  <strong>{unassignedCount}</strong> Zeile(n) ohne Auftrag-Angabe konnten keinem Auftrag
+                  zugewiesen werden. Bitte lege fest, wohin diese Einträge gehören – entweder in einen
+                  bestehenden oder in einen neu angelegten Auftrag.
+                </p>
+                <div className="row">
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <input
+                      type="radio"
+                      name="target"
+                      checked={targetMode === 'existing'}
+                      style={{ width: 'auto' }}
+                      onChange={() => setTargetMode('existing')}
+                    />
+                    Bestehender Auftrag
+                  </label>
+                  <select
+                    disabled={targetMode !== 'existing'}
+                    value={defaultEventId}
+                    onChange={(e) => setDefaultEventId(e.target.value)}
+                    style={{ width: 260 }}
+                  >
+                    <option value="">— Auftrag wählen —</option>
+                    {events.map((ev) => (
+                      <option key={ev.id} value={ev.id}>{ev.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="row" style={{ marginTop: 10 }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <input
+                      type="radio"
+                      name="target"
+                      checked={targetMode === 'new'}
+                      style={{ width: 'auto' }}
+                      onChange={() => setTargetMode('new')}
+                    />
+                    Neuen Auftrag anlegen
+                  </label>
+                  <input
+                    disabled={targetMode !== 'new'}
+                    value={defaultEventName}
+                    onChange={(e) => setDefaultEventName(e.target.value)}
+                    placeholder="z. B. Kindergarten Sonnenschein"
+                    style={{ width: 260 }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card mb">
