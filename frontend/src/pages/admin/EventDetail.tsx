@@ -128,8 +128,26 @@ export default function EventDetail() {
   };
 
   const patchPhoto = async (photoId: string, data: Record<string, unknown>) => {
-    await api(`/api/admin/photos/${photoId}`, { method: 'PATCH', admin: true, body: data });
-    load();
+    // Reflect the change in local state immediately. Otherwise the controlled
+    // checkbox only updates after the PATCH + reload round-trip completes, which
+    // caused the visible "the box jumps to a slightly different place / a larger
+    // field flashes" glitch while the row re-rendered with stale then fresh data.
+    setPhotos((prev) =>
+      prev.map((p) => {
+        if (p.id !== photoId) return p;
+        const next = { ...p };
+        if ('is_class_photo' in data) next.is_class_photo = data.is_class_photo ? 1 : 0;
+        if ('visible_to_event' in data) next.visible_to_event = data.visible_to_event ? 1 : 0;
+        if ('child_id' in data) next.child_id = (data.child_id as string | null) ?? null;
+        if ('status' in data) next.status = String(data.status);
+        return next;
+      }),
+    );
+    try {
+      await api(`/api/admin/photos/${photoId}`, { method: 'PATCH', admin: true, body: data });
+    } finally {
+      load();
+    }
   };
 
   const deletePhoto = async (photoId: string) => {
@@ -332,6 +350,8 @@ export default function EventDetail() {
                     {p.original_filename} {p.width ? `· ${p.width}×${p.height}` : ''}
                   </div>
 
+                  {/* Primary control. Kept on its own line so it never moves
+                      when the class-photo options below appear or disappear. */}
                   <div className="row" style={{ marginTop: 10 }}>
                     <label style={{ margin: 0 }}>
                       <input
@@ -371,27 +391,35 @@ export default function EventDetail() {
                         ))}
                       </select>
                     )}
+                  </div>
 
-                    {!!p.is_class_photo && (
-                      <label style={{ margin: 0 }} title="Alle Familien dieses Auftrags/dieser Klasse sehen dieses Foto automatisch">
+                  {/* Secondary class-photo options live on a separate line so
+                      toggling them never nudges the checkbox above. */}
+                  {!!p.is_class_photo && (
+                    <div className="row" style={{ marginTop: 8 }}>
+                      <label
+                        style={{ margin: 0 }}
+                        title="Alle Familien dieses Auftrags/dieser Klasse sehen dieses Foto automatisch"
+                      >
                         <input
                           type="checkbox"
                           checked={!!p.visible_to_event}
                           style={{ width: 'auto', marginRight: 6 }}
-                          onChange={(e) =>
-                            patchPhoto(p.id, { visible_to_event: e.target.checked })
-                          }
+                          onChange={(e) => patchPhoto(p.id, { visible_to_event: e.target.checked })}
                         />
                         Für die ganze Klasse sichtbar
                       </label>
-                    )}
 
-                    {!!p.is_class_photo && (
-                      <button className="btn secondary small" onClick={() => setEmailModalPhoto(p)}>
-                        Einzelne E-Mails …
-                      </button>
-                    )}
-                  </div>
+                      {!p.visible_to_event && (
+                        <button
+                          className="btn secondary small"
+                          onClick={() => setEmailModalPhoto(p)}
+                        >
+                          E-Mail-Adressen zuweisen …
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {!!p.is_class_photo && (
                     <p className="muted" style={{ fontSize: '0.78rem', marginTop: 6, marginBottom: 0 }}>
                       {p.visible_to_event
@@ -446,7 +474,11 @@ export default function EventDetail() {
       )}
 
       {emailModalPhoto && (
-        <PhotoEmailModal photo={emailModalPhoto} onClose={() => setEmailModalPhoto(null)} />
+        <PhotoEmailModal
+          photo={emailModalPhoto}
+          eventId={event.id}
+          onClose={() => setEmailModalPhoto(null)}
+        />
       )}
 
       {zoomPhoto && <AdminPhotoLightbox photo={zoomPhoto} onClose={() => setZoomPhoto(null)} />}
@@ -573,92 +605,180 @@ function AddChildModal({
   );
 }
 
-interface EmailRow {
+interface ClassEmail {
   id: string;
   email: string;
+  name?: string;
+  children?: { id: string; name: string; event_id: string }[];
 }
 
-function PhotoEmailModal({ photo, onClose }: { photo: Photo; onClose: () => void }) {
-  const [assigned, setAssigned] = useState<EmailRow[]>([]);
+/**
+ * Assigns a group/class photo to individual e-mail addresses of the current
+ * Auftrag/Klasse. Built on the shared `Modal` (same look & feel as
+ * „E-Mail anlegen“): it lists every e-mail address of the class and lets the
+ * photographer toggle each one with a single click. Toggles are optimistic so
+ * nothing flickers or jumps.
+ */
+function PhotoEmailModal({
+  photo,
+  eventId,
+  onClose,
+}: {
+  photo: Photo;
+  eventId: string;
+  onClose: () => void;
+}) {
+  const [classEmails, setClassEmails] = useState<ClassEmail[]>([]);
+  const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<EmailRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const loadAssigned = async () => {
-    const res = await api<{ emails: { email_id: string; email: string }[] }>(
-      `/api/admin/photos/${photo.id}/emails`,
-      { admin: true },
-    );
-    setAssigned(res.emails.map((e) => ({ id: e.email_id, email: e.email })));
+  const loadAll = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [assignedRes, classRes] = await Promise.all([
+        api<{ emails: { email_id: string; email: string }[] }>(
+          `/api/admin/photos/${photo.id}/emails`,
+          { admin: true },
+        ),
+        api<{ emails: ClassEmail[] }>(
+          `/api/admin/emails?eventId=${encodeURIComponent(eventId)}`,
+          { admin: true },
+        ),
+      ]);
+      setAssignedIds(new Set(assignedRes.emails.map((e) => e.email_id)));
+      // Show every class address, plus any already-assigned address that does
+      // not belong to the class (e.g. a family without an own child) so it can
+      // still be reviewed and removed here.
+      const classIds = new Set(classRes.emails.map((e) => e.id));
+      const extra: ClassEmail[] = assignedRes.emails
+        .filter((a) => !classIds.has(a.email_id))
+        .map((a) => ({ id: a.email_id, email: a.email }));
+      setClassEmails([...classRes.emails, ...extra]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'E-Mail-Adressen konnten nicht geladen werden.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadAssigned();
-  }, [photo.id]);
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photo.id, eventId]);
 
-  const search = async (q: string) => {
-    setQuery(q);
-    const res = await api<{ emails: EmailRow[] }>(`/api/admin/emails?q=${encodeURIComponent(q)}`, {
-      admin: true,
+  const toggle = async (emailId: string) => {
+    const wasAssigned = assignedIds.has(emailId);
+    setAssignedIds((prev) => {
+      const next = new Set(prev);
+      if (wasAssigned) next.delete(emailId);
+      else next.add(emailId);
+      return next;
     });
-    setResults(res.emails);
+    setError('');
+    try {
+      if (wasAssigned) {
+        await api(`/api/admin/photos/${photo.id}/emails/${emailId}`, {
+          method: 'DELETE',
+          admin: true,
+        });
+      } else {
+        await api(`/api/admin/photos/${photo.id}/emails`, {
+          method: 'POST',
+          admin: true,
+          body: { emailId },
+        });
+      }
+    } catch (err) {
+      setAssignedIds((prev) => {
+        const next = new Set(prev);
+        if (wasAssigned) next.add(emailId);
+        else next.delete(emailId);
+        return next;
+      });
+      setError(err instanceof ApiError ? err.message : 'Aktion fehlgeschlagen.');
+    }
   };
 
-  const add = async (emailId: string) => {
-    await api(`/api/admin/photos/${photo.id}/emails`, { method: 'POST', admin: true, body: { emailId } });
-    loadAssigned();
-  };
-  const remove = async (emailId: string) => {
-    await api(`/api/admin/photos/${photo.id}/emails/${emailId}`, { method: 'DELETE', admin: true });
-    loadAssigned();
-  };
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? classEmails.filter(
+        (e) =>
+          e.email.toLowerCase().includes(q) ||
+          (e.name ?? '').toLowerCase().includes(q) ||
+          (e.children ?? []).some((c) => c.name.toLowerCase().includes(q)),
+      )
+    : classEmails;
+
+  const childNamesFor = (e: ClassEmail) =>
+    (e.children ?? []).filter((c) => c.event_id === eventId).map((c) => c.name);
 
   return (
-    <div className="lightbox" onClick={onClose}>
-      <div
-        className="card"
-        style={{ maxWidth: 480, width: '100%' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="row between">
-          <h2 style={{ marginBottom: 0 }}>Einzelne E-Mail-Zuordnung (Klassenfoto)</h2>
-          <button className="btn ghost small" onClick={onClose}>
-            Schließen
-          </button>
-        </div>
-        <p className="muted" style={{ fontSize: '0.82rem' }}>
-          Nur nötig für Sonderfälle. Soll das Foto die <strong>ganze Klasse</strong> erreichen, nutze
-          die Option „Für die ganze Klasse sichtbar“. Hier kannst du das Foto zusätzlich einzelnen
-          E-Mail-Adressen zuweisen (z. B. Familien ohne eigenes Kind im Auftrag).
-        </p>
-        <div className="mb">
-          <strong>Zugewiesen ({assigned.length})</strong>
-          <div style={{ marginTop: 6 }}>
-            {assigned.length === 0 && <span className="muted">Noch niemand zugewiesen.</span>}
-            {assigned.map((e) => (
-              <span className="chip" key={e.id}>
-                {e.email}
-                <button onClick={() => remove(e.id)}>×</button>
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="field">
-          <label>E-Mail suchen &amp; hinzufügen</label>
-          <input value={query} onChange={(e) => search(e.target.value)} placeholder="Suchen …" />
-        </div>
-        <div style={{ maxHeight: 200, overflow: 'auto' }}>
-          {results
-            .filter((r) => !assigned.some((a) => a.id === r.id))
-            .map((r) => (
-              <div key={r.id} className="row between" style={{ padding: '6px 0' }}>
-                <span>{r.email}</span>
-                <button className="btn secondary small" onClick={() => add(r.id)}>
-                  + Hinzufügen
-                </button>
-              </div>
-            ))}
-        </div>
+    <Modal
+      title="E-Mail-Adressen zuweisen"
+      onClose={onClose}
+      width={520}
+      footer={
+        <button type="button" className="btn" onClick={onClose}>
+          Fertig
+        </button>
+      }
+    >
+      {error && <Alert kind="error">{error}</Alert>}
+      <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0 }}>
+        Wähle die E-Mail-Adressen aus, die dieses Gruppen-/Klassenfoto sehen dürfen. Es werden alle
+        Adressen dieser Klasse angezeigt – ein Klick genügt zum Zuweisen bzw. Entfernen.
+      </p>
+
+      <div className="field" style={{ marginBottom: 12 }}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="E-Mail, Name oder Kind suchen …"
+          autoFocus
+        />
       </div>
-    </div>
+
+      {loading ? (
+        <p className="muted">Wird geladen …</p>
+      ) : classEmails.length === 0 ? (
+        <p className="muted">
+          Für diese Klasse sind noch keine E-Mail-Adressen hinterlegt. Lege sie oben über „+ E-Mail
+          anlegen“ an.
+        </p>
+      ) : filtered.length === 0 ? (
+        <p className="muted">Keine Treffer für „{query}“.</p>
+      ) : (
+        <div className="email-pick-list">
+          {filtered.map((e) => {
+            const checked = assignedIds.has(e.id);
+            const childNames = childNamesFor(e);
+            return (
+              <label key={e.id} className={`email-pick${checked ? ' selected' : ''}`}>
+                <input type="checkbox" checked={checked} onChange={() => toggle(e.id)} />
+                <span className="email-pick-info">
+                  <span className="email-pick-email">{e.email}</span>
+                  {(e.name || childNames.length > 0) && (
+                    <span className="email-pick-meta">
+                      {e.name ? e.name : null}
+                      {e.name && childNames.length > 0 ? ' · ' : ''}
+                      {childNames.length > 0 ? `Kind: ${childNames.join(', ')}` : ''}
+                    </span>
+                  )}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="muted" style={{ fontSize: '0.78rem', marginTop: 12, marginBottom: 0 }}>
+        {assignedIds.size === 0
+          ? 'Noch keine Adresse zugewiesen.'
+          : `${assignedIds.size} Adresse(n) zugewiesen.`}
+      </p>
+    </Modal>
   );
 }
