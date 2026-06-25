@@ -40,7 +40,10 @@ function watermarkSvg(width: number, height: number, text: string): Buffer {
   // word sit next to each other instead of overlapping.
   const approxTextWidth = fontSize * 0.62 * text.length;
   const stepX = approxTextWidth + fontSize * 1.6;
-  const stepY = fontSize * 3.5;
+  // Vertical gap between tiled rows. Reduced (~63% tighter than the previous
+  // 3.5) on request so the "Vorschau" rows sit closer together — more text,
+  // smaller spacing — without changing the font size.
+  const stepY = fontSize * 1.3;
   // Use font families that are actually installed in the runtime image
   // (see backend/Dockerfile). librsvg only renders text when it can resolve a
   // font; "Liberation Sans"/"DejaVu Sans" are the metric-compatible packages we
