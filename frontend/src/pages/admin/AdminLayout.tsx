@@ -39,13 +39,11 @@ export default function AdminLayout({
           </NavLink>
         ))}
         <div className="spacer" />
+        <div className="side-user">Angemeldet als {username}</div>
         <NavLink to="account" className={({ isActive }) => (isActive ? 'active' : '')}>
           Konto
         </NavLink>
-        <div style={{ fontSize: '0.82rem', color: '#94a3b8', padding: '8px 12px' }}>
-          Angemeldet als {username}
-        </div>
-        <button className="btn ghost small" style={{ color: '#cbd5e1' }} onClick={logout}>
+        <button type="button" className="side-action" onClick={logout}>
           Abmelden
         </button>
       </aside>

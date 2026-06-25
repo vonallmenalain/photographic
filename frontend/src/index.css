@@ -177,14 +177,17 @@ tr:hover td { background: var(--surface-2); }
 .admin-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
 .admin-side { background: #0f1b2d; color: #cbd5e1; padding: 22px 16px; }
 .admin-side .logo { color: #fff; font-weight: 700; margin-bottom: 24px; display: flex; gap: 8px; align-items: center; }
-.admin-side a {
-  display: block; color: #cbd5e1; padding: 10px 12px; border-radius: 9px;
-  margin-bottom: 4px; font-size: 0.92rem; font-weight: 500;
+.admin-side a, .admin-side .side-action {
+  display: block; width: 100%; text-align: left; color: #cbd5e1;
+  padding: 10px 12px; border-radius: 9px; margin-bottom: 4px;
+  font: inherit; font-size: 0.92rem; font-weight: 500;
 }
-.admin-side a:hover { background: rgba(255,255,255,0.07); text-decoration: none; }
+.admin-side .side-action { background: transparent; border: none; cursor: pointer; }
+.admin-side a:hover, .admin-side .side-action:hover { background: rgba(255,255,255,0.07); text-decoration: none; }
 .admin-side a.active { background: var(--primary); color: #fff; }
 .admin-main { padding: 28px 32px; overflow: auto; }
 .admin-side .spacer { flex: 1; }
+.admin-side .side-user { padding: 8px 12px; font-size: 0.82rem; color: #94a3b8; }
 
 .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
 .row.between { justify-content: space-between; }
