@@ -79,6 +79,9 @@ export default function Gallery() {
         <div>
           <h1>Fotos</h1>
         </div>
+        <Link to="/galerie" className="btn secondary small">
+          ✨ Galerie-Vorschau
+        </Link>
       </div>
 
       {error && <Alert kind="error">{error}</Alert>}
@@ -104,11 +107,10 @@ export default function Gallery() {
               {ev.photos.length} {ev.photos.length === 1 ? 'Foto' : 'Fotos'}
             </span>
           </div>
-          <div className="masonry">
+          <div className="photo-grid">
             {ev.photos.map((p) => {
               const purchased = purchasedIds.has(p.id);
               const inCart = cartIds.has(p.id);
-              const ratio = p.width && p.height ? p.width / p.height : undefined;
               return (
                 <figure className="photo-tile" key={p.id}>
                   <div
@@ -124,7 +126,9 @@ export default function Gallery() {
                       }
                     }}
                   >
-                    <ProtectedImage src={p.thumbUrl} ratio={ratio} />
+                    {/* Uniform, centre-cropped tiles: every photo takes up the
+                        same amount of space and is shown from its centre. */}
+                    <ProtectedImage src={p.thumbUrl} cover />
                     <span className="photo-zoom" aria-hidden="true">
                       ⤢ Ansehen
                     </span>
@@ -245,7 +249,10 @@ function PhotoControls({
   return (
     <div className="photo-buy">
       {error && <Alert kind="error">{error}</Alert>}
-      <div className="field">
+      {/* Product select and quantity share one row. Showing the quantity field
+          for prints therefore never changes the tile's height, so no other
+          photo shifts position when the product is switched. */}
+      <div className="buy-row">
         <select
           value={productId}
           onChange={(e) => handleProductChange(e.target.value)}
@@ -257,16 +264,14 @@ function PhotoControls({
             </option>
           ))}
         </select>
-      </div>
-      {isPrint && (
-        <div className="field">
-          <label htmlFor={`qty-${photo.id}`} className="qty-label">
-            Menge
-          </label>
+        {isPrint && (
           <input
             id={`qty-${photo.id}`}
+            className="qty-input"
             type="number"
             inputMode="numeric"
+            aria-label="Menge"
+            title="Menge"
             min={1}
             max={99}
             value={qty}
@@ -276,8 +281,8 @@ function PhotoControls({
             }}
             onBlur={() => setQty(String(qtyNum))}
           />
-        </div>
-      )}
+        )}
+      </div>
       {digitalBlocked ? (
         <>
           <Alert kind="info">
