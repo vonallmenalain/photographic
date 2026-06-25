@@ -69,6 +69,7 @@ JWT_SECRET=<openssl rand -base64 48>
 FILE_TOKEN_SECRET=<openssl rand -base64 48>
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=<starkes-passwort>              # für ersten Start; später Hash, s. u.
+ADMIN_EMAIL=vonallmenalain@gmail.com          # für Login per E-Mail + "Passwort vergessen"
 # Empfohlen: API unter api.alae.app -> dann genuegt SameSite=lax + COOKIE_DOMAIN
 COOKIE_SECURE=true
 COOKIE_SAMESITE=lax
@@ -144,8 +145,8 @@ Für den Dauerbetrieb solltest du kein Klartext-Passwort in `.env` lassen, sonde
 einen **bcrypt-Hash** verwenden:
 
 ```bash
-# im Container:
-docker compose exec backend npm run create-admin -- admin "DeinSicheresPasswort"
+# im Container (optional die Admin-E-Mail als 3. Argument):
+docker compose exec backend npm run create-admin -- admin "DeinSicheresPasswort" vonallmenalain@gmail.com
 ```
 
 Das gibt einen Hash aus. Trage ihn in `.env` ein und entferne `ADMIN_PASSWORD`:
@@ -154,6 +155,7 @@ Das gibt einen Hash aus. Trage ihn in `.env` ein und entferne `ADMIN_PASSWORD`:
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD_HASH=$2a$10$....
 # ADMIN_PASSWORD=   (leer / entfernt)
+ADMIN_EMAIL=vonallmenalain@gmail.com
 ```
 
 Danach Container neu starten:
@@ -161,6 +163,18 @@ Danach Container neu starten:
 ```bash
 docker compose up -d backend
 ```
+
+> **Admin-E-Mail / „Passwort vergessen“:** Wird `ADMIN_EMAIL` gesetzt, trägt die
+> App die Adresse beim Start automatisch (normalisiert) am Admin-Konto ein. Du
+> kannst dich dann **mit dem Benutzernamen *oder* der E-Mail-Adresse** anmelden
+> und „Passwort vergessen“ nutzen. Damit die Reset-Mail wirklich verschickt wird,
+> muss SMTP konfiguriert sein (siehe [docs/04-email-smtp.md](04-email-smtp.md));
+> ohne SMTP landet der Link nur im Server-Log (`mail: DEV LOG ONLY`).
+>
+> **Direkter Notnagel ohne E-Mail-Versand:** Der obige `create-admin`-Befehl mit
+> E-Mail als 3. Argument setzt sofort ein neues Passwort **und** registriert die
+> Admin-E-Mail – unabhängig davon, ob SMTP eingerichtet ist. Danach kannst du
+> dich direkt mit der E-Mail-Adresse und dem neuen Passwort anmelden.
 
 ## 1.8 Updates einspielen
 
