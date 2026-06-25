@@ -1533,6 +1533,17 @@ router.patch(
   }),
 );
 
+router.delete(
+  '/reports/:id',
+  asyncHandler(async (req, res) => {
+    const report = await getById(COL.reports, req.params.id);
+    if (!report) throw new ApiError(404, 'Meldung nicht gefunden.');
+    await deleteById(COL.reports, req.params.id);
+    await audit('report.delete', req.params.id);
+    res.json({ ok: true });
+  }),
+);
+
 // --- Products ------------------------------------------------------------
 router.get(
   '/products',
