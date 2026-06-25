@@ -6,10 +6,21 @@ let transporter: Transporter | null = null;
 function getTransporter(): Transporter | null {
   if (config.mail.devLogOnly) return null;
   if (transporter) return transporter;
+  // Port 465 is implicit TLS (SMTPS): a plaintext connection there never
+  // succeeds and just hangs until the socket times out. Guard against the very
+  // common "SMTP_PORT=465 + SMTP_SECURE=false" misconfiguration by forcing TLS.
+  const secure = config.mail.secure || config.mail.port === 465;
+  if (secure !== config.mail.secure) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[mail] SMTP_PORT=${config.mail.port} requires TLS — overriding SMTP_SECURE to true. ` +
+        'Set SMTP_SECURE=true (port 465) or use port 587 with SMTP_SECURE=false to silence this.',
+    );
+  }
   transporter = nodemailer.createTransport({
     host: config.mail.host,
     port: config.mail.port,
-    secure: config.mail.secure,
+    secure,
     auth:
       config.mail.user || config.mail.pass
         ? { user: config.mail.user, pass: config.mail.pass }
