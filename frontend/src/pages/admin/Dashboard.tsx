@@ -7,7 +7,6 @@ interface Stats {
   events: number;
   publishedEvents: number;
   photos: number;
-  publishedPhotos: number;
   emails: number;
   verifiedEmails: number;
   orders: number;
@@ -27,7 +26,6 @@ export default function Dashboard() {
     { num: stats.events, lbl: 'Events / Foto-Sets', to: 'events' },
     { num: stats.publishedEvents, lbl: 'davon veröffentlicht' },
     { num: stats.photos, lbl: 'Fotos gesamt' },
-    { num: stats.publishedPhotos, lbl: 'veröffentlichte Fotos' },
     { num: stats.emails, lbl: 'E-Mail-Adressen', to: 'emails' },
     { num: stats.verifiedEmails, lbl: 'verifizierte Adressen' },
     { num: stats.orders, lbl: 'Bestellungen', to: 'orders' },
@@ -63,7 +61,7 @@ export default function Dashboard() {
           <li>Fotos prüfen – Varianten (Thumbnail, Wasserzeichen-Preview) werden automatisch erzeugt.</li>
           <li>Kinder anlegen und Fotos zuordnen; Klassenfotos direkt E-Mail-Adressen zuweisen.</li>
           <li>E-Mail-Adressen erfassen und mit Kindern verknüpfen.</li>
-          <li>Fotos veröffentlichen und das Event auf „Veröffentlicht“ setzen.</li>
+          <li>Das Event auf „Veröffentlicht“ setzen – die zugeordneten Fotos werden dadurch sichtbar.</li>
           <li>Eltern bestätigen ihre E-Mail und sehen nur ihre Fotos.</li>
         </ol>
       </div>

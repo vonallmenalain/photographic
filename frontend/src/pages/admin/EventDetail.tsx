@@ -22,7 +22,6 @@ interface Photo {
   is_class_photo: number;
   original_filename: string;
   status: string;
-  published: number;
   width: number | null;
   height: number | null;
 }
@@ -160,8 +159,6 @@ export default function EventDetail() {
   if (loading) return <Spinner />;
   if (!event) return <Alert kind="error">{error || 'Event nicht gefunden.'}</Alert>;
 
-  const publishedCount = photos.filter((p) => p.published).length;
-
   return (
     <div>
       <p>
@@ -193,12 +190,12 @@ export default function EventDetail() {
               )}
             </select>
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8 }}>
-              Erst bei Status „Veröffentlicht“ sind freigegebene Fotos für berechtigte Eltern
+              Erst bei Status „Veröffentlicht“ sind die zugeordneten Fotos für berechtigte Eltern
               sichtbar. „Archiviert“ wird nach Ablauf der Aufbewahrungsfrist automatisch gesetzt.
             </p>
           </div>
           <div className="muted" style={{ textAlign: 'right' }}>
-            {photos.length} Fotos · {publishedCount} veröffentlicht
+            {photos.length} Fotos
             <br />
             {children.length} Kinder
           </div>
@@ -281,11 +278,6 @@ export default function EventDetail() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <StatusBadge status={p.status} />
-                    {p.published ? (
-                      <span className="badge green">Veröffentlicht</span>
-                    ) : (
-                      <span className="badge gray">Nicht veröffentlicht</span>
-                    )}
                     {p.is_class_photo ? <span className="badge class">Klassenfoto</span> : null}
                   </div>
                   <div className="muted" style={{ fontSize: '0.8rem', marginTop: 4 }} title={p.original_filename}>
@@ -328,7 +320,7 @@ export default function EventDetail() {
                       </select>
                     )}
 
-                    {p.is_class_photo && (
+                    {!!p.is_class_photo && (
                       <button className="btn secondary small" onClick={() => setEmailModalPhoto(p)}>
                         E-Mail-Zuordnung verwalten
                       </button>
@@ -337,12 +329,6 @@ export default function EventDetail() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button
-                    className={p.published ? 'btn secondary small' : 'btn small'}
-                    onClick={() => patchPhoto(p.id, { published: !p.published })}
-                  >
-                    {p.published ? 'Zurückziehen' : 'Veröffentlichen'}
-                  </button>
                   <button
                     className="btn ghost small"
                     onClick={() => patchPhoto(p.id, { status: 'processed' })}

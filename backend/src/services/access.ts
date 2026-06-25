@@ -63,13 +63,16 @@ function eventIsLive(ev: EventDoc | null): boolean {
 }
 
 function photoIsLive(p: PhotoDoc): boolean {
-  return p.published === 1 && p.status !== 'disabled';
+  // Per-photo publishing was removed; visibility is gated by the event status
+  // (and the explicit link). A photo only stays hidden when it was disabled
+  // (e.g. via a report) – the legacy `published` flag is ignored.
+  return p.status !== 'disabled';
 }
 
 /**
  * Core access rule. A photo is visible to a verified e-mail only when ALL of:
  *  - the event is published and not expired
- *  - the photo is published and not disabled
+ *  - the photo is not disabled
  *  - the photo is linked to the e-mail (via the child OR directly)
  *
  * No open galleries: a family only ever sees photos explicitly linked to it.

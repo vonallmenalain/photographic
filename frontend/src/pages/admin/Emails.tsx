@@ -50,6 +50,22 @@ export default function Emails() {
     }
   };
 
+  const remove = async (row: EmailRow) => {
+    if (
+      !confirm(
+        `E-Mail-Adresse „${row.email}“ wirklich löschen? Verknüpfungen, Sitzungen und Bestätigungs-Tokens dieser Adresse werden mit entfernt.`,
+      )
+    )
+      return;
+    setError('');
+    try {
+      await api(`/api/admin/emails/${row.id}`, { method: 'DELETE', admin: true });
+      load(q);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Konnte nicht gelöscht werden.');
+    }
+  };
+
   if (loading) return <Spinner />;
 
   return (
@@ -125,7 +141,16 @@ export default function Emails() {
                   </td>
                   <td>{formatDateShort(e.created_at)}</td>
                   <td>
-                    <Link to={e.id}>Verwalten</Link>
+                    <div className="row" style={{ gap: 12 }}>
+                      <Link to={e.id}>Verwalten</Link>
+                      <button
+                        className="btn ghost small"
+                        onClick={() => remove(e)}
+                        style={{ color: 'var(--danger)' }}
+                      >
+                        Löschen
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

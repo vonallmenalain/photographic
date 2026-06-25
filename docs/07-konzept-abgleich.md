@@ -36,11 +36,12 @@ umgesetzt**, **wie**, und **was musst du selbst einrichten**.
   (Mutter+Vater). Verwaltung im Adminbereich.
 
 ## Foto-/Zugriffslogik (Konzept 4, 13)
-- Sichtbar nur, wenn: Event `published` + nicht abgelaufen, Foto `published` +
-  nicht deaktiviert, **und** Foto mit der E-Mail verknüpft (über Kind oder direkt).
+- Sichtbar nur, wenn: Event `published` + nicht abgelaufen, Foto nicht
+  deaktiviert, **und** Foto mit der E-Mail verknüpft (über Kind oder direkt).
 - **Klassenfotos** (ohne einzelnes Kind) werden gezielt einzelnen E-Mails
   zugewiesen → jede Familie sieht nur ihr zugewiesenes Klassenfoto.
-- Veröffentlichungs-Workflow: hochladen → verarbeiten → zuordnen → veröffentlichen.
+- Workflow: hochladen → verarbeiten → zuordnen → Event veröffentlichen. Ein
+  separates Veröffentlichen je Foto gibt es nicht mehr.
 
 ## E-Mail-Verifizierung (Konzept 5)
 - Code **oder** Magic-Link. Code-Hash + Ablaufzeit + Versuchslimit.
