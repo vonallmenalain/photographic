@@ -258,119 +258,143 @@ input:focus, select:focus, textarea:focus {
 
 /* ==========================================================================
    Galerie-Vorschau — immersive, text-free showcase ("wow" intro).
-   A full-bleed dark stage sits below the sticky header. The photos are the
-   whole show: one photo after another takes centre stage with a slow Ken-Burns
-   zoom and cross-fade, an ambient blur of the current photo tints the stage,
-   and a slowly drifting collage of all the other photos frames it.
+   A full-bleed dark stage sits below the sticky header. The photos ride a
+   3-D coverflow carousel (modelled on the DreamTeam project): the photo in the
+   centre stands full-height while its neighbours recede with a slight rotation
+   and fade. The photos are decorative only (not clickable); an ambient blur of
+   the centred photo tints the stage, and a single glass button at the bottom
+   leads to the shopping gallery.
    ========================================================================== */
-.preview-stage {
+.gp-stage {
   position: fixed;
   top: 64px; /* sit just below the sticky app header */
   left: 0; right: 0; bottom: 0;
   z-index: 20;
   overflow: hidden;
+  display: flex; flex-direction: column;
   background: radial-gradient(120% 120% at 50% 0%, #11131c 0%, #07070c 60%, #050509 100%);
   isolation: isolate;
 }
-.preview-stage.is-loading { display: grid; place-items: center; }
+.gp-stage.is-loading { display: grid; place-items: center; }
 
 /* Ambient: blurred, enlarged copy of the photo currently centre stage. */
-.preview-ambient { position: absolute; inset: 0; z-index: 1; }
-.preview-ambient img {
+.gp-ambient { position: absolute; inset: 0; z-index: 0; }
+.gp-ambient img {
   position: absolute; inset: -8%;
   width: 116%; height: 116%;
   object-fit: cover; object-position: center;
-  filter: blur(46px) saturate(1.25) brightness(0.55);
+  filter: blur(54px) saturate(1.25) brightness(0.5);
   opacity: 0;
   transform: scale(1.08);
-  transition: opacity 1.6s ease;
+  transition: opacity 1.4s ease;
   user-select: none; -webkit-user-drag: none;
 }
-.preview-ambient img.on { opacity: 0.7; }
-
-/* Drifting collage of every other photo, dim and softly blurred. */
-.preview-mosaic { position: absolute; inset: -2% -2% 0; z-index: 2; overflow: hidden; opacity: 0.32; }
-.preview-mosaic-track {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
-  width: 100%;
-  padding: 12px;
-  animation: mosaicDrift 70s linear infinite;
-}
-.preview-mosaic-tile {
-  aspect-ratio: 1 / 1;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #15161f;
-}
-.preview-mosaic-tile img {
-  width: 100%; height: 100%;
-  object-fit: cover; object-position: center;
-  filter: blur(2px) brightness(0.7);
-  user-select: none; -webkit-user-drag: none;
-}
-@keyframes mosaicDrift {
-  from { transform: translateY(0); }
-  to { transform: translateY(-50%); }
-}
+.gp-ambient img.on { opacity: 0.6; }
 
 /* Darken the edges so the centre photo pops to the foreground. */
-.preview-vignette {
-  position: absolute; inset: 0; z-index: 3; pointer-events: none;
+.gp-vignette {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
   background:
-    radial-gradient(78% 78% at 50% 46%, rgba(5, 5, 9, 0) 38%, rgba(5, 5, 9, 0.78) 100%),
-    linear-gradient(to bottom, rgba(5, 5, 9, 0.5) 0%, rgba(5, 5, 9, 0) 22%, rgba(5, 5, 9, 0) 62%, rgba(5, 5, 9, 0.85) 100%);
+    radial-gradient(82% 82% at 50% 46%, rgba(5, 5, 9, 0) 42%, rgba(5, 5, 9, 0.7) 100%),
+    linear-gradient(to bottom, rgba(5, 5, 9, 0.45) 0%, rgba(5, 5, 9, 0) 20%, rgba(5, 5, 9, 0) 60%, rgba(5, 5, 9, 0.85) 100%);
 }
 
-/* Centre stage. */
-.preview-hero {
-  position: absolute; inset: 0; z-index: 4;
-  display: grid; place-items: center;
-  padding: 4vh 6vw 16vh;
-  pointer-events: none;
+/* Carousel fills the stage above the footer. */
+.gp-carousel {
+  position: relative; z-index: 3;
+  flex: 1 1 auto; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
 }
-.preview-hero-photo {
-  position: absolute; inset: 0; margin: 0;
-  display: grid; place-items: center;
-  padding: inherit;
-  opacity: 0;
-  transition: opacity 1.1s ease;
+.gp-outer { position: relative; flex: 1 1 auto; min-width: 0; height: 100%; overflow: hidden; }
+
+/* Subtle fade-out at the very edges to hint at more photos. */
+.gp-outer::before, .gp-outer::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 9%;
+  z-index: 5; pointer-events: none;
 }
-.preview-hero-photo.is-active { opacity: 1; }
-.preview-hero-photo img {
-  max-width: min(86vw, 1100px);
-  max-height: 74vh;
-  width: auto; height: auto;
+.gp-outer::before { left: 0; background: linear-gradient(to right, rgba(5, 5, 9, 0.65), transparent); }
+.gp-outer::after { right: 0; background: linear-gradient(to left, rgba(5, 5, 9, 0.65), transparent); }
+
+/* Native scroll viewport — the browser handles touch physics + momentum. */
+.gp-viewport {
+  position: relative;
+  height: 100%;
+  overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  outline: none;
+  contain: paint;
+}
+.gp-viewport::-webkit-scrollbar { display: none; }
+
+.gp-track { display: flex; align-items: center; height: 100%; gap: 26px; }
+
+.gp-slide {
+  flex-shrink: 0;
+  width: var(--gp-slide-w, 60vh);
+  height: var(--gp-slide-h, 80vh);
+  scroll-snap-align: center;
+  display: flex; align-items: center; justify-content: center;
+  will-change: transform, opacity;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  transition: opacity 0.45s ease;
+}
+.gp-slide img {
+  max-width: 100%; max-height: 100%;
+  width: auto; height: 100%;
   object-fit: contain;
   border-radius: 16px;
   background: #0b0b11;
   box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.65),
-    0 0 0 1px rgba(255, 255, 255, 0.06),
-    0 0 120px rgba(120, 150, 255, 0.12);
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
   user-select: none; -webkit-user-drag: none;
+  transition: box-shadow 0.45s ease;
 }
-.preview-hero-photo.is-active img { animation: kenburns 5.6s ease-out both; }
-@keyframes kenburns {
-  from { transform: scale(1.04) translateY(6px); }
-  to { transform: scale(1.13) translateY(-6px); }
+.gp-slide.is-center img {
+  box-shadow:
+    0 36px 90px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 0 120px rgba(120, 150, 255, 0.16);
 }
 
-/* The only chrome: progress dots + one glass button to enter the gallery. */
-.preview-foot {
-  position: absolute; left: 0; right: 0; bottom: max(26px, 4vh);
-  z-index: 6;
-  display: flex; flex-direction: column; align-items: center; gap: 18px;
-  padding: 0 20px;
+/* Nav arrows (desktop only). */
+.gp-arrow {
+  position: relative; z-index: 6; flex: none;
+  width: 48px; height: 48px; margin: 0 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff; font-size: 1.6rem; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(8px);
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
 }
-.preview-dots { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 320px; }
-.preview-dots button {
+.gp-arrow:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.08);
+}
+.gp-arrow:active { transform: scale(0.94); }
+@media (max-width: 760px) {
+  .gp-arrow { display: none; }
+}
+
+/* Footer: progress dots + one glass button to enter the gallery. */
+.gp-foot {
+  position: relative; z-index: 6;
+  flex: none;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding: 12px 20px max(20px, 3vh);
+}
+.gp-dots { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 320px; }
+.gp-dot {
   width: 8px; height: 8px; padding: 0; border: none; border-radius: 999px;
   background: rgba(255, 255, 255, 0.32); cursor: pointer;
   transition: background 0.3s ease, transform 0.3s ease, width 0.3s ease;
 }
-.preview-dots button.on { background: #fff; width: 22px; }
+.gp-dot.on { background: #fff; width: 22px; }
 .preview-enter {
   display: inline-flex; align-items: center; gap: 10px;
   font-weight: 600; font-size: 1rem; color: #0b0b11;
@@ -389,15 +413,9 @@ input:focus, select:focus, textarea:focus {
 
 .spinner.light { border-color: rgba(255, 255, 255, 0.22); border-top-color: #fff; }
 
-@media (max-width: 560px) {
-  .preview-hero { padding: 2vh 4vw 18vh; }
-  .preview-hero-photo img { max-height: 62vh; max-width: 92vw; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .preview-mosaic-track { animation: none; }
-  .preview-hero-photo.is-active img { animation: none; transform: none; }
-  .preview-ambient img, .preview-hero-photo { transition: opacity 0.4s ease; }
+  .gp-viewport { scroll-behavior: auto; }
+  .gp-ambient img { transition: opacity 0.4s ease; }
 }
 
 /* Lightbox */
