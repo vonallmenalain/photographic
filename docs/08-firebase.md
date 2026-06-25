@@ -49,9 +49,69 @@ So bekommen Eltern beim Login eine E-Mail mit einem sicheren Anmeldelink. Nach
 dem Klick wird im Frontend die Anmeldung abgeschlossen, ein Firebase-ID-Token
 erzeugt und gegen eine Backend-Session getauscht (`/api/parent/firebase-session`).
 
-> Du kannst die Firebase-Anmeldung abschalten (`FIREBASE_PARENT_AUTH=false` im
-> Backend und keine `VITE_FIREBASE_*` im Frontend). Dann nutzt die App den
-> eingebauten 6-stelligen Code-/Magic-Link-Fluss per SMTP wie zuvor.
+> Du kannst die Firebase-Anmeldung abschalten und stattdessen die eigene,
+> deutsche Mail der App verschicken (Code + Ein-Klick-Link). Wie das geht,
+> steht in **[8.2a](#82a-eltern-login-eigene-mail-statt-firebase-mail-empfohlen)**.
+
+## 8.2a Eltern-Login: eigene Mail statt Firebase-Mail (empfohlen)
+
+Die von Firebase versendete Anmelde-Mail kommt von
+`noreply@…firebaseapp.com`, ist standardmässig **englisch** und landet oft im
+**Spam**. Du kannst die App stattdessen ihre **eigene** Mail verschicken lassen:
+deutsch, mit deinem Absender (z. B. `Foto-Galerie <no-reply@alae.app>`),
+hübschem Layout und einem **6-stelligen Code _und_ Ein-Klick-Link**. Bei
+korrekt eingerichteter Absenderdomain (SPF/DKIM/DMARC) landet sie zuverlässig im
+Posteingang.
+
+Wichtig zu wissen: Die `VITE_FIREBASE_*`-Werte werden weiterhin für den
+**Firestore-Datenbankzugriff** gebraucht – sie einfach zu löschen schaltet den
+Login also **nicht** ab. Dafür gibt es zwei aufeinander abgestimmte Schalter:
+
+- **Backend:** `FIREBASE_PARENT_AUTH=false`
+- **Frontend:** `VITE_FIREBASE_PARENT_AUTH=false`
+
+### Schritt für Schritt
+
+1. **SMTP einrichten** (falls noch nicht geschehen). Ohne SMTP werden Mails nur
+   ins Server-Log geschrieben. Anleitung inkl. SPF/DKIM:
+   [docs/04-email-smtp.md](04-email-smtp.md). In der Backend-`.env`:
+
+   ```ini
+   SMTP_HOST=smtp.deinanbieter.de
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=dein-smtp-benutzer
+   SMTP_PASS=dein-smtp-passwort
+   MAIL_FROM=Foto-Galerie <no-reply@alae.app>
+   SUPPORT_EMAIL=support@alae.app
+   ```
+
+2. **Backend umstellen:** in der `.env` (bzw. Root-`.env` für docker-compose)
+   `FIREBASE_PARENT_AUTH=false` setzen und Backend neu starten:
+
+   ```bash
+   docker compose up -d backend
+   ```
+
+   Beim Start zeigt das Log dann `parent auth : code only`.
+
+3. **Frontend umstellen:** in der Netlify-Umgebung (oder lokal in
+   `frontend/.env`) `VITE_FIREBASE_PARENT_AUTH=false` setzen und das Frontend
+   **neu deployen/bauen** (Vite-Variablen werden zur Build-Zeit eingebacken).
+   In Netlify: **Site settings → Environment variables → Add**, danach
+   **Deploys → Trigger deploy → Clear cache and deploy site**.
+
+4. **Absenderdomain absichern** (entscheidend gegen Spam): für die Domain in
+   `MAIL_FROM` (z. B. `alae.app`) **SPF**, **DKIM** und **DMARC** als
+   DNS-Einträge setzen. Die genauen Werte liefert dein SMTP-/Mail-Anbieter.
+
+5. **Testen:** in der Eltern-App eine im Admin **angelegte** Adresse eingeben.
+   Es kommt nun deine eigene deutsche Mail mit Code + „E-Mail bestätigen“-Button.
+   Der Login-Bildschirm spricht jetzt von „Zugangscode“ statt „Anmeldelink“.
+
+> Zurückschalten? Beide Flags wieder auf `true` setzen (und Frontend neu
+> deployen). Bereits eingeloggte Eltern bleiben in beiden Fällen angemeldet –
+> die Session verwaltet das Backend per Cookie, unabhängig vom gewählten Flow.
 
 ## 8.3 Service-Account für das Backend erstellen
 
