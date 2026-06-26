@@ -6,7 +6,7 @@ import { useCart } from '../context/Cart';
 export function Layout({ children }: { children: ReactNode }) {
   const { verified } = useParentAuth();
   return (
-    <>
+    <div className="parent-theme">
       <header className="appbar">
         <div className="container appbar-inner">
           <Link to="/" className="brand">
@@ -37,7 +37,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <Link to="/hilfe">Hilfe & Kontakt</Link>
         </div>
       </footer>
-    </>
+    </div>
   );
 }
 
