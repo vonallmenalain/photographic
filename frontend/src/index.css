@@ -362,7 +362,11 @@ input:focus, select:focus, textarea:focus {
   object-fit: cover; object-position: center;
   filter: blur(54px) saturate(1.25) brightness(0.5);
   opacity: 0;
-  transform: scale(1.08);
+  /* `translateZ(0)` keeps each ambient layer permanently on the GPU so the
+     cross-fade below is a pure compositor opacity change (no re-raster of the
+     expensive blur) — this removes a source of flicker on mobile. */
+  transform: scale(1.08) translateZ(0);
+  will-change: opacity;
   transition: opacity 1.4s ease;
   user-select: none; -webkit-user-drag: none;
 }
@@ -465,6 +469,13 @@ input:focus, select:focus, textarea:focus {
 .gp-arrow:active { transform: scale(0.94); }
 @media (max-width: 760px) {
   .gp-arrow { display: none; }
+  /* A lighter blur is far cheaper to raster on mobile GPUs, which keeps the
+     ambient cross-fade smooth and flicker-free. */
+  .gp-ambient img { filter: blur(30px) saturate(1.2) brightness(0.52); }
+  .gp-ambient img.on { opacity: 0.55; }
+  /* A slightly flatter perspective + smaller depth keeps the 3-D transforms
+     light on mobile, where deep perspective layers can shimmer. */
+  .gp-viewport { perspective: 1300px; }
 }
 
 /* Footer: progress dots + one glass button to enter the gallery. */
@@ -704,14 +715,20 @@ tr:hover td { background: var(--surface-2); }
 }
 
 /* ==========================================================================
-   Rustic wood theme — parent ("Eltern") view only.
-   The whole parent experience is wrapped in `.parent-theme`, so we can
-   re-skin it with warm wood-brown tones (espresso text on cream paper, a
-   saddle-brown accent and a dark walnut header) without touching the admin
-   area, which keeps its own cool blue/slate look. Most components read their
-   colours from CSS custom properties, so overriding the variables here
-   re-themes cards, buttons, inputs, badges and alerts in one place; a few
-   hard-coded accents are tuned individually below.
+   Dark wood "bar" theme — parent ("Eltern") view only.
+   The whole parent experience is wrapped in `.parent-theme`, so we can re-skin
+   it into a warm, cozy espresso-wood lounge (inspired by a dimly-lit bar with
+   amber bokeh lights) without touching the admin area, which keeps its own cool
+   blue/slate look.
+
+   How the colours work on a DARK backdrop:
+   • The page background is deep walnut wood with glowing amber "bokeh" lights.
+   • Text that sits directly on that backdrop (page titles, gallery headings,
+     hero copy, footer) is light/cream — so --text/--text-soft/--text-muted
+     default to warm cream here.
+   • Content surfaces (cards, inputs, dropdowns, photo tiles …) stay on warm
+     cream "paper", so those surfaces RE-DECLARE the text variables back to dark
+     espresso further below, keeping everything inside them perfectly legible.
    ========================================================================== */
 .parent-theme {
   /* Hand-lettered display font everywhere in the parent view — the same
@@ -722,46 +739,112 @@ tr:hover td { background: var(--surface-2); }
   --font: 'Permanent Marker', 'Segoe UI', cursive;
   font-family: var(--font);
 
-  /* Warm rustic palette */
-  --bg: #e9dcc6;
+  /* Warm palette tuned for the dark backdrop. Cream text by default (for
+     content sitting directly on the wood); cream "paper" surfaces. */
+  --bg: #1c130a;
   --surface: #fbf5ea;
   --surface-2: #f1e6d2;
-  --border: #d8c2a2;
-  --text: #3a2a1b;
-  --text-soft: #6d543e;
-  --text-muted: #9a8163;
-  --primary: #8a5a2b;
-  --primary-dark: #6b431d;
-  --success: #5d7a39;
-  --danger: #a8431f;
-  --warning: #ad7718;
-  --shadow: 0 1px 3px rgba(74, 45, 22, 0.14), 0 10px 28px rgba(74, 45, 22, 0.10);
-  --shadow-sm: 0 1px 2px rgba(74, 45, 22, 0.12);
+  --border: #dcc6a3;
+  --text: #f4e7cf;
+  --text-soft: #dcc4a0;
+  --text-muted: #b69f7c;
+  --primary: #a8631f;
+  --primary-dark: #8a4f17;
+  --success: #6f9038;
+  --danger: #bb4a22;
+  --warning: #b9812a;
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 16px 40px rgba(0, 0, 0, 0.32);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);
 
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
   color: var(--text);
-  /* Layered "wood grain" backdrop: a warm vertical gradient, faint darker
-     grain stripes, and a soft top glow so the paper cards lift off it. */
-  background-color: #e3d4bb;
+  /* Layered dark-wood backdrop: warm corner glows (the "bokeh" lights), a faint
+     vertical wood grain, and a deep espresso vertical gradient base. Animated
+     glowing orbs are layered on top via `.parent-bg` (see Layout). */
+  background-color: #160e07;
   background-image:
-    radial-gradient(120% 80% at 50% -10%, rgba(255, 248, 235, 0.85) 0%, rgba(227, 212, 187, 0) 55%),
+    radial-gradient(46% 38% at 16% 8%, rgba(232, 158, 70, 0.20) 0%, rgba(232, 158, 70, 0) 60%),
+    radial-gradient(42% 34% at 86% 16%, rgba(214, 120, 46, 0.16) 0%, rgba(214, 120, 46, 0) 60%),
+    radial-gradient(60% 44% at 50% 108%, rgba(196, 110, 40, 0.22) 0%, rgba(196, 110, 40, 0) 62%),
     repeating-linear-gradient(
       90deg,
-      rgba(120, 84, 48, 0.05) 0px,
-      rgba(120, 84, 48, 0.05) 2px,
-      rgba(120, 84, 48, 0) 2px,
-      rgba(120, 84, 48, 0) 7px
+      rgba(0, 0, 0, 0.16) 0px,
+      rgba(0, 0, 0, 0.16) 2px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0) 9px
     ),
-    linear-gradient(180deg, #ecdfc8 0%, #e3d4bb 45%, #d9c8aa 100%);
+    linear-gradient(180deg, #2c1d10 0%, #20150b 52%, #160e07 100%);
   background-attachment: fixed;
 }
 
-/* Header: a solid dark walnut bar with warm cream lettering. */
+/* Animated "bokeh" light layer: a few large, blurred amber orbs drifting slowly
+   behind the content, echoing the warm out-of-focus lights of a cozy bar. They
+   are purely decorative (pointer-events: none) and sit behind every surface. */
+.parent-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1; /* behind all content, above the parent's wood background box */
+  overflow: hidden;
+  pointer-events: none;
+}
+.parent-bg .bokeh {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(52px);
+  mix-blend-mode: screen;
+  opacity: 0.5;
+  will-change: transform;
+  transform: translateZ(0);
+}
+.parent-bg .b1 {
+  width: 360px; height: 360px; left: -70px; top: 10%;
+  background: radial-gradient(circle, rgba(236, 164, 78, 0.6), transparent 66%);
+  animation: bokehDrift 17s ease-in-out infinite alternate;
+}
+.parent-bg .b2 {
+  width: 420px; height: 420px; right: -120px; top: 42%;
+  background: radial-gradient(circle, rgba(214, 124, 48, 0.42), transparent 66%);
+  animation: bokehDrift 22s 1.5s ease-in-out infinite alternate-reverse;
+}
+.parent-bg .b3 {
+  width: 300px; height: 300px; left: 24%; bottom: -90px;
+  background: radial-gradient(circle, rgba(244, 196, 120, 0.34), transparent 66%);
+  animation: bokehDrift 26s 3s ease-in-out infinite alternate;
+}
+.parent-bg .b4 {
+  width: 200px; height: 200px; left: 62%; top: 6%;
+  background: radial-gradient(circle, rgba(255, 214, 150, 0.30), transparent 64%);
+  animation: bokehDrift 19s 0.8s ease-in-out infinite alternate-reverse;
+}
+@keyframes bokehDrift {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(28px, -26px) scale(1.08); }
+  100% { transform: translate(-22px, 24px) scale(0.94); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .parent-bg .bokeh { animation: none; }
+}
+
+/* Header: a translucent dark-walnut bar with warm cream lettering, a soft blur
+   so the bokeh shimmers through, and a thin emerald→amber accent line on top
+   (a nod to the reference image's green hairline above the logo). */
 .parent-theme .appbar {
   background:
-    linear-gradient(180deg, #5e3a1e 0%, #4a2c15 100%);
-  border-bottom: 3px solid #34200f;
-  box-shadow: 0 4px 14px rgba(52, 32, 15, 0.35);
+    linear-gradient(180deg, rgba(58, 36, 18, 0.92) 0%, rgba(36, 23, 12, 0.94) 100%);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.42);
+}
+.parent-theme .appbar::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #5d9a44 0%, #d8a44f 55%, #a8662b 100%);
 }
 .parent-theme .brand { color: #f6ead4; }
 .parent-theme .brand-mark {
@@ -791,33 +874,71 @@ tr:hover td { background: var(--surface-2); }
   box-shadow: 0 0 0 3px rgba(242, 216, 167, 0.4);
 }
 .parent-theme .cart-btn .cart-badge {
-  background: #c0641f;
+  background: #d2741f;
   color: #fff;
-  box-shadow: 0 0 0 2px #4a2c15;
+  box-shadow: 0 0 0 2px #281910;
 }
 .parent-theme .profile-btn[aria-expanded='true'] {
   background: rgba(246, 234, 212, 0.20);
   border-color: #f2d8a7;
   color: #fdebcb;
 }
-.parent-theme .profile-status { border-color: #4a2c15; }
-/* The dropdown sits on cream paper, so restore dark-on-light text inside it */
-.parent-theme .profile-dropdown { color: var(--text); }
-.parent-theme .profile-dropdown-item { color: var(--text); }
+.parent-theme .profile-status { border-color: #2a1a0d; }
+
+/* ── Text colour scoping for the dark backdrop ──────────────────────────────
+   Cream "paper" surfaces RE-DECLARE the text variables back to dark espresso so
+   every label, paragraph and helper text inside them stays crisp and legible.
+   Because `color: var(--text)` is re-applied on the surface itself, plain
+   children (<p>, <li>, <strong> …) inherit the dark colour too. */
+.parent-theme .card,
+.parent-theme .modal-card,
+.parent-theme .profile-dropdown,
+.parent-theme .photo-tile,
+.parent-theme .trust,
+.parent-theme .btn.secondary,
+.parent-theme .btn.on-photo,
+.parent-theme input,
+.parent-theme select,
+.parent-theme textarea {
+  --text: #3a2a1b;
+  --text-soft: #6d543e;
+  --text-muted: #9a8163;
+  color: var(--text);
+}
 
 /* Hero lock badge + section accents */
 .parent-theme .hero .lock-big {
-  background: linear-gradient(135deg, #8a5a2b, #b07a3a);
-  box-shadow: 0 8px 20px rgba(74, 45, 22, 0.28);
+  background: linear-gradient(135deg, #c2772f, #e1a04a);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
 }
+
+/* Headings sit directly on the dark wood → warm cream with a soft shadow so
+   they lift off the backdrop. Headings inside cream surfaces stay dark. */
 .parent-theme h1,
 .parent-theme h2,
-.parent-theme h3 { color: #43301f; }
+.parent-theme h3 {
+  color: #f6e8cf;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+.parent-theme .card h1,
+.parent-theme .card h2,
+.parent-theme .card h3,
+.parent-theme .modal-card h2 {
+  color: #43301f;
+  text-shadow: none;
+}
 
-/* Cards get a subtle warm border highlight for a crafted, paper-on-wood feel */
+/* Cream "paper" cards lifting off the dark wood: a warm hairline plus a deep
+   ambient shadow so they read as physical cards on a table. */
 .parent-theme .card {
-  border-color: #e0cdad;
-  box-shadow: 0 1px 2px rgba(74, 45, 22, 0.10), 0 12px 30px rgba(74, 45, 22, 0.12);
+  border-color: #e7d6b8;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.30), 0 20px 44px rgba(0, 0, 0, 0.34);
+}
+.parent-theme .photo-tile {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28), 0 16px 36px rgba(0, 0, 0, 0.32);
+}
+.parent-theme .photo-tile:hover {
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.34), 0 24px 56px rgba(0, 0, 0, 0.42);
 }
 
 /* Inputs on cream paper */
@@ -851,8 +972,10 @@ tr:hover td { background: var(--surface-2); }
 .parent-theme .photo-toast.error { background: #f6e2d6; color: #8f3217; }
 .parent-theme .profile-dropdown-item-danger:hover { background: #f6e2d6; color: var(--danger); }
 
-/* Footer */
-.parent-theme .footer { color: #8a6f52; }
+/* Footer sits on the dark wood → warm muted cream, with glowing gold links. */
+.parent-theme .footer { color: #c2a87f; }
+.parent-theme .footer a { color: #e9c489; }
+.parent-theme .footer a:hover { color: #f7d9a3; }
 
 /* Gallery-Vorschau stage: keep it dark so the photos pop, but warm the black
    into a deep espresso/walnut and switch the centre glow to a candle-amber. */
@@ -866,3 +989,66 @@ tr:hover td { background: var(--surface-2); }
     0 0 120px rgba(214, 158, 84, 0.22);
 }
 .parent-theme .preview-enter { color: #2c1d10; }
+
+/* ==========================================================================
+   Cart / order line items — a reusable row (thumbnail · details · price ·
+   action) that stays tidy on desktop and wraps gracefully on small screens.
+   ========================================================================== */
+.line-item {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.line-item:last-child { border-bottom: none; }
+.line-item > img { flex: none; }
+.line-item .li-main { flex: 1 1 auto; min-width: 0; }
+.line-item .li-price { font-weight: 600; white-space: nowrap; }
+
+@media (max-width: 480px) {
+  /* Let the price + action drop onto a second line, aligned under the details
+     (next to the thumbnail) so nothing gets squeezed or clipped. */
+  .line-item { flex-wrap: wrap; }
+  .line-item .li-main { flex: 1 1 calc(100% - 78px); }
+  .line-item .li-price { margin-left: 78px; }
+  .line-item .li-action { margin-left: auto; }
+}
+
+/* ==========================================================================
+   Mobile optimisation — parent ("Eltern") view.
+   Desktop is intentionally left untouched (apart from the new theme); these
+   rules only tighten spacing and prevent overflow on small screens so the whole
+   parent experience feels comfortable on a phone.
+   ========================================================================== */
+@media (max-width: 640px) {
+  /* Header: keep the 64px height (the gallery stage aligns to it) but scale the
+     wordmark down and tighten the action group so nothing crowds. */
+  .parent-theme .brand-mark { font-size: 1.5rem; }
+  .parent-theme .nav-actions { gap: 8px; }
+  .parent-theme .nav-link { font-size: 0.9rem; }
+  .parent-theme .icon-btn { width: 38px; height: 38px; }
+
+  /* Roomier reading: trim the big page + card padding. */
+  .parent-theme .page-pad { padding: 22px 0 48px; }
+  .parent-theme .card { padding: 18px; border-radius: 14px; }
+  .parent-theme .hero { padding: 10px 0 18px; }
+  .parent-theme .hero h1 { font-size: 1.45rem; }
+
+  /* Gallery: comfortable side gutters (the dark wood now clearly frames each
+     cream tile) and a tighter, even grid. */
+  .parent-theme .gallery-section { margin-bottom: 26px; }
+  .parent-theme .photo-grid { gap: 14px; }
+
+  /* Profile dropdown never wider than the screen. */
+  .parent-theme .profile-dropdown { min-width: min(230px, calc(100vw - 32px)); }
+
+  /* Tables (orders) breathe a little less so all columns fit. */
+  .parent-theme th,
+  .parent-theme td { padding: 9px 8px; font-size: 0.88rem; }
+}
+
+/* Very small phones: drop the photo grid to a single, clearly-framed column. */
+@media (max-width: 420px) {
+  .parent-theme .photo-grid { grid-template-columns: 1fr; }
+}
