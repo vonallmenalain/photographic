@@ -202,7 +202,20 @@ export default function GalleryPreview() {
         const dirClamped = Math.max(-CLAMP, Math.min(CLAMP, delta));
 
         const x = delta * gap;
-        const z = -clamped * 130; // neighbours recede behind the centre photo
+        // Depth recedes monotonically behind the centre photo. The extra term
+        // past CLAMP keeps even the far-back cards on their own distinct depth
+        // planes (the old flat plateau left them all coplanar), and the small
+        // direction-based bias guarantees the two cards straddling the centre
+        // during a transition are never exactly coplanar either.
+        //
+        // Coplanar, overlapping slides are precisely what make tile-based mobile
+        // GPUs flip their paint order every frame inside a `preserve-3d` context
+        // — that is the rapid "flicker" where 2–3 images alternate when a new
+        // photo moves to the front. A few pixels of guaranteed depth separation
+        // is imperceptible but ends the z-fighting completely. Desktop already
+        // looked smooth and is visually unchanged by these sub-perceptual nudges.
+        const recede = clamped * 130 + Math.max(0, abs - CLAMP) * 6;
+        const z = -recede + dirClamped * 10;
         const scale = 1 - clamped * 0.12;
         const rotY = -dirClamped * 11;
         const y = clamped * 7;
@@ -212,7 +225,9 @@ export default function GalleryPreview() {
         card.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, ${z.toFixed(2)}px) rotateY(${rotY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
         card.style.opacity = op.toFixed(3);
         card.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : 'none';
-        card.style.zIndex = String(Math.round(1000 - clamped * 100));
+        // Strictly-monotonic stacking as a fallback for any engine that still
+        // honours z-index inside a preserve-3d context.
+        card.style.zIndex = String(10000 - Math.round(recede * 10));
         const isCenter = abs < 0.5;
         if (isCenter !== card.classList.contains('is-center')) {
           card.classList.toggle('is-center', isCenter);
