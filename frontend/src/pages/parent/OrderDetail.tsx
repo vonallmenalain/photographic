@@ -67,16 +67,7 @@ export default function OrderDetail() {
       <div className="card">
         <ul className="list-reset">
           {order.items.map((item, i) => (
-            <li
-              key={i}
-              style={{
-                display: 'flex',
-                gap: 14,
-                alignItems: 'center',
-                padding: '12px 0',
-                borderBottom: '1px solid var(--border)',
-              }}
-            >
+            <li key={i} className="line-item">
               <img
                 src={imageUrl(item.thumbUrl)}
                 alt=""
@@ -85,13 +76,13 @@ export default function OrderDetail() {
                 style={{ borderRadius: 8, objectFit: 'cover' }}
                 draggable={false}
               />
-              <div style={{ flex: 1 }}>
+              <div className="li-main">
                 <strong>{item.productName}</strong>
                 <div className="muted" style={{ fontSize: '0.85rem' }}>
                   Menge {item.qty}
                 </div>
               </div>
-              <div style={{ fontWeight: 600 }}>
+              <div className="li-price">
                 {formatPrice(item.unitPriceCents * item.qty, order.currency)}
               </div>
             </li>

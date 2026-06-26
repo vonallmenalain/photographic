@@ -141,16 +141,7 @@ export default function Cart() {
           <div className="card">
             <ul className="list-reset">
               {cart.items.map((item) => (
-                <li
-                  key={item.id}
-                  style={{
-                    display: 'flex',
-                    gap: 14,
-                    alignItems: 'center',
-                    padding: '12px 0',
-                    borderBottom: '1px solid var(--border)',
-                  }}
-                >
+                <li key={item.id} className="line-item">
                   <img
                     src={imageUrl(item.thumbUrl)}
                     alt=""
@@ -159,7 +150,7 @@ export default function Cart() {
                     style={{ borderRadius: 8, objectFit: 'cover' }}
                     draggable={false}
                   />
-                  <div style={{ flex: 1 }}>
+                  <div className="li-main">
                     <strong>{item.productName}</strong>
                     {item.productType === 'digital' ? (
                       <div className="muted" style={{ fontSize: '0.85rem' }}>
@@ -190,10 +181,10 @@ export default function Cart() {
                       </div>
                     )}
                   </div>
-                  <div style={{ fontWeight: 600 }}>
+                  <div className="li-price">
                     {formatPrice(item.unitPriceCents * item.qty, cart.currency)}
                   </div>
-                  <button className="btn ghost small" onClick={() => remove(item.id)}>
+                  <button className="btn ghost small li-action" onClick={() => remove(item.id)}>
                     Entfernen
                   </button>
                 </li>

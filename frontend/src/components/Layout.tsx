@@ -7,6 +7,13 @@ export function Layout({ children }: { children: ReactNode }) {
   const { verified } = useParentAuth();
   return (
     <div className="parent-theme">
+      {/* Decorative warm "bokeh" glow drifting behind everything (see index.css). */}
+      <div className="parent-bg" aria-hidden="true">
+        <span className="bokeh b1" />
+        <span className="bokeh b2" />
+        <span className="bokeh b3" />
+        <span className="bokeh b4" />
+      </div>
       <header className="appbar">
         <div className="container appbar-inner">
           <Link to="/" className="brand">
