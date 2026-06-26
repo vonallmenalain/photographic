@@ -55,10 +55,10 @@ p { margin: 0 0 1rem; }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--text); }
 .brand:hover { text-decoration: none; }
 .brand-mark {
-  font-family: 'Permanent Marker', 'Segoe UI', cursive;
+  font-family: 'Kalam', 'Segoe UI', cursive;
   font-size: 1.85rem;
   line-height: 1;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--text);
   background: linear-gradient(135deg, var(--primary), #5b8def);
@@ -715,11 +715,14 @@ tr:hover td { background: var(--surface-2); }
    ========================================================================== */
 .parent-theme {
   /* Hand-lettered display font everywhere in the parent view — the same
-     "Permanent Marker" face used by the "Photographic" wordmark in the header.
-     Set both as the inherited font-family and via the --font variable so every
-     descendant (headings, body copy, buttons, inputs, badges …) picks it up.
-     The admin area is a separate tree and keeps the default system font. */
-  --font: 'Permanent Marker', 'Segoe UI', cursive;
+     "Kalam" face used by the "Photographic" wordmark in the header. Kalam keeps
+     the casual brush/marker character of the design but with calmer, unjoined
+     letterforms (and a real bold weight), so body copy, inputs and labels stay
+     comfortably readable. Set both as the inherited font-family and via the
+     --font variable so every descendant (headings, body copy, buttons, inputs,
+     badges …) picks it up. The admin area is a separate tree and keeps the
+     default system font. */
+  --font: 'Kalam', 'Segoe UI', cursive;
   font-family: var(--font);
 
   /* Warm rustic palette */
