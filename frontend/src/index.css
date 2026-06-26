@@ -714,6 +714,14 @@ tr:hover td { background: var(--surface-2); }
    hard-coded accents are tuned individually below.
    ========================================================================== */
 .parent-theme {
+  /* Hand-lettered display font everywhere in the parent view — the same
+     "Permanent Marker" face used by the "Photographic" wordmark in the header.
+     Set both as the inherited font-family and via the --font variable so every
+     descendant (headings, body copy, buttons, inputs, badges …) picks it up.
+     The admin area is a separate tree and keeps the default system font. */
+  --font: 'Permanent Marker', 'Segoe UI', cursive;
+  font-family: var(--font);
+
   /* Warm rustic palette */
   --bg: #e9dcc6;
   --surface: #fbf5ea;
