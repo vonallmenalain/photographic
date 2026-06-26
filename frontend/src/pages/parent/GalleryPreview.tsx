@@ -123,6 +123,19 @@ export default function GalleryPreview() {
     const n = heroPhotos.length;
     if (n === 0) return;
 
+    // On phones (and when the user prefers reduced motion) we drop the per-card
+    // blur. Toggling a CSS `filter` between a blur value and `none` repeatedly
+    // promotes/demotes the GPU layer of a card, which is the main cause of the
+    // intermittent "flicker" seen on mobile during the animation. Keeping the
+    // filter permanently off there means the layer stays stable → no flicker.
+    // The desktop experience (where everything is already buttery) is untouched.
+    const reduceFx =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      (window.matchMedia('(max-width: 760px)').matches ||
+        window.matchMedia('(pointer: coarse)').matches ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
     const abort = new AbortController();
     const { signal } = abort;
 
@@ -194,7 +207,7 @@ export default function GalleryPreview() {
         const rotY = -dirClamped * 11;
         const y = clamped * 7;
         const op = Math.max(0, 1 - clamped * 0.2);
-        const blur = Math.max(0, clamped - 1.5) * 1.1;
+        const blur = reduceFx ? 0 : Math.max(0, clamped - 1.5) * 1.1;
 
         card.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, ${z.toFixed(2)}px) rotateY(${rotY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
         card.style.opacity = op.toFixed(3);
