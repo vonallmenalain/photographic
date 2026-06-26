@@ -702,3 +702,159 @@ tr:hover td { background: var(--surface-2); }
   .admin-side a { margin: 0; }
   .admin-side .spacer { display: none; }
 }
+
+/* ==========================================================================
+   Rustic wood theme — parent ("Eltern") view only.
+   The whole parent experience is wrapped in `.parent-theme`, so we can
+   re-skin it with warm wood-brown tones (espresso text on cream paper, a
+   saddle-brown accent and a dark walnut header) without touching the admin
+   area, which keeps its own cool blue/slate look. Most components read their
+   colours from CSS custom properties, so overriding the variables here
+   re-themes cards, buttons, inputs, badges and alerts in one place; a few
+   hard-coded accents are tuned individually below.
+   ========================================================================== */
+.parent-theme {
+  /* Warm rustic palette */
+  --bg: #e9dcc6;
+  --surface: #fbf5ea;
+  --surface-2: #f1e6d2;
+  --border: #d8c2a2;
+  --text: #3a2a1b;
+  --text-soft: #6d543e;
+  --text-muted: #9a8163;
+  --primary: #8a5a2b;
+  --primary-dark: #6b431d;
+  --success: #5d7a39;
+  --danger: #a8431f;
+  --warning: #ad7718;
+  --shadow: 0 1px 3px rgba(74, 45, 22, 0.14), 0 10px 28px rgba(74, 45, 22, 0.10);
+  --shadow-sm: 0 1px 2px rgba(74, 45, 22, 0.12);
+
+  min-height: 100vh;
+  color: var(--text);
+  /* Layered "wood grain" backdrop: a warm vertical gradient, faint darker
+     grain stripes, and a soft top glow so the paper cards lift off it. */
+  background-color: #e3d4bb;
+  background-image:
+    radial-gradient(120% 80% at 50% -10%, rgba(255, 248, 235, 0.85) 0%, rgba(227, 212, 187, 0) 55%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(120, 84, 48, 0.05) 0px,
+      rgba(120, 84, 48, 0.05) 2px,
+      rgba(120, 84, 48, 0) 2px,
+      rgba(120, 84, 48, 0) 7px
+    ),
+    linear-gradient(180deg, #ecdfc8 0%, #e3d4bb 45%, #d9c8aa 100%);
+  background-attachment: fixed;
+}
+
+/* Header: a solid dark walnut bar with warm cream lettering. */
+.parent-theme .appbar {
+  background:
+    linear-gradient(180deg, #5e3a1e 0%, #4a2c15 100%);
+  border-bottom: 3px solid #34200f;
+  box-shadow: 0 4px 14px rgba(52, 32, 15, 0.35);
+}
+.parent-theme .brand { color: #f6ead4; }
+.parent-theme .brand-mark {
+  color: #f6ead4;
+  background: linear-gradient(135deg, #f2d8a7, #e7b873);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+.parent-theme .nav-link,
+.parent-theme .nav-actions .muted { color: #e8d6ba; }
+.parent-theme .nav-link:hover { color: #f7c982; }
+
+/* Round header icon buttons on the dark wood bar */
+.parent-theme .icon-btn {
+  background: rgba(246, 234, 212, 0.10);
+  border-color: rgba(246, 234, 212, 0.28);
+  color: #f0e2c8;
+}
+.parent-theme .icon-btn:hover {
+  background: rgba(246, 234, 212, 0.20);
+  border-color: #f2d8a7;
+  color: #fdebcb;
+}
+.parent-theme .icon-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(242, 216, 167, 0.4);
+}
+.parent-theme .cart-btn .cart-badge {
+  background: #c0641f;
+  color: #fff;
+  box-shadow: 0 0 0 2px #4a2c15;
+}
+.parent-theme .profile-btn[aria-expanded='true'] {
+  background: rgba(246, 234, 212, 0.20);
+  border-color: #f2d8a7;
+  color: #fdebcb;
+}
+.parent-theme .profile-status { border-color: #4a2c15; }
+/* The dropdown sits on cream paper, so restore dark-on-light text inside it */
+.parent-theme .profile-dropdown { color: var(--text); }
+.parent-theme .profile-dropdown-item { color: var(--text); }
+
+/* Hero lock badge + section accents */
+.parent-theme .hero .lock-big {
+  background: linear-gradient(135deg, #8a5a2b, #b07a3a);
+  box-shadow: 0 8px 20px rgba(74, 45, 22, 0.28);
+}
+.parent-theme h1,
+.parent-theme h2,
+.parent-theme h3 { color: #43301f; }
+
+/* Cards get a subtle warm border highlight for a crafted, paper-on-wood feel */
+.parent-theme .card {
+  border-color: #e0cdad;
+  box-shadow: 0 1px 2px rgba(74, 45, 22, 0.10), 0 12px 30px rgba(74, 45, 22, 0.12);
+}
+
+/* Inputs on cream paper */
+.parent-theme input,
+.parent-theme select,
+.parent-theme textarea { background: #fffaf1; }
+.parent-theme input:focus,
+.parent-theme select:focus,
+.parent-theme textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(138, 90, 43, 0.18);
+}
+
+/* Photo tiles + the "on photo" buy button in warm tones */
+.parent-theme .btn.on-photo { background: #fbf5ea; color: var(--text); }
+.parent-theme .btn.on-photo:hover { background: #f1e6d2; }
+.parent-theme .pill.green { background: rgba(233, 240, 220, 0.95); color: #4d6a2c; }
+.parent-theme .pill.blue { background: rgba(244, 232, 212, 0.95); color: #7a5320; }
+
+/* Badges + alerts retuned to the rustic palette */
+.parent-theme .badge.class { background: #efe2cb; color: #7a5320; }
+.parent-theme .badge.green { background: #e9f0dc; color: #4d6a2c; }
+.parent-theme .badge.red { background: #f6e2d6; color: #94371a; }
+.parent-theme .badge.amber { background: #f6e9cf; color: #8a6312; }
+.parent-theme .alert.error { background: #f6e2d6; color: #8f3217; border-color: #e6bda6; }
+.parent-theme .alert.success { background: #e9f0dc; color: #46632a; border-color: #cad9ab; }
+.parent-theme .alert.info { background: #f4e8d4; color: #7a5320; border-color: #e0cba2; }
+.parent-theme .buy-success,
+.parent-theme .photo-toast.success { color: #46632a; }
+.parent-theme .photo-toast.success { background: #e9f0dc; }
+.parent-theme .photo-toast.error { background: #f6e2d6; color: #8f3217; }
+.parent-theme .profile-dropdown-item-danger:hover { background: #f6e2d6; color: var(--danger); }
+
+/* Footer */
+.parent-theme .footer { color: #8a6f52; }
+
+/* Gallery-Vorschau stage: keep it dark so the photos pop, but warm the black
+   into a deep espresso/walnut and switch the centre glow to a candle-amber. */
+.parent-theme .gp-stage {
+  background: radial-gradient(120% 120% at 50% 0%, #2c1d10 0%, #1a1009 60%, #120b06 100%);
+}
+.parent-theme .gp-slide.is-center img {
+  box-shadow:
+    0 36px 90px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(247, 220, 176, 0.18),
+    0 0 120px rgba(214, 158, 84, 0.22);
+}
+.parent-theme .preview-enter { color: #2c1d10; }
