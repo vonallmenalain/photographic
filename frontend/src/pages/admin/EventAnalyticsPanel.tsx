@@ -27,6 +27,7 @@ export interface EventAnalytics {
   status: string;
   created_at: string;
   expires_at: string | null;
+  invited_at: string | null;
   revenue_cents: number;
   order_count: number;
   email_total: number;
@@ -164,6 +165,11 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
   const [showEmail, setShowEmail] = useState(false);
   const [msg, setMsg] = useState('');
 
+  // Wurde noch keine Einladung verschickt, generiert der Versand die ursprüngliche
+  // Einladungs-Mail; danach handelt es sich um eine Erinnerung (anderer Text).
+  const mode: 'invitation' | 'reminder' = event.invited_at ? 'reminder' : 'invitation';
+  const sendLabel = mode === 'invitation' ? 'Einladung versenden' : 'Erinnerung versenden';
+
   const add = async () => {
     setError('');
     setBusy(true);
@@ -176,7 +182,7 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
       setNote('');
       onReload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erinnerung konnte nicht gespeichert werden.');
+      setError(err instanceof ApiError ? err.message : 'Eintrag konnte nicht gespeichert werden.');
     } finally {
       setBusy(false);
     }
@@ -189,15 +195,30 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
 
   return (
     <div className="card" style={{ marginTop: 14, background: 'var(--surface-2)' }}>
-      <strong>Erinnerung protokollieren</strong>
-      <p className="muted" style={{ fontSize: '0.82rem', marginTop: 4 }}>
-        Trage ein, wann du eine Einladung oder Erinnerung verschickt hast. Die Markierung erscheint
-        im Umsatzverlauf, damit du den Effekt ablesen kannst. Mit „Erinnerung versenden“
-        erinnerst du gezielt Eltern, die noch keine Bestellung erfasst haben.
-      </p>
+      <strong>Einladungen &amp; Erinnerungen</strong>
+
+      {event.reminders.length > 0 ? (
+        <div style={{ marginTop: 10 }}>
+          {event.reminders.map((r) => (
+            <span className="chip" key={r.id}>
+              {formatDateShort(r.sent_at)}
+              {r.note ? ` · ${r.note}` : ''}
+              <button onClick={() => remove(r.id)} title="Entfernen">
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="muted" style={{ fontSize: '0.82rem', marginTop: 6, marginBottom: 0 }}>
+          Noch keine Einladung oder Erinnerung verschickt.
+        </p>
+      )}
+
       {error && <Alert kind="error">{error}</Alert>}
       {msg && <Alert kind="success">{msg}</Alert>}
-      <div className="row" style={{ alignItems: 'flex-end' }}>
+
+      <div className="row" style={{ alignItems: 'flex-end', marginTop: 14 }}>
         <div className="field" style={{ marginBottom: 0 }}>
           <label style={{ fontSize: '0.8rem' }}>Datum</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -221,25 +242,14 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
             setShowEmail(true);
           }}
         >
-          Erinnerung versenden
+          {sendLabel}
         </button>
       </div>
-      {event.reminders.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          {event.reminders.map((r) => (
-            <span className="chip" key={r.id}>
-              {formatDateShort(r.sent_at)}
-              {r.note ? ` · ${r.note}` : ''}
-              <button onClick={() => remove(r.id)} title="Entfernen">
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
+
       {showEmail && (
-        <ReminderEmailModal
+        <EmailDispatchModal
           eventId={event.id}
+          mode={mode}
           onClose={() => setShowEmail(false)}
           onSent={(message) => {
             setShowEmail(false);
@@ -276,20 +286,28 @@ interface ReminderRecipients {
 }
 
 /**
- * Reminder-Popup: pro Kind aufgeschlüsselt, welche E-Mail-Adressen bereits
- * bestätigt wurden und welche schon bestellt haben. Standardmässig sind nur die
- * Adressen ausgewählt, die noch keine Bestellung erfasst haben. Optional kann
- * eine Kopie an das eigene Admin-Konto gehen.
+ * Versand-Popup für Einladung bzw. Erinnerung. Zeigt alle aktiven Eltern-
+ * Adressen des Auftrags als kompakte Liste – eine Zeile pro Adresse, ohne
+ * Zeilenumbrüche, bei Bedarf horizontal scrollbar. Spalten: E-Mail-Adresse,
+ * Auswahl-Häkchen, Bestätigungs-Status und Bestell-Status. Bei der Einladung
+ * sind standardmässig alle Adressen ausgewählt, bei der Erinnerung nur jene,
+ * die noch keine Bestellung erfasst haben. Optional geht eine Kopie an das
+ * eigene Admin-Konto.
  */
-function ReminderEmailModal({
+function EmailDispatchModal({
   eventId,
+  mode,
   onClose,
   onSent,
 }: {
   eventId: string;
+  mode: 'invitation' | 'reminder';
   onClose: () => void;
   onSent: (msg: string) => void;
 }) {
+  const isReminder = mode === 'reminder';
+  const noun = isReminder ? 'Erinnerung' : 'Einladung';
+
   const [data, setData] = useState<ReminderRecipients | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sendToSelf, setSendToSelf] = useState(false);
@@ -297,12 +315,14 @@ function ReminderEmailModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  // Eine deduplizierte, alphabetisch sortierte Liste aller Adressen (eine Zeile
+  // pro Adresse – eine Adresse kann mehreren Kindern zugeordnet sein).
   const allEmails = useMemo(() => {
     if (!data) return [] as ReminderEmail[];
     const byId = new Map<string, ReminderEmail>();
     for (const c of data.children) for (const e of c.emails) byId.set(e.id, e);
     for (const e of data.otherEmails) byId.set(e.id, e);
-    return Array.from(byId.values());
+    return Array.from(byId.values()).sort((a, b) => a.email.localeCompare(b.email));
   }, [data]);
 
   useEffect(() => {
@@ -310,15 +330,17 @@ function ReminderEmailModal({
       .then((r) => {
         setData(r);
         const ids = new Set<string>();
-        for (const c of r.children) for (const e of c.emails) if (!e.hasOrdered) ids.add(e.id);
-        for (const e of r.otherEmails) if (!e.hasOrdered) ids.add(e.id);
+        // Einladung: alle vorausgewählt. Erinnerung: nur Nicht-Besteller.
+        for (const c of r.children)
+          for (const e of c.emails) if (!isReminder || !e.hasOrdered) ids.add(e.id);
+        for (const e of r.otherEmails) if (!isReminder || !e.hasOrdered) ids.add(e.id);
         setSelected(ids);
       })
       .catch((err) =>
         setError(err instanceof ApiError ? err.message : 'Empfänger konnten nicht ermittelt werden.'),
       )
       .finally(() => setLoading(false));
-  }, [eventId]);
+  }, [eventId, isReminder]);
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -336,8 +358,11 @@ function ReminderEmailModal({
     setBusy(true);
     setError('');
     try {
+      const endpoint = isReminder
+        ? `/api/admin/events/${eventId}/send-reminder`
+        : `/api/admin/events/${eventId}/notify`;
       const res = await api<{ sent: number; failed: number; total: number; sentToSelf: boolean; devLogOnly: boolean }>(
-        `/api/admin/events/${eventId}/send-reminder`,
+        endpoint,
         {
           method: 'POST',
           admin: true,
@@ -349,7 +374,7 @@ function ReminderEmailModal({
       const note = res.devLogOnly
         ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
         : '';
-      onSent(`Erinnerung an ${res.sent} von ${res.total} Adresse(n) gesendet.${extra}${self}${note}`);
+      onSent(`${noun} an ${res.sent} von ${res.total} Adresse(n) gesendet.${extra}${self}${note}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Versand fehlgeschlagen.');
       setBusy(false);
@@ -361,8 +386,8 @@ function ReminderEmailModal({
 
   return (
     <Modal
-      title="Erinnerung versenden"
-      width={760}
+      title={`${noun} versenden`}
+      width={680}
       onClose={onClose}
       footer={
         <>
@@ -377,11 +402,19 @@ function ReminderEmailModal({
     >
       {error && <Alert kind="error">{error}</Alert>}
       <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
-        Die Erinnerung ist ähnlich wie die ursprüngliche Einladung (Link zur App, Hinweise zu den
-        Fotos
-        {data?.daysLeft != null ? ` – „noch ${data.daysLeft} Tage verfügbar“` : ''}). Jede Zeile ist
-        ein Kind. Standardmässig sind nur Adressen ausgewählt, die noch{' '}
-        <strong>keine Bestellung</strong> erfasst haben.
+        {isReminder ? (
+          <>
+            Die Erinnerung enthält den Link zur App und die Hinweise zu den Fotos
+            {data?.daysLeft != null ? ` („noch ${data.daysLeft} Tage verfügbar“)` : ''}.
+            Standardmässig sind nur Adressen ausgewählt, die noch{' '}
+            <strong>keine Bestellung</strong> erfasst haben.
+          </>
+        ) : (
+          <>
+            Die Einladung enthält den Link zur App, eine Kurzanleitung zur Verifizierung sowie die
+            Hinweise zum Schutz der Fotos. Standardmässig sind alle Adressen ausgewählt.
+          </>
+        )}
       </p>
       {loading ? (
         <p className="muted">Empfänger werden ermittelt …</p>
@@ -399,29 +432,60 @@ function ReminderEmailModal({
           </div>
           <div
             style={{
-              maxHeight: 320,
-              overflowY: 'auto',
+              maxHeight: 340,
+              overflow: 'auto',
               border: '1px solid var(--border)',
               borderRadius: 10,
             }}
           >
-            {data.children.map((c) => (
-              <ReminderChildGroup
-                key={c.id}
-                title={c.name}
-                emails={c.emails}
-                selected={selected}
-                onToggle={toggle}
-              />
-            ))}
-            {data.otherEmails.length > 0 && (
-              <ReminderChildGroup
-                title="Ohne Kind zugeordnet"
-                emails={data.otherEmails}
-                selected={selected}
-                onToggle={toggle}
-              />
-            )}
+            <table className="dispatch-table">
+              <thead>
+                <tr>
+                  <th>E-Mail-Adresse</th>
+                  <th style={{ textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      onChange={toggleAll}
+                      aria-label="Alle auswählen"
+                      style={{ width: 'auto', margin: 0 }}
+                    />
+                  </th>
+                  <th>Status</th>
+                  <th>Bestellung</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allEmails.map((e) => (
+                  <tr key={e.id} onClick={() => toggle(e.id)} style={{ cursor: 'pointer' }}>
+                    <td className="dispatch-email">{e.email}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(e.id)}
+                        onChange={() => toggle(e.id)}
+                        onClick={(ev) => ev.stopPropagation()}
+                        style={{ width: 'auto', margin: 0 }}
+                      />
+                    </td>
+                    <td>
+                      {e.verified ? (
+                        <span className="badge green">Bestätigt</span>
+                      ) : (
+                        <span className="badge amber">Nicht bestätigt</span>
+                      )}
+                    </td>
+                    <td>
+                      {e.hasOrdered ? (
+                        <span className="badge green">Bestellung</span>
+                      ) : (
+                        <span className="badge gray">Keine Bestellung</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           <SendToSelfCheckbox
             checked={sendToSelf}
@@ -436,75 +500,6 @@ function ReminderEmailModal({
         </>
       ) : null}
     </Modal>
-  );
-}
-
-function ReminderChildGroup({
-  title,
-  emails,
-  selected,
-  onToggle,
-}: {
-  title: string;
-  emails: ReminderEmail[];
-  selected: Set<string>;
-  onToggle: (id: string) => void;
-}) {
-  return (
-    <div>
-      <div
-        style={{
-          padding: '6px 10px',
-          background: 'var(--surface-2)',
-          borderBottom: '1px solid var(--border)',
-          fontSize: '0.82rem',
-          fontWeight: 600,
-          position: 'sticky',
-          top: 0,
-        }}
-      >
-        {title}
-      </div>
-      {emails.length === 0 ? (
-        <p className="muted" style={{ fontSize: '0.8rem', padding: '6px 10px', margin: 0 }}>
-          Keine E-Mail-Adresse verknüpft.
-        </p>
-      ) : (
-        emails.map((e) => (
-          <label
-            key={e.id}
-            className="row"
-            style={{
-              flexWrap: 'nowrap',
-              alignItems: 'center',
-              gap: 8,
-              padding: '7px 10px',
-              borderBottom: '1px solid var(--border)',
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={selected.has(e.id)}
-              onChange={() => onToggle(e.id)}
-              style={{ marginRight: 4, flex: 'none' }}
-            />
-            <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-all' }}>{e.email}</span>
-            {e.verified ? (
-              <span className="badge green" style={{ flexShrink: 0 }}>Bestätigt</span>
-            ) : (
-              <span className="badge amber" style={{ flexShrink: 0 }}>Nicht bestätigt</span>
-            )}
-            {e.hasOrdered ? (
-              <span className="badge green" style={{ flexShrink: 0 }}>Bestellt</span>
-            ) : (
-              <span className="badge gray" style={{ flexShrink: 0 }}>Keine Bestellung</span>
-            )}
-          </label>
-        ))
-      )}
-    </div>
   );
 }
 

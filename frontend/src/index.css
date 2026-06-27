@@ -567,6 +567,19 @@ th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--bo
 th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
 tr:hover td { background: var(--surface-2); }
 
+/* E-Mail-Versand-Popup: kompakte Empfängerliste, eine Zeile pro Adresse,
+   ohne Zeilenumbrüche und bei Bedarf horizontal scrollbar. */
+.dispatch-table { width: 100%; min-width: 480px; font-size: 0.86rem; }
+.dispatch-table th,
+.dispatch-table td { padding: 8px 12px; white-space: nowrap; }
+.dispatch-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--surface-2); text-transform: none; letter-spacing: 0;
+  font-size: 0.74rem; font-weight: 600; color: var(--text-muted);
+}
+.dispatch-table td.dispatch-email { width: 100%; font-weight: 500; }
+.dispatch-table tbody tr:last-child td { border-bottom: none; }
+
 /* Admin layout */
 .admin-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; align-items: start; }
 .admin-side {
