@@ -64,6 +64,16 @@ async function audit(action: string, detail: string, actor = 'admin') {
   });
 }
 
+/**
+ * Resolves the e-mail address of the currently logged-in admin account so the
+ * "E-Mail an mich senden" option can deliver a copy to the admin. Falls back to
+ * the configured default admin e-mail when the account has none on file.
+ */
+async function resolveAdminEmail(username: string): Promise<string> {
+  const user = await getById<{ email?: string }>(COL.adminUsers, username);
+  return (user?.email || config.admin.email || '').trim();
+}
+
 // ---------------------------------------------------------------------------
 // Cascade helpers (Firestore has no foreign keys, so we mirror the previous
 // ON DELETE CASCADE behaviour explicitly).
@@ -521,25 +531,45 @@ async function eventEmailIds(eventId: string): Promise<Set<string>> {
 }
 
 // --- "Galerie ist bereit" Sammel-E-Mail an alle Adressen eines Auftrags ----
-// Schickt allen (nicht deaktivierten) Eltern-Adressen des Auftrags eine E-Mail
-// mit Link zur App, Kurzanleitung zur Verifizierung sowie den Schutz-/Auf-
-// bewahrungshinweisen. Mit `?count=1` (bzw. GET) wird nur die Empfängerzahl
-// zurückgegeben, damit das Frontend vorab eine Bestätigung anzeigen kann.
+// Schickt den (nicht deaktivierten) Eltern-Adressen des Auftrags eine E-Mail mit
+// Link zur App, Kurzanleitung zur Verifizierung sowie den Schutz-/Aufbewahrungs-
+// hinweisen ("Einladung per E-Mail"). Per GET wird die komplette Empfängerliste
+// geliefert, damit das Frontend einzelne Adressen abwählen kann; standardmässig
+// sind im Popup alle Adressen ausgewählt.
 router.get(
   '/events/:id/notify',
   asyncHandler(async (req, res) => {
     const event = await getById(COL.events, req.params.id);
     if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
     const ids = await eventEmailIds(req.params.id);
-    const emails = await getManyById<{ status: string }>(COL.parentEmails, Array.from(ids));
-    const recipients = Array.from(emails.values()).filter((e) => e.status !== 'disabled');
-    res.json({ recipientCount: recipients.length, devLogOnly: config.mail.devLogOnly });
+    const emails = await getManyById<{ email: string; name?: string; status: string }>(
+      COL.parentEmails,
+      Array.from(ids),
+    );
+    const recipients = Array.from(emails.values())
+      .filter((e) => e.status !== 'disabled' && e.email)
+      .map((e) => ({ id: e.id, email: e.email, name: e.name ?? '', status: e.status }))
+      .sort((a, b) => a.email.localeCompare(b.email));
+    res.json({
+      recipientCount: recipients.length,
+      recipients,
+      adminEmail: await resolveAdminEmail(req.admin!.username),
+      devLogOnly: config.mail.devLogOnly,
+    });
   }),
 );
 
 router.post(
   '/events/:id/notify',
   asyncHandler(async (req, res) => {
+    const { emailIds, sendToSelf } = parse(
+      z.object({
+        emailIds: z.array(z.string()).optional(),
+        sendToSelf: z.boolean().default(false),
+      }),
+      req.body ?? {},
+    );
+
     const event = await getById<{ name: string; expires_at: string | null }>(
       COL.events,
       req.params.id,
@@ -551,11 +581,19 @@ router.post(
       COL.parentEmails,
       Array.from(ids),
     );
-    const recipients = Array.from(emails.values()).filter(
+    let recipients = Array.from(emails.values()).filter(
       (e) => e.status !== 'disabled' && e.email,
     );
-    if (recipients.length === 0) {
-      throw new ApiError(400, 'Diesem Auftrag sind keine (aktiven) E-Mail-Adressen zugeordnet.');
+    // Restrict to the explicitly selected addresses (the admin may have unticked
+    // some in the popup). Without a selection we fall back to "all".
+    if (emailIds) {
+      const allowed = new Set(emailIds);
+      recipients = recipients.filter((e) => allowed.has(e.id));
+    }
+
+    const selfEmail = sendToSelf ? await resolveAdminEmail(req.admin!.username) : '';
+    if (recipients.length === 0 && !selfEmail) {
+      throw new ApiError(400, 'Es wurde keine (aktive) E-Mail-Adresse ausgewählt.');
     }
 
     const link = config.publicAppUrl;
@@ -567,21 +605,39 @@ router.post(
     const sent = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.length - sent;
 
+    let sentToSelf = false;
+    if (selfEmail) {
+      try {
+        await sendGalleryReadyEmail(selfEmail, link, {
+          retentionDays: config.retentionDaysDefault,
+        });
+        sentToSelf = true;
+      } catch {
+        sentToSelf = false;
+      }
+    }
+
     // Record a reminder marker so the moment shows up in the Auswertung chart.
     if (sent > 0) {
       await setById(COL.reminders, newId('rem'), {
         event_id: req.params.id,
         sent_at: nowIso(),
-        note: `Galerie-Benachrichtigung an ${sent} Adresse(n)`,
+        note: `Einladung per E-Mail an ${sent} Adresse(n)`,
         created_at: nowIso(),
       });
     }
 
     await audit(
       'event.notify',
-      `${req.params.id}: ${sent} sent, ${failed} failed`,
+      `${req.params.id}: ${sent} sent, ${failed} failed${sentToSelf ? ', self copy' : ''}`,
     );
-    res.json({ sent, failed, total: recipients.length, devLogOnly: config.mail.devLogOnly });
+    res.json({
+      sent,
+      failed,
+      total: recipients.length,
+      sentToSelf,
+      devLogOnly: config.mail.devLogOnly,
+    });
   }),
 );
 
@@ -1698,6 +1754,211 @@ router.delete(
     await deleteById(COL.reminders, req.params.id);
     await audit('reminder.delete', req.params.id);
     res.json({ ok: true });
+  }),
+);
+
+// --- Reminder-E-Mail an die Eltern eines Auftrags ------------------------
+// Verschickt – ähnlich der Galerie-Einladung – eine Erinnerung ("Ihre Fotos
+// sind noch X Tage verfügbar") an ausgewählte Eltern-Adressen. Anders als die
+// Einladung unter "Aufträge" wird hier pro Kind aufgeschlüsselt, welche
+// Adressen bereits bestätigt wurden bzw. schon bestellt haben, damit der Admin
+// gezielt nur die Nicht-Besteller erinnern kann.
+
+/** Remaining days until the gallery is archived (null when no/expired date). */
+function daysLeftUntil(expiresAt: string | null): number | null {
+  if (!expiresAt) return null;
+  const end = new Date(expiresAt).getTime();
+  if (isNaN(end)) return null;
+  const days = Math.ceil((end - Date.now()) / (24 * 60 * 60 * 1000));
+  return days > 0 ? days : null;
+}
+
+/**
+ * Email ids that have a confirmed (pending/completed) order within this event.
+ * An order belongs to the event when at least one of its items references a
+ * photo of that event.
+ */
+async function orderedEmailIdsForEvent(eventId: string): Promise<Set<string>> {
+  const [photos, orders, orderItems] = await Promise.all([
+    runQuery<{ id: string }>(col(COL.photos).where('event_id', '==', eventId)),
+    runQuery<{ id: string; email_id: string; status: string }>(col(COL.orders)),
+    runQuery<{ order_id: string; photo_id: string }>(col(COL.orderItems)),
+  ]);
+  const photoIds = new Set(photos.map((p) => p.id));
+  const orderById = new Map(orders.map((o) => [o.id, o]));
+  const ordered = new Set<string>();
+  for (const item of orderItems) {
+    if (!photoIds.has(item.photo_id)) continue;
+    const order = orderById.get(item.order_id);
+    if (!order) continue;
+    if (order.status === 'pending' || order.status === 'completed') {
+      ordered.add(order.email_id);
+    }
+  }
+  return ordered;
+}
+
+router.get(
+  '/events/:id/reminder-recipients',
+  asyncHandler(async (req, res) => {
+    const eventId = req.params.id;
+    const event = await getById<{ expires_at: string | null; status: string }>(
+      COL.events,
+      eventId,
+    );
+    if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
+
+    const [children, childLinks, photos, photoLinks, ordered] = await Promise.all([
+      runQuery<{ name: string }>(col(COL.children).where('event_id', '==', eventId)),
+      runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
+      runQuery<{ id: string }>(col(COL.photos).where('event_id', '==', eventId)),
+      runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
+      orderedEmailIdsForEvent(eventId),
+    ]);
+    children.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+    const childIds = new Set(children.map((c) => c.id));
+    const photoIds = new Set(photos.map((p) => p.id));
+    const linksForEvent = childLinks.filter((l) => childIds.has(l.child_id));
+
+    // All e-mail ids we need to load: child-linked plus direct photo-assigned.
+    const neededIds = new Set<string>();
+    for (const l of linksForEvent) neededIds.add(l.email_id);
+    const directEmailIds = new Set<string>();
+    for (const l of photoLinks) {
+      if (photoIds.has(l.photo_id)) {
+        directEmailIds.add(l.email_id);
+        neededIds.add(l.email_id);
+      }
+    }
+    const emailDocs = await getManyById<{ email: string; name?: string; status: string }>(
+      COL.parentEmails,
+      Array.from(neededIds),
+    );
+
+    const toView = (id: string) => {
+      const e = emailDocs.get(id);
+      if (!e || !e.email || e.status === 'disabled') return null;
+      return {
+        id: e.id,
+        email: e.email,
+        name: e.name ?? '',
+        status: e.status,
+        verified: e.status === 'verified',
+        hasOrdered: ordered.has(e.id),
+      };
+    };
+
+    const emailsByChild = new Map<string, ReturnType<typeof toView>[]>();
+    const childLinkedEmailIds = new Set<string>();
+    for (const l of linksForEvent) {
+      const view = toView(l.email_id);
+      if (!view) continue;
+      childLinkedEmailIds.add(view.id);
+      const list = emailsByChild.get(l.child_id) ?? [];
+      list.push(view);
+      emailsByChild.set(l.child_id, list);
+    }
+
+    const childrenOut = children.map((c) => ({
+      id: c.id,
+      name: c.name,
+      emails: (emailsByChild.get(c.id) ?? [])
+        .filter((e): e is NonNullable<typeof e> => e !== null)
+        .sort((a, b) => a.email.localeCompare(b.email)),
+    }));
+
+    // E-mail addresses linked only through a direct photo assignment (no child).
+    const otherEmails = Array.from(directEmailIds)
+      .filter((id) => !childLinkedEmailIds.has(id))
+      .map(toView)
+      .filter((e): e is NonNullable<typeof e> => e !== null)
+      .sort((a, b) => a.email.localeCompare(b.email));
+
+    res.json({
+      children: childrenOut,
+      otherEmails,
+      adminEmail: await resolveAdminEmail(req.admin!.username),
+      devLogOnly: config.mail.devLogOnly,
+      retentionDays: config.retentionDaysDefault,
+      daysLeft: daysLeftUntil(event.expires_at ?? null),
+    });
+  }),
+);
+
+router.post(
+  '/events/:id/send-reminder',
+  asyncHandler(async (req, res) => {
+    const { emailIds, sendToSelf } = parse(
+      z.object({
+        emailIds: z.array(z.string()).optional(),
+        sendToSelf: z.boolean().default(false),
+      }),
+      req.body ?? {},
+    );
+    const eventId = req.params.id;
+    const event = await getById<{ expires_at: string | null }>(COL.events, eventId);
+    if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
+
+    // Validate the selection against the addresses actually linked to the event.
+    const allowed = await eventEmailIds(eventId);
+    const selectedIds = (emailIds ?? Array.from(allowed)).filter((id) => allowed.has(id));
+    const emails = await getManyById<{ email: string; status: string }>(
+      COL.parentEmails,
+      selectedIds,
+    );
+    const recipients = Array.from(emails.values()).filter(
+      (e) => e.status !== 'disabled' && e.email,
+    );
+
+    const selfEmail = sendToSelf ? await resolveAdminEmail(req.admin!.username) : '';
+    if (recipients.length === 0 && !selfEmail) {
+      throw new ApiError(400, 'Es wurde keine (aktive) E-Mail-Adresse ausgewählt.');
+    }
+
+    const link = config.publicAppUrl;
+    const daysLeft = daysLeftUntil(event.expires_at ?? null);
+    const mailOpts = {
+      retentionDays: config.retentionDaysDefault,
+      reminder: true as const,
+      daysLeft,
+    };
+    const results = await Promise.allSettled(
+      recipients.map((r) => sendGalleryReadyEmail(r.email, link, mailOpts)),
+    );
+    const sent = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.length - sent;
+
+    let sentToSelf = false;
+    if (selfEmail) {
+      try {
+        await sendGalleryReadyEmail(selfEmail, link, mailOpts);
+        sentToSelf = true;
+      } catch {
+        sentToSelf = false;
+      }
+    }
+
+    if (sent > 0) {
+      await setById(COL.reminders, newId('rem'), {
+        event_id: eventId,
+        sent_at: nowIso(),
+        note: `Reminder per E-Mail an ${sent} Adresse(n)`,
+        created_at: nowIso(),
+      });
+    }
+
+    await audit(
+      'event.reminder.send',
+      `${eventId}: ${sent} sent, ${failed} failed${sentToSelf ? ', self copy' : ''}`,
+    );
+    res.json({
+      sent,
+      failed,
+      total: recipients.length,
+      sentToSelf,
+      devLogOnly: config.mail.devLogOnly,
+    });
   }),
 );
 

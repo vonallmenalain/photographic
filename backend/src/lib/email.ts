@@ -108,18 +108,52 @@ export async function sendPasswordResetEmail(to: string, username: string, link:
  * erfassten Eltern-Adressen schicken kann, sobald die Galerie freigeschaltet
  * ist. Enthält den Link zur App, eine Kurzanleitung zur Verifizierung sowie die
  * Hinweise zum Schutz der Fotos und zur Aufbewahrungsfrist.
+ *
+ * Mit `reminder: true` wird dieselbe Nachricht als Erinnerung formuliert
+ * ("Ihre Fotos sind noch X Tage verfügbar"), z. B. für Eltern, die noch keine
+ * Bestellung erfasst haben. `daysLeft` ist die verbleibende Anzahl Tage bis zur
+ * Archivierung; fehlt sie, wird auf die Standard-Aufbewahrungsdauer zurück-
+ * gegriffen.
  */
 export async function sendGalleryReadyEmail(
   to: string,
   link: string,
-  opts: { retentionDays?: number } = {},
+  opts: { retentionDays?: number; reminder?: boolean; daysLeft?: number | null } = {},
 ) {
   const retentionDays = opts.retentionDays ?? config.retentionDaysDefault;
-  const subject = 'Ihre Fotos sind bereit';
+  const reminder = opts.reminder ?? false;
+  const daysLeft =
+    typeof opts.daysLeft === 'number' && opts.daysLeft > 0 ? opts.daysLeft : null;
+
+  const subject = reminder
+    ? daysLeft != null
+      ? `Erinnerung: Ihre Fotos sind noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'} verfügbar`
+      : 'Erinnerung: Ihre Fotos sind noch verfügbar'
+    : 'Ihre Fotos sind bereit';
+  const heading = reminder ? 'Ihre Fotos sind noch verfügbar' : 'Ihre Fotos sind bereit';
+  const intro = reminder
+    ? daysLeft != null
+      ? `die Fotos sind weiterhin für Sie freigeschaltet – <strong>Ihre Fotos sind noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'} verfügbar</strong>. So sehen Sie Ihre persönlichen Bilder:`
+      : 'die Fotos sind weiterhin für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bilder:'
+    : 'die Fotos sind jetzt für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bilder:';
+  const introText = reminder
+    ? daysLeft != null
+      ? `die Fotos sind weiterhin für Sie freigeschaltet – Ihre Fotos sind noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'} verfügbar. So sehen Sie Ihre persönlichen Bilder:`
+      : 'die Fotos sind weiterhin für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bilder:'
+    : 'die Fotos sind jetzt für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bilder:';
+  const availability =
+    reminder && daysLeft != null
+      ? `Ihre Fotos sind <strong>noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'}</strong> verfügbar und werden danach automatisch archiviert.`
+      : `Die Fotos stehen <strong>${retentionDays} Tage</strong> zur Verfügung und werden danach automatisch archiviert.`;
+  const availabilityText =
+    reminder && daysLeft != null
+      ? `Ihre Fotos sind noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'} verfügbar und werden danach automatisch archiviert.`
+      : `Die Fotos stehen ${retentionDays} Tage zur Verfügung und werden danach automatisch archiviert.`;
+
   const html = wrap(
-    'Ihre Fotos sind bereit',
+    heading,
     `<p style="font-size:15px;line-height:1.6;">Guten Tag,</p>
-     <p style="font-size:15px;line-height:1.6;">die Fotos sind jetzt für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bilder:</p>
+     <p style="font-size:15px;line-height:1.6;">${intro}</p>
      <ol style="font-size:15px;line-height:1.7;padding-left:20px;margin:0 0 4px;">
        <li>Öffnen Sie die Galerie über den Button unten.</li>
        <li>Geben Sie <strong>diese E-Mail-Adresse</strong> ein – Sie erhalten dann einen Bestätigungslink bzw. einen Code.</li>
@@ -134,14 +168,14 @@ export async function sendGalleryReadyEmail(
        <ul style="font-size:14px;line-height:1.6;padding-left:20px;margin:0;">
          <li>Die Bilder sind nur nach Bestätigung genau dieser E-Mail-Adresse sichtbar.</li>
          <li>Vorschaubilder sind mit einem Wasserzeichen geschützt; die Originale erhalten Sie erst nach dem Kauf.</li>
-         <li>Die Fotos stehen <strong>${retentionDays} Tage</strong> zur Verfügung und werden danach automatisch archiviert.</li>
+         <li>${availability}</li>
          <li>Bitte geben Sie Ihren Bestätigungslink bzw. Code nicht weiter.</li>
        </ul>
      </div>`,
   );
   const text = `Guten Tag,
 
-die Fotos sind jetzt für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bilder:
+${introText}
 
 1. Öffnen Sie die Galerie: ${link}
 2. Geben Sie DIESE E-Mail-Adresse ein – Sie erhalten dann einen Bestätigungslink bzw. einen Code.
@@ -150,7 +184,7 @@ die Fotos sind jetzt für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bi
 Zum Schutz der Fotos:
 - Die Bilder sind nur nach Bestätigung genau dieser E-Mail-Adresse sichtbar.
 - Vorschaubilder sind mit einem Wasserzeichen geschützt; die Originale erhalten Sie erst nach dem Kauf.
-- Die Fotos stehen ${retentionDays} Tage zur Verfügung und werden danach automatisch archiviert.
+- ${availabilityText}
 - Bitte geben Sie Ihren Bestätigungslink bzw. Code nicht weiter.`;
   await sendMail({ to, subject, html, text });
 }
