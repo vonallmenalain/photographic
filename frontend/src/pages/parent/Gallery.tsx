@@ -72,36 +72,6 @@ export default function Gallery() {
 
   const markInCart = (photoId: string) => setCartIds((prev) => new Set(prev).add(photoId));
 
-  // The single digital download product (if configured) powers both the per-photo
-  // one-click purchase and the per-section "add all as download" shortcut.
-  const digitalProduct = products.find((p) => p.type === 'digital');
-  const [bulkBusy, setBulkBusy] = useState<string | null>(null);
-
-  const addableDigital = (group: PhotoGroup) =>
-    group.photos.filter((p) => !purchasedIds.has(p.id) && !cartIds.has(p.id));
-
-  const addAllDigital = async (group: PhotoGroup) => {
-    if (!digitalProduct) return;
-    setError('');
-    setBulkBusy(group.id);
-    try {
-      for (const p of addableDigital(group)) {
-        try {
-          await api('/api/parent/cart', {
-            method: 'POST',
-            body: { photoId: p.id, productId: digitalProduct.id, qty: 1 },
-          });
-          markInCart(p.id);
-        } catch {
-          // Skip photos that can't be added (e.g. already owned) and continue.
-        }
-      }
-      refreshCart();
-    } finally {
-      setBulkBusy(null);
-    }
-  };
-
   if (loading) return <Spinner label="Fotos werden geladen …" />;
 
   const totalPhotos = groups.reduce((n, g) => n + g.photos.length, 0);
@@ -112,9 +82,6 @@ export default function Gallery() {
         <div>
           <h1>Fotos</h1>
         </div>
-        <Link to="/galerie" className="btn secondary small">
-          ✨ Galerie-Vorschau
-        </Link>
       </div>
 
       {error && <Alert kind="error">{error}</Alert>}
@@ -140,18 +107,6 @@ export default function Gallery() {
               <span className="soft photo-count">
                 {g.photos.length} {g.photos.length === 1 ? 'Foto' : 'Fotos'}
               </span>
-              {digitalProduct && addableDigital(g).length > 0 && (
-                <button
-                  type="button"
-                  className="btn secondary small"
-                  onClick={() => addAllDigital(g)}
-                  disabled={bulkBusy === g.id}
-                >
-                  {bulkBusy === g.id
-                    ? 'Wird hinzugefügt …'
-                    : `Alle als Download (${addableDigital(g).length})`}
-                </button>
-              )}
             </div>
           </div>
           <div className="photo-grid">
@@ -319,7 +274,7 @@ function PhotoControls({
           >
             {adding === 'digital'
               ? 'Wird hinzugefügt …'
-              : `In den Warenkorb · ${formatPrice(digitalProduct.price_cents, digitalProduct.currency)}`}
+              : `Digital in den Warenkorb · ${formatPrice(digitalProduct.price_cents, digitalProduct.currency)}`}
           </button>
         ))}
 
@@ -396,22 +351,21 @@ function PrintPicker({
   busy: boolean;
   onAdd: () => void;
 }) {
+  const selectedPrint = printProducts.find((p) => p.id === printId) ?? printProducts[0];
   return (
     <>
       <div className="buy-row">
-        {printProducts.length > 1 && (
-          <select
-            value={printId}
-            onChange={(e) => setPrintId(e.target.value)}
-            aria-label="Druckprodukt auswählen"
-          >
-            {printProducts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} – {formatPrice(p.price_cents, p.currency)}
-              </option>
-            ))}
-          </select>
-        )}
+        <select
+          value={printId}
+          onChange={(e) => setPrintId(e.target.value)}
+          aria-label="Druckprodukt auswählen"
+        >
+          {printProducts.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} – {formatPrice(p.price_cents, p.currency)}
+            </option>
+          ))}
+        </select>
         <input
           id={`qty-${photoId}`}
           className="qty-input"
@@ -429,8 +383,8 @@ function PrintPicker({
       <button type="button" className="btn secondary block small" onClick={onAdd} disabled={busy || !printId}>
         {busy
           ? 'Wird hinzugefügt …'
-          : printProducts.length === 1
-            ? `Druck in den Warenkorb · ${formatPrice(printProducts[0].price_cents, printProducts[0].currency)}`
+          : selectedPrint
+            ? `Druck in den Warenkorb · ${formatPrice(selectedPrint.price_cents, selectedPrint.currency)}`
             : 'Druck in den Warenkorb'}
       </button>
     </>

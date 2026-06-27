@@ -21,6 +21,7 @@ import { normalizeEmail } from '../lib/validation';
  */
 export async function migrate(): Promise<void> {
   await ensureDefaultProducts();
+  await ensurePrintProduct16x21();
   await ensureProductsCurrency();
   await ensureAdminFromEnv();
   await ensureAdminEmail();
@@ -94,6 +95,13 @@ async function ensureDefaultProducts(): Promise<void> {
       price_cents: 600,
       sort_order: 1,
     },
+    {
+      name: 'Druck 16×21 cm',
+      description: 'Gedrucktes Foto auf Fotopapier, Format 16×21 cm.',
+      type: 'print',
+      price_cents: 1000,
+      sort_order: 2,
+    },
   ];
 
   for (const d of defaults) {
@@ -111,6 +119,34 @@ async function ensureDefaultProducts(): Promise<void> {
   }
   // eslint-disable-next-line no-console
   console.log('[migrate] seeded default products');
+}
+
+/**
+ * Selbstheilend: stellt sicher, dass das Druckprodukt „16×21 cm" (10.-) auch in
+ * bereits bestehenden Datenbanken verfügbar ist. `ensureDefaultProducts` legt
+ * Produkte nur beim allerersten Start an (leere Collection); ältere Bestände
+ * kennen daher nur „13×18 cm". Diese Migration ergänzt das neue Format genau
+ * einmal und ist über den Produktnamen idempotent.
+ */
+async function ensurePrintProduct16x21(): Promise<void> {
+  const name = 'Druck 16×21 cm';
+  const products = await runQuery<{ name?: string }>(col(COL.products));
+  if (products.length === 0) return; // Erststart: ensureDefaultProducts übernimmt
+  if (products.some((p) => (p.name ?? '').trim() === name)) return;
+
+  const id = newId('prod');
+  await setById(COL.products, id, {
+    name,
+    description: 'Gedrucktes Foto auf Fotopapier, Format 16×21 cm.',
+    type: 'print',
+    price_cents: 1000,
+    currency: config.stripe.currency,
+    active: 1,
+    sort_order: 2,
+    created_at: nowIso(),
+  });
+  // eslint-disable-next-line no-console
+  console.log('[migrate] seeded print product 16×21');
 }
 
 /**

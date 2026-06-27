@@ -22,11 +22,11 @@ export function Layout({ children }: { children: ReactNode }) {
           <nav className="nav-actions">
             {verified ? (
               <>
-                <Link to="/galerie/fotos" className="nav-link">
+                <Link to="/galerie" className="nav-link">
                   Galerie
                 </Link>
-                <Link to="/bestellungen" className="nav-link">
-                  Bestellungen
+                <Link to="/galerie/fotos" className="nav-link">
+                  Bestellen
                 </Link>
                 <CartButton />
                 <ProfileMenu />
