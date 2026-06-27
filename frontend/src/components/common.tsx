@@ -69,6 +69,51 @@ export function Alert({ kind, children }: { kind: 'error' | 'success' | 'info'; 
   return <div className={`alert ${kind}`}>{children}</div>;
 }
 
+/**
+ * „E-Mail an mich senden“-Häkchen für die Versand-Popups. Standardmässig
+ * deaktiviert; wenn aktiviert, erhält das angemeldete Admin-Konto eine Kopie.
+ * Ist im Konto keine E-Mail hinterlegt, wird die Option deaktiviert dargestellt.
+ */
+export function SendToSelfCheckbox({
+  checked,
+  onChange,
+  adminEmail,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  adminEmail: string;
+}) {
+  const hasEmail = !!adminEmail;
+  return (
+    <label
+      className="row"
+      style={{
+        alignItems: 'center',
+        gap: 10,
+        marginTop: 12,
+        fontSize: '0.88rem',
+        cursor: hasEmail ? 'pointer' : 'not-allowed',
+        opacity: hasEmail ? 1 : 0.6,
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={checked && hasEmail}
+        disabled={!hasEmail}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span>
+        E-Mail an mich senden
+        {hasEmail ? (
+          <span className="muted"> ({adminEmail})</span>
+        ) : (
+          <span className="muted"> – im Admin-Konto ist keine E-Mail-Adresse hinterlegt.</span>
+        )}
+      </span>
+    </label>
+  );
+}
+
 export function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     // events
