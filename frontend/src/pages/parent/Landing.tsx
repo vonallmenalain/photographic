@@ -55,7 +55,8 @@ export default function Landing() {
         <p className="soft">
           Geben Sie Ihre E-Mail-Adresse ein. Wir senden Ihnen{' '}
           {firebaseEnabled ? 'einen sicheren Anmeldelink' : 'einen Zugangscode'}, damit nur Sie Ihre
-          zugeordneten Fotos sehen können.
+          zugeordneten Fotos sehen können. Die Fotos sind sicher auf einem lokalen Schweizer Server
+          gespeichert.
         </p>
       </div>
 
@@ -91,9 +92,9 @@ export default function Landing() {
 
       <div style={{ marginTop: 18 }}>
         <TrustNote>
-          <strong>Warum eine Bestätigung?</strong> Wir zeigen Fotos erst nach Bestätigung Ihrer
-          E-Mail-Adresse an. So sehen nur berechtigte Personen die Bilder. Es gibt keine offenen
-          Galerien und keine erratbaren Links.
+          <strong>Warum eine Bestätigung?</strong> Zum Schutz Ihrer Fotos zeigen wir die Bilder erst
+          an, nachdem Ihre E-Mail-Adresse bestätigt wurde. Die Fotos sind genau dieser E-Mail-Adresse
+          zugeordnet und können nur nach erfolgreicher Bestätigung angezeigt werden.
         </TrustNote>
       </div>
     </div>
