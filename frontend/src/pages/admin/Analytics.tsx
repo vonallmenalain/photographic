@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import { Alert, Spinner, StatusBadge } from '../../components/common';
+import { Alert, Modal, SendToSelfCheckbox, Spinner, StatusBadge } from '../../components/common';
 import { formatPrice, formatDateShort } from '../../lib/format';
 
 interface Buyer {
@@ -261,6 +261,8 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [showEmail, setShowEmail] = useState(false);
+  const [msg, setMsg] = useState('');
 
   const add = async () => {
     setError('');
@@ -290,9 +292,11 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
       <strong>Reminder festhalten</strong>
       <p className="muted" style={{ fontSize: '0.82rem', marginTop: 4 }}>
         Trage ein, wann du eine Einladung oder Erinnerung verschickt hast. Die Markierung erscheint
-        im Umsatzverlauf, damit du den Effekt ablesen kannst.
+        im Umsatzverlauf, damit du den Effekt ablesen kannst. Mit „Reminder per E-Mail versenden“
+        erinnerst du gezielt Eltern, die noch keine Bestellung erfasst haben.
       </p>
       {error && <Alert kind="error">{error}</Alert>}
+      {msg && <Alert kind="success">{msg}</Alert>}
       <div className="row" style={{ alignItems: 'flex-end' }}>
         <div className="field" style={{ marginBottom: 0 }}>
           <label style={{ fontSize: '0.8rem' }}>Datum</label>
@@ -309,6 +313,16 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
         <button className="btn small" disabled={busy} onClick={add} type="button">
           + Reminder
         </button>
+        <button
+          className="btn secondary small"
+          type="button"
+          onClick={() => {
+            setMsg('');
+            setShowEmail(true);
+          }}
+        >
+          Reminder per E-Mail versenden
+        </button>
       </div>
       {event.reminders.length > 0 && (
         <div style={{ marginTop: 12 }}>
@@ -322,6 +336,274 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
             </span>
           ))}
         </div>
+      )}
+      {showEmail && (
+        <ReminderEmailModal
+          eventId={event.id}
+          onClose={() => setShowEmail(false)}
+          onSent={(message) => {
+            setShowEmail(false);
+            setMsg(message);
+            setError('');
+            onReload();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface ReminderEmail {
+  id: string;
+  email: string;
+  name: string;
+  status: string;
+  verified: boolean;
+  hasOrdered: boolean;
+}
+interface ReminderChild {
+  id: string;
+  name: string;
+  emails: ReminderEmail[];
+}
+interface ReminderRecipients {
+  children: ReminderChild[];
+  otherEmails: ReminderEmail[];
+  adminEmail: string;
+  devLogOnly: boolean;
+  retentionDays: number;
+  daysLeft: number | null;
+}
+
+/**
+ * Reminder-Popup im ausgeklappten Auftrag: pro Kind aufgeschlüsselt, welche
+ * E-Mail-Adressen bereits bestätigt wurden und welche schon bestellt haben.
+ * Standardmässig sind nur die Adressen ausgewählt, die noch keine Bestellung
+ * erfasst haben. Optional kann eine Kopie an das eigene Admin-Konto gehen.
+ */
+function ReminderEmailModal({
+  eventId,
+  onClose,
+  onSent,
+}: {
+  eventId: string;
+  onClose: () => void;
+  onSent: (msg: string) => void;
+}) {
+  const [data, setData] = useState<ReminderRecipients | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sendToSelf, setSendToSelf] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  // Alle (eindeutigen) Adressen über Kinder und Direktzuweisungen hinweg.
+  const allEmails = useMemo(() => {
+    if (!data) return [] as ReminderEmail[];
+    const byId = new Map<string, ReminderEmail>();
+    for (const c of data.children) for (const e of c.emails) byId.set(e.id, e);
+    for (const e of data.otherEmails) byId.set(e.id, e);
+    return Array.from(byId.values());
+  }, [data]);
+
+  useEffect(() => {
+    api<ReminderRecipients>(`/api/admin/events/${eventId}/reminder-recipients`, { admin: true })
+      .then((r) => {
+        setData(r);
+        // Standard: nur Adressen ohne Bestellung vorauswählen.
+        const ids = new Set<string>();
+        for (const c of r.children) for (const e of c.emails) if (!e.hasOrdered) ids.add(e.id);
+        for (const e of r.otherEmails) if (!e.hasOrdered) ids.add(e.id);
+        setSelected(ids);
+      })
+      .catch((err) =>
+        setError(err instanceof ApiError ? err.message : 'Empfänger konnten nicht ermittelt werden.'),
+      )
+      .finally(() => setLoading(false));
+  }, [eventId]);
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const allChecked = allEmails.length > 0 && selected.size === allEmails.length;
+  const toggleAll = () =>
+    setSelected(allChecked ? new Set() : new Set(allEmails.map((e) => e.id)));
+
+  const send = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await api<{ sent: number; failed: number; total: number; sentToSelf: boolean; devLogOnly: boolean }>(
+        `/api/admin/events/${eventId}/send-reminder`,
+        {
+          method: 'POST',
+          admin: true,
+          body: { emailIds: Array.from(selected), sendToSelf },
+        },
+      );
+      const extra = res.failed > 0 ? ` ${res.failed} konnten nicht zugestellt werden.` : '';
+      const self = res.sentToSelf ? ' Eine Kopie wurde an dich gesendet.' : '';
+      const note = res.devLogOnly
+        ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
+        : '';
+      onSent(`Reminder an ${res.sent} von ${res.total} Adresse(n) gesendet.${extra}${self}${note}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Versand fehlgeschlagen.');
+      setBusy(false);
+    }
+  };
+
+  const canSend = !loading && !busy && (selected.size > 0 || sendToSelf);
+  const hasAny = allEmails.length > 0;
+
+  return (
+    <Modal
+      title="Reminder per E-Mail versenden"
+      width={620}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
+            Abbrechen
+          </button>
+          <button type="button" className="btn" onClick={send} disabled={!canSend}>
+            {busy ? 'Wird gesendet …' : 'Jetzt senden'}
+          </button>
+        </>
+      }
+    >
+      {error && <Alert kind="error">{error}</Alert>}
+      <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
+        Die Erinnerung ist ähnlich wie die ursprüngliche Einladung (Link zur App, Hinweise zu den
+        Fotos
+        {data?.daysLeft != null ? ` – „noch ${data.daysLeft} Tage verfügbar“` : ''}). Jede Zeile ist
+        ein Kind. Standardmässig sind nur Adressen ausgewählt, die noch{' '}
+        <strong>keine Bestellung</strong> erfasst haben.
+      </p>
+      {loading ? (
+        <p className="muted">Empfänger werden ermittelt …</p>
+      ) : !hasAny ? (
+        <Alert kind="error">Diesem Auftrag sind noch keine (aktiven) E-Mail-Adressen zugeordnet.</Alert>
+      ) : data ? (
+        <>
+          <div className="row between" style={{ marginBottom: 6 }}>
+            <strong style={{ fontSize: '0.85rem' }}>
+              {selected.size} von {allEmails.length} ausgewählt
+            </strong>
+            <button type="button" className="btn ghost small" onClick={toggleAll}>
+              {allChecked ? 'Alle abwählen' : 'Alle auswählen'}
+            </button>
+          </div>
+          <div
+            style={{
+              maxHeight: 320,
+              overflowY: 'auto',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+            }}
+          >
+            {data.children.map((c) => (
+              <ReminderChildGroup
+                key={c.id}
+                title={c.name}
+                emails={c.emails}
+                selected={selected}
+                onToggle={toggle}
+              />
+            ))}
+            {data.otherEmails.length > 0 && (
+              <ReminderChildGroup
+                title="Ohne Kind zugeordnet"
+                emails={data.otherEmails}
+                selected={selected}
+                onToggle={toggle}
+              />
+            )}
+          </div>
+          <SendToSelfCheckbox
+            checked={sendToSelf}
+            onChange={setSendToSelf}
+            adminEmail={data.adminEmail}
+          />
+          {data.devLogOnly && (
+            <p className="muted" style={{ fontSize: '0.8rem', marginTop: 8, marginBottom: 0 }}>
+              Achtung: Kein SMTP konfiguriert – die E-Mails landen nur im Server-Log.
+            </p>
+          )}
+        </>
+      ) : null}
+    </Modal>
+  );
+}
+
+function ReminderChildGroup({
+  title,
+  emails,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  emails: ReminderEmail[];
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <div>
+      <div
+        style={{
+          padding: '6px 10px',
+          background: 'var(--surface-2)',
+          borderBottom: '1px solid var(--border)',
+          fontSize: '0.82rem',
+          fontWeight: 600,
+          position: 'sticky',
+          top: 0,
+        }}
+      >
+        {title}
+      </div>
+      {emails.length === 0 ? (
+        <p className="muted" style={{ fontSize: '0.8rem', padding: '6px 10px', margin: 0 }}>
+          Keine E-Mail-Adresse verknüpft.
+        </p>
+      ) : (
+        emails.map((e) => (
+          <label
+            key={e.id}
+            className="row"
+            style={{
+              alignItems: 'center',
+              gap: 8,
+              padding: '7px 10px',
+              borderBottom: '1px solid var(--border)',
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={selected.has(e.id)}
+              onChange={() => onToggle(e.id)}
+              style={{ marginRight: 4 }}
+            />
+            <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-all' }}>{e.email}</span>
+            {e.verified ? (
+              <span className="badge green">Bestätigt</span>
+            ) : (
+              <span className="badge amber">Nicht bestätigt</span>
+            )}
+            {e.hasOrdered ? (
+              <span className="badge green">Bestellt</span>
+            ) : (
+              <span className="badge gray">Keine Bestellung</span>
+            )}
+          </label>
+        ))
       )}
     </div>
   );
