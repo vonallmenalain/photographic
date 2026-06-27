@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { COL, col, runQuery, setById, nowIso } from '../db';
+import { COL, col, getById, runQuery, setById, nowIso } from '../db';
 import { config } from '../config';
 import { asyncHandler, ApiError } from '../middleware/errorHandler';
 import { attachParent, requireParent, PARENT_COOKIE } from '../middleware/parentAuth';
@@ -183,29 +183,79 @@ router.get(
       purchasedDigitalPhotoIds(req.parent!.emailId),
       cartDigitalPhotoIds(req.parent!.emailId),
     ]);
-    // Group by event for a calm presentation.
-    const eventsMap = new Map<string, { id: string; name: string; photos: unknown[] }>();
+
+    // Resolve the (internal) child names so each individual order can be titled
+    // "Auftrag – <Name des Kindes>". A child name is only ever shown for THIS
+    // family's own children (those linked to this e-mail); for any other child
+    // we fall back to the neutral order/event name so no foreign name leaks.
+    const linkedRows = await runQuery<{ child_id: string }>(
+      col(COL.emailChildren).where('email_id', '==', req.parent!.emailId),
+    );
+    const linkedChildIds = new Set(linkedRows.map((r) => r.child_id));
+    const childIds = [
+      ...new Set(photos.map((p) => p.child_id).filter((id): id is string => !!id && linkedChildIds.has(id))),
+    ];
+    const childNames = new Map<string, string>();
+    await Promise.all(
+      childIds.map(async (id) => {
+        const c = await getById<{ name: string }>(COL.children, id);
+        if (c?.name) childNames.set(id, c.name);
+      }),
+    );
+
+    const toPublic = (p: (typeof photos)[number]) => ({
+      id: p.id,
+      isClassPhoto: !!p.is_class_photo,
+      // Original pixel dimensions so the gallery can present each photo in its
+      // true orientation (portrait/landscape) without cropping or layout jumps.
+      width: p.width ?? null,
+      height: p.height ?? null,
+      // Short-lived signed URLs to watermarked variants only. No IDs/paths leak.
+      thumbUrl: `/files/preview-image?token=${signFileToken(p.id, 'thumb', 3600)}`,
+      previewUrl: `/files/preview-image?token=${signFileToken(p.id, 'preview', 3600)}`,
+      // Whether the digital download is already owned / already in the cart, so
+      // the UI can prevent buying the same photo a second time.
+      purchased: purchased.has(p.id),
+      inCart: inCart.has(p.id),
+    });
+
+    // Build the presentation groups:
+    //  • one section per child ("Auftrag – <Name>") for that child's own photos
+    //  • a single "Gruppenfotos" section pooling every group/class photo of the
+    //    family (across all siblings/orders).
+    // When two siblings are linked to the same e-mail, the same group photo can
+    // exist once per order (separate uploads/records). We de-duplicate those by
+    // their original file name so each group photo shows up exactly once.
+    type Group = { id: string; title: string; kind: 'order' | 'group'; photos: unknown[] };
+    const orderSections = new Map<string, Group>();
+    const groupPhotos: unknown[] = [];
+    const seenGroupKeys = new Set<string>();
+
     for (const p of photos) {
-      if (!eventsMap.has(p.event_id)) {
-        eventsMap.set(p.event_id, { id: p.event_id, name: p.event_name, photos: [] });
+      if (p.is_class_photo) {
+        const key = (p.original_filename || '').trim().toLowerCase() || `id:${p.id}`;
+        if (seenGroupKeys.has(key)) continue;
+        seenGroupKeys.add(key);
+        groupPhotos.push(toPublic(p));
+        continue;
       }
-      eventsMap.get(p.event_id)!.photos.push({
-        id: p.id,
-        isClassPhoto: !!p.is_class_photo,
-        // Original pixel dimensions so the gallery can present each photo in its
-        // true orientation (portrait/landscape) without cropping or layout jumps.
-        width: p.width ?? null,
-        height: p.height ?? null,
-        // Short-lived signed URLs to watermarked variants only. No IDs/paths leak.
-        thumbUrl: `/files/preview-image?token=${signFileToken(p.id, 'thumb', 3600)}`,
-        previewUrl: `/files/preview-image?token=${signFileToken(p.id, 'preview', 3600)}`,
-        // Whether the digital download is already owned / already in the cart, so
-        // the UI can prevent buying the same photo a second time.
-        purchased: purchased.has(p.id),
-        inCart: inCart.has(p.id),
-      });
+      const sectionKey = p.child_id ? `child:${p.child_id}` : `event:${p.event_id}`;
+      let section = orderSections.get(sectionKey);
+      if (!section) {
+        const childName = p.child_id ? childNames.get(p.child_id) : '';
+        const title = childName ? `Auftrag – ${childName}` : p.event_name || 'Auftrag';
+        section = { id: sectionKey, title, kind: 'order', photos: [] };
+        orderSections.set(sectionKey, section);
+      }
+      section.photos.push(toPublic(p));
     }
-    res.json({ events: Array.from(eventsMap.values()) });
+
+    const groups: Group[] = [...orderSections.values()];
+    if (groupPhotos.length > 0) {
+      groups.push({ id: 'group-photos', title: 'Gruppenfotos', kind: 'group', photos: groupPhotos });
+    }
+
+    res.json({ groups });
   }),
 );
 
