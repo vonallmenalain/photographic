@@ -266,24 +266,31 @@ router.post(
 
     const user = await findAdminUser(username);
 
-    if (!user || !user.email) {
-      throw new ApiError(404, 'Diese E-Mail-Adresse ist nicht registriert.');
+    // Neutral response: never reveal whether a given username/e-mail exists. We
+    // only create a reset token and send the e-mail when the account (and an
+    // e-mail address for it) actually exists, but always return 200 either way.
+    if (user && user.email) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const tokenHash = hashToken(token);
+      const ttlMs = config.admin.passwordResetTtlMinutes * 60 * 1000;
+      const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+
+      await setById(COL.adminPasswordResets, tokenHash, {
+        username: user.username,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+        created_at: nowIso(),
+      });
+
+      const link = `${config.publicAppUrl}/admin/passwort-zuruecksetzen?token=${token}`;
+      // Sending must not turn the neutral 200 into a 500 for existing accounts.
+      try {
+        await sendPasswordResetEmail(user.email, user.username, link, config.admin.passwordResetTtlMinutes);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[admin] Failed to send password reset e-mail. Check SMTP_* settings.', err);
+      }
     }
-
-    const token = crypto.randomBytes(32).toString('hex');
-    const tokenHash = hashToken(token);
-    const ttlMs = config.admin.passwordResetTtlMinutes * 60 * 1000;
-    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-
-    await setById(COL.adminPasswordResets, tokenHash, {
-      username: user.username,
-      token_hash: tokenHash,
-      expires_at: expiresAt,
-      created_at: nowIso(),
-    });
-
-    const link = `${config.publicAppUrl}/admin/passwort-zuruecksetzen?token=${token}`;
-    await sendPasswordResetEmail(user.email, user.username, link, config.admin.passwordResetTtlMinutes);
 
     res.json({ ok: true });
   }),
