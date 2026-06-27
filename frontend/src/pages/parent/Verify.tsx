@@ -50,7 +50,7 @@ export default function Verify() {
         setVerified(res.email);
         await refresh();
         sessionStorage.removeItem('pending_email');
-        navigate('/galerie', { replace: true });
+        navigate('/galerie/fotos', { replace: true });
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
       } finally {
@@ -73,7 +73,7 @@ export default function Verify() {
       setVerified(res.email);
       await refresh();
       sessionStorage.removeItem('pending_email');
-      navigate('/galerie', { replace: true });
+      navigate('/galerie/fotos', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
     } finally {
@@ -94,7 +94,7 @@ export default function Verify() {
         });
         setVerified(res.email);
         await refresh();
-        navigate('/galerie', { replace: true });
+        navigate('/galerie/fotos', { replace: true });
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
       } finally {
@@ -115,7 +115,7 @@ export default function Verify() {
       setVerified(res.email);
       await refresh();
       sessionStorage.removeItem('pending_email');
-      navigate('/galerie', { replace: true });
+      navigate('/galerie/fotos', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
     } finally {
@@ -241,15 +241,15 @@ export default function Verify() {
               required
             />
           </div>
-          <button className="btn block" disabled={busy || code.length < 4}>
+          <button className="btn block" disabled={busy || code.length !== 6}>
             {busy ? 'Wird geprüft …' : 'Bestätigen & Fotos ansehen'}
           </button>
         </form>
         <p className="center muted" style={{ marginTop: 14, marginBottom: 0, fontSize: '0.85rem' }}>
           Keinen Code erhalten?{' '}
-          <a style={{ cursor: 'pointer' }} onClick={resend}>
+          <button type="button" className="linklike" onClick={resend}>
             Erneut senden
-          </a>
+          </button>
         </p>
       </div>
 

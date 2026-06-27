@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { useParentAuth } from '../../context/ParentAuth';
 import { Alert, TrustNote } from '../../components/common';
@@ -14,7 +14,7 @@ export default function Landing() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!loading && verified) navigate('/galerie', { replace: true });
+    if (!loading && verified) navigate('/galerie/fotos', { replace: true });
   }, [verified, loading, navigate]);
 
   const submit = async (e: React.FormEvent) => {
@@ -86,7 +86,7 @@ export default function Landing() {
         </form>
         <p className="muted center" style={{ marginTop: 14, marginBottom: 0, fontSize: '0.85rem' }}>
           {firebaseEnabled ? 'Schon einen Link erhalten?' : 'Schon einen Code?'}{' '}
-          <a onClick={() => navigate('/verifizieren')} style={{ cursor: 'pointer' }}>Hier bestätigen</a>
+          <Link to="/verifizieren">Hier bestätigen</Link>
         </p>
       </div>
 

@@ -206,10 +206,12 @@ input:focus, select:focus, textarea:focus {
    photo no longer reshuffles the others. */
 .gallery-section { margin-bottom: 36px; }
 .gallery-section-head {
-  display: flex; align-items: baseline; gap: 10px;
+  display: flex; align-items: center; gap: 10px;
+  justify-content: space-between; flex-wrap: wrap;
   margin-bottom: 14px;
 }
 .gallery-section-head h2 { margin: 0; }
+.gallery-section-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .photo-count { font-size: 0.9rem; }
 
 .photo-grid {
@@ -1163,3 +1165,29 @@ tr:hover td { background: var(--surface-2); }
   overflow: hidden;
 }
 .link-look { color: var(--primary); font-weight: 600; }
+
+/* ---------------------------------------------------------------------------
+   Shared helpers (added with the parent-UX simplification)
+   --------------------------------------------------------------------------- */
+
+/* A real <button> that looks like an inline text link – keyboard focusable and
+   announced as a button by assistive tech (replaces former <a onClick> hacks). */
+.linklike {
+  display: inline; width: auto; padding: 0; margin: 0;
+  border: none; background: none; box-shadow: none;
+  color: var(--primary); font: inherit; font-weight: 600;
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
+.linklike:hover { color: var(--primary-dark); }
+.linklike:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+/* Toggle that reveals the print options under a photo. */
+.buy-more-toggle { align-self: flex-start; font-size: 0.82rem; }
+
+/* Inline form validation (e.g. the shipping address fields). */
+input.input-error,
+.input-error {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px rgba(214, 69, 69, 0.15);
+}
+.field-error { color: var(--danger); font-size: 0.78rem; font-weight: 600; }

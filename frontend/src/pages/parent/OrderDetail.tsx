@@ -49,13 +49,30 @@ export default function OrderDetail() {
     );
 
   const isDone = ['completed', 'pending'].includes(order.status);
+  const hasDownloads = order.items.some((i) => i.downloadUrl);
+
+  const scrollToDownloads = () => {
+    document.getElementById('downloads')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <div className="narrow" style={{ margin: '0 auto' }}>
       {justPaid && isDone && (
         <Alert kind="success">
-          Vielen Dank! Ihre Bestellung war erfolgreich. Eine Bestätigung wurde an Ihre
-          E-Mail-Adresse gesendet.
+          <div>
+            Vielen Dank! Ihre Bestellung war erfolgreich. Eine Bestätigung wurde an Ihre
+            E-Mail-Adresse gesendet.
+          </div>
+          {hasDownloads && (
+            <button
+              type="button"
+              className="btn small"
+              style={{ marginTop: 10 }}
+              onClick={scrollToDownloads}
+            >
+              ⬇︎ Downloads jetzt holen
+            </button>
+          )}
         </Alert>
       )}
       <div className="row between">
@@ -70,7 +87,7 @@ export default function OrderDetail() {
             <li key={i} className="line-item">
               <img
                 src={imageUrl(item.thumbUrl)}
-                alt=""
+                alt={`Vorschau: ${item.productName}`}
                 width={64}
                 height={64}
                 style={{ borderRadius: 8, objectFit: 'cover' }}
@@ -97,7 +114,7 @@ export default function OrderDetail() {
       </div>
 
       {isDone && (
-        <div className="card">
+        <div className="card" id="downloads">
           <h2>Downloads</h2>
           {order.items.some((i) => i.downloadUrl) ? (
             <ul className="list-reset">
@@ -137,7 +154,7 @@ function DownloadLink({ url, thumbUrl, label }: { url: string; thumbUrl: string;
     >
       <img
         src={imageUrl(thumbUrl)}
-        alt=""
+        alt={`Vorschau: ${label}`}
         width={40}
         height={40}
         style={{ borderRadius: 6, objectFit: 'cover' }}

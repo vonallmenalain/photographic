@@ -45,11 +45,24 @@ export default function Cart() {
   const [busy, setBusy] = useState(false);
   const [qtyDraft, setQtyDraft] = useState<Record<string, string>>({});
   const [address, setAddress] = useState<ShippingForm>(EMPTY_ADDRESS);
+  // Becomes true once the parent tries to check out, so we only show "missing
+  // field" markers after a real attempt (not while they are still typing).
+  const [triedCheckout, setTriedCheckout] = useState(false);
   const navigate = useNavigate();
   const { refresh: refreshCart } = useCart();
 
   const hasPrint = !!cart?.items.some((i) => i.productType === 'print');
-  const addressComplete = Object.values(address).every((v) => v.trim().length > 0);
+  // Order matters: used to focus the first missing field on a failed checkout.
+  const ADDRESS_FIELDS: (keyof ShippingForm)[] = [
+    'firstName',
+    'lastName',
+    'street',
+    'houseNo',
+    'zip',
+    'city',
+  ];
+  const isMissing = (k: keyof ShippingForm) => address[k].trim().length === 0;
+  const addressComplete = ADDRESS_FIELDS.every((k) => !isMissing(k));
 
   const load = async () => {
     try {
@@ -96,7 +109,10 @@ export default function Cart() {
   const checkout = async () => {
     setError('');
     if (hasPrint && !addressComplete) {
-      setError('Bitte füllen Sie alle Felder der Lieferadresse aus, damit wir die Fotos ausdrucken und versenden können.');
+      setTriedCheckout(true);
+      setError('Bitte ergänzen Sie die rot markierten Pflichtfelder der Lieferadresse, damit wir die Fotos ausdrucken und versenden können.');
+      const firstMissing = ADDRESS_FIELDS.find((k) => isMissing(k));
+      if (firstMissing) document.getElementById(`addr-${firstMissing}`)?.focus();
       return;
     }
     setBusy(true);
@@ -132,7 +148,7 @@ export default function Cart() {
       {!cart || cart.items.length === 0 ? (
         <div className="card center">
           <p className="soft">Der Warenkorb ist leer.</p>
-          <Link to="/galerie" className="btn">
+          <Link to="/galerie/fotos" className="btn">
             Zur Galerie
           </Link>
         </div>
@@ -144,7 +160,7 @@ export default function Cart() {
                 <li key={item.id} className="line-item">
                   <img
                     src={imageUrl(item.thumbUrl)}
-                    alt=""
+                    alt={`Vorschau: ${item.productName}`}
                     width={64}
                     height={64}
                     style={{ borderRadius: 8, objectFit: 'cover' }}
@@ -207,54 +223,62 @@ export default function Cart() {
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                 <AddressField
+                  name="firstName"
                   label="Vorname"
                   value={address.firstName}
                   onChange={(v) => setAddress((a) => ({ ...a, firstName: v }))}
                   autoComplete="given-name"
+                  invalid={triedCheckout && isMissing('firstName')}
                 />
                 <AddressField
-                  label="Name"
+                  name="lastName"
+                  label="Nachname"
                   value={address.lastName}
                   onChange={(v) => setAddress((a) => ({ ...a, lastName: v }))}
                   autoComplete="family-name"
+                  invalid={triedCheckout && isMissing('lastName')}
                 />
                 <AddressField
+                  name="street"
                   label="Strasse"
                   value={address.street}
                   onChange={(v) => setAddress((a) => ({ ...a, street: v }))}
                   autoComplete="address-line1"
                   grow
+                  invalid={triedCheckout && isMissing('street')}
                 />
                 <AddressField
+                  name="houseNo"
                   label="Nr."
                   value={address.houseNo}
                   onChange={(v) => setAddress((a) => ({ ...a, houseNo: v }))}
                   width={90}
+                  invalid={triedCheckout && isMissing('houseNo')}
                 />
                 <AddressField
+                  name="zip"
                   label="PLZ"
                   value={address.zip}
                   onChange={(v) => setAddress((a) => ({ ...a, zip: v }))}
                   autoComplete="postal-code"
                   width={110}
+                  invalid={triedCheckout && isMissing('zip')}
                 />
                 <AddressField
+                  name="city"
                   label="Ort"
                   value={address.city}
                   onChange={(v) => setAddress((a) => ({ ...a, city: v }))}
                   autoComplete="address-level2"
                   grow
+                  invalid={triedCheckout && isMissing('city')}
                 />
               </div>
             </div>
           )}
 
-          <button
-            className="btn block mt"
-            onClick={checkout}
-            disabled={busy || (hasPrint && !addressComplete)}
-          >
-            {busy ? 'Einen Moment …' : 'Kauf abschliessen'}
+          <button className="btn block mt" onClick={checkout} disabled={busy}>
+            {busy ? 'Einen Moment …' : 'Zur Zahlung'}
           </button>
 
           <div style={{ marginTop: 18 }}>
@@ -270,30 +294,48 @@ export default function Cart() {
 }
 
 function AddressField({
+  name,
   label,
   value,
   onChange,
   autoComplete,
   width,
   grow,
+  invalid,
 }: {
+  name: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
   autoComplete?: string;
   width?: number;
   grow?: boolean;
+  invalid?: boolean;
 }) {
+  const id = `addr-${name}`;
+  const errorId = `${id}-error`;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: grow ? '1 1 160px' : '0 0 auto' }}>
-      <label style={{ fontSize: '0.82rem' }}>{label}</label>
+      <label htmlFor={id} style={{ fontSize: '0.82rem' }}>
+        {label}
+      </label>
       <input
+        id={id}
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
+        required
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? errorId : undefined}
+        className={invalid ? 'input-error' : undefined}
         style={{ width: width ?? (grow ? '100%' : 150), padding: '6px 8px' }}
       />
+      {invalid && (
+        <span id={errorId} className="field-error">
+          Pflichtfeld
+        </span>
+      )}
     </div>
   );
 }

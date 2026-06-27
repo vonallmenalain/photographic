@@ -32,3 +32,14 @@ export const passwordResetLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Zu viele Anfragen. Bitte versuche es später erneut.' },
 });
+
+// Protects the parent "report a problem" endpoint from spam/abuse. The endpoint
+// does not strictly require a logged-in session, so without a limit anyone could
+// flood the admin "Meldungen" inbox.
+export const reportLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Zu viele Meldungen. Bitte versuchen Sie es später erneut.' },
+});

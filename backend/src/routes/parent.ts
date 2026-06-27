@@ -4,7 +4,7 @@ import { COL, col, getById, runQuery, setById, nowIso } from '../db';
 import { config } from '../config';
 import { asyncHandler, ApiError } from '../middleware/errorHandler';
 import { attachParent, requireParent, PARENT_COOKIE } from '../middleware/parentAuth';
-import { verificationLimiter, codeCheckLimiter } from '../middleware/rateLimit';
+import { verificationLimiter, codeCheckLimiter, reportLimiter } from '../middleware/rateLimit';
 import { clearAuthCookie } from '../lib/cookies';
 import { emailSchema, parse } from '../lib/validation';
 import { signFileToken } from '../lib/auth';
@@ -422,6 +422,7 @@ router.get(
 // --- Report a problem (Meldefunktion) ------------------------------------
 router.post(
   '/report',
+  reportLimiter,
   attachParent,
   asyncHandler(async (req, res) => {
     const { type, message, email } = parse(
