@@ -65,9 +65,6 @@ const wrap = (title: string, body: string) => `
       <h1 style="font-size:20px;margin:0 0 16px;color:#1f2933;">${title}</h1>
       ${body}
     </div>
-    <p style="text-align:center;color:#9aa5b1;font-size:12px;margin-top:24px;">
-      Diese Nachricht schützt Kinderfotos. Bitte geben Sie Ihren Code oder Link nicht weiter.
-    </p>
   </div>
 </body></html>`;
 
@@ -106,8 +103,8 @@ export async function sendPasswordResetEmail(to: string, username: string, link:
 /**
  * "Ihre Fotos sind bereit" – Sammel-E-Mail, die der Admin pro Auftrag an alle
  * erfassten Eltern-Adressen schicken kann, sobald die Galerie freigeschaltet
- * ist. Enthält den Link zur App, eine Kurzanleitung zur Verifizierung sowie die
- * Hinweise zum Schutz der Fotos und zur Aufbewahrungsfrist.
+ * ist. Enthält den Link zur App sowie Informationen zu den Fotos (Bestätigung,
+ * Kauf, Wasserzeichen, Speicherort und Aufbewahrungsfrist).
  *
  * Mit `reminder: true` wird dieselbe Nachricht als Erinnerung formuliert
  * ("Ihre Fotos sind noch X Tage verfügbar"), z. B. für Eltern, die noch keine
@@ -133,59 +130,56 @@ export async function sendGalleryReadyEmail(
   const heading = reminder ? 'Ihre Fotos sind noch verfügbar' : 'Ihre Fotos sind bereit';
   const intro = reminder
     ? daysLeft != null
-      ? `die Fotos sind weiterhin für Sie freigeschaltet – <strong>Ihre Fotos sind noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'} verfügbar</strong>. So sehen Sie Ihre persönlichen Bilder:`
-      : 'die Fotos sind weiterhin für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bilder:'
-    : 'die Fotos sind jetzt für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bilder:';
+      ? `Die Fotos sind weiterhin für Sie freigeschaltet – <strong>Ihre Fotos sind noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'} verfügbar</strong>.`
+      : 'Die Fotos sind weiterhin für Sie freigeschaltet.'
+    : 'Die Fotos sind jetzt für Sie freigeschaltet.';
   const introText = reminder
     ? daysLeft != null
-      ? `die Fotos sind weiterhin für Sie freigeschaltet – Ihre Fotos sind noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'} verfügbar. So sehen Sie Ihre persönlichen Bilder:`
-      : 'die Fotos sind weiterhin für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bilder:'
-    : 'die Fotos sind jetzt für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bilder:';
+      ? `Die Fotos sind weiterhin für Sie freigeschaltet – Ihre Fotos sind noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'} verfügbar.`
+      : 'Die Fotos sind weiterhin für Sie freigeschaltet.'
+    : 'Die Fotos sind jetzt für Sie freigeschaltet.';
   const availability =
     reminder && daysLeft != null
       ? `Ihre Fotos sind <strong>noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'}</strong> verfügbar und werden danach automatisch archiviert.`
-      : `Die Fotos stehen <strong>${retentionDays} Tage</strong> zur Verfügung und werden danach automatisch archiviert.`;
+      : `Ihre Fotos stehen Ihnen während <strong>${retentionDays} Tagen</strong> zur Verfügung und werden danach automatisch archiviert.`;
   const availabilityText =
     reminder && daysLeft != null
       ? `Ihre Fotos sind noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'} verfügbar und werden danach automatisch archiviert.`
-      : `Die Fotos stehen ${retentionDays} Tage zur Verfügung und werden danach automatisch archiviert.`;
+      : `Ihre Fotos stehen Ihnen während ${retentionDays} Tagen zur Verfügung und werden danach automatisch archiviert.`;
 
   const html = wrap(
     heading,
-    `<p style="font-size:15px;line-height:1.6;">Guten Tag,</p>
+    `<p style="font-size:15px;line-height:1.6;">Guten Tag</p>
      <p style="font-size:15px;line-height:1.6;">${intro}</p>
-     <ol style="font-size:15px;line-height:1.7;padding-left:20px;margin:0 0 4px;">
-       <li>Öffnen Sie die Galerie über den Button unten.</li>
-       <li>Geben Sie <strong>diese E-Mail-Adresse</strong> ein – Sie erhalten dann einen Bestätigungslink bzw. einen Code.</li>
-       <li>Nach der Bestätigung sehen Sie ausschliesslich die Ihnen zugeordneten Fotos.</li>
-     </ol>
      <p style="text-align:center;margin:24px 0;">
        <a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:600;font-size:15px;">Zu meinen Fotos</a>
      </p>
-     <p style="font-size:13px;color:#7b8794;line-height:1.6;word-break:break-all;">Falls der Button nicht funktioniert, öffnen Sie diese Adresse im Browser:<br />${link}</p>
+     <p style="font-size:13px;color:#7b8794;line-height:1.6;word-break:break-all;">Falls der Button nicht funktioniert: <br />${link}</p>
      <div style="background:#f0f4f8;border-radius:12px;padding:16px 18px;margin-top:18px;">
-       <p style="font-size:14px;line-height:1.6;margin:0 0 8px;"><strong>Zum Schutz der Fotos:</strong></p>
+       <p style="font-size:14px;line-height:1.6;margin:0 0 8px;"><strong>Informationen zu den Fotos</strong></p>
        <ul style="font-size:14px;line-height:1.6;padding-left:20px;margin:0;">
-         <li>Die Bilder sind nur nach Bestätigung genau dieser E-Mail-Adresse sichtbar.</li>
-         <li>Vorschaubilder sind mit einem Wasserzeichen geschützt; die Originale erhalten Sie erst nach dem Kauf.</li>
+         <li>Die Fotos werden erst sichtbar, nachdem Sie diese E-Mail-Adresse bestätigt haben.</li>
+         <li>Der Kauf und Download der Fotos ist nur über diese E-Mail-Adresse möglich.</li>
          <li>${availability}</li>
-         <li>Bitte geben Sie Ihren Bestätigungslink bzw. Code nicht weiter.</li>
+         <li>Die Vorschaubilder sind mit einem Wasserzeichen versehen. Die Originaldateien erhalten Sie nach dem Kauf.</li>
+         <li>Alle Fotos werden auf einem lokalen Server in der Schweiz gespeichert.</li>
        </ul>
      </div>`,
   );
-  const text = `Guten Tag,
+  const text = `Guten Tag
 
 ${introText}
 
-1. Öffnen Sie die Galerie: ${link}
-2. Geben Sie DIESE E-Mail-Adresse ein – Sie erhalten dann einen Bestätigungslink bzw. einen Code.
-3. Nach der Bestätigung sehen Sie ausschliesslich die Ihnen zugeordneten Fotos.
+Zu meinen Fotos: ${link}
 
-Zum Schutz der Fotos:
-- Die Bilder sind nur nach Bestätigung genau dieser E-Mail-Adresse sichtbar.
-- Vorschaubilder sind mit einem Wasserzeichen geschützt; die Originale erhalten Sie erst nach dem Kauf.
+Falls der Button nicht funktioniert: ${link}
+
+Informationen zu den Fotos:
+- Die Fotos werden erst sichtbar, nachdem Sie diese E-Mail-Adresse bestätigt haben.
+- Der Kauf und Download der Fotos ist nur über diese E-Mail-Adresse möglich.
 - ${availabilityText}
-- Bitte geben Sie Ihren Bestätigungslink bzw. Code nicht weiter.`;
+- Die Vorschaubilder sind mit einem Wasserzeichen versehen. Die Originaldateien erhalten Sie nach dem Kauf.
+- Alle Fotos werden auf einem lokalen Server in der Schweiz gespeichert.`;
   await sendMail({ to, subject, html, text });
 }
 
