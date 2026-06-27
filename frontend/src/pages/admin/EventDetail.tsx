@@ -323,6 +323,7 @@ export default function EventDetail() {
             {photos.map((p) => (
               <div
                 key={p.id}
+                className="admin-photo-row"
                 style={{
                   display: 'flex',
                   gap: 16,
@@ -429,7 +430,10 @@ export default function EventDetail() {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div
+                  className="admin-photo-actions"
+                  style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                >
                   <button
                     className="btn ghost small"
                     onClick={() => patchPhoto(p.id, { status: 'processed' })}

@@ -590,6 +590,7 @@ tr:hover td { background: var(--surface-2); }
   background: #0f1b2d; color: #cbd5e1; padding: 22px 16px;
   position: sticky; top: 0; align-self: start;
   height: 100vh; overflow-y: auto;
+  display: flex; flex-direction: column;
 }
 .admin-side .logo { color: #fff; font-weight: 700; margin-bottom: 24px; display: flex; gap: 8px; align-items: center; }
 .admin-side a, .admin-side .side-action {
@@ -703,15 +704,100 @@ tr:hover td { background: var(--surface-2); }
 }
 .chip button { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 1rem; line-height: 1; padding: 0; }
 
+/* ==========================================================================
+   Mobile optimisation — Admin view.
+   The desktop layout (a 220px dark sidebar next to the content) is intentionally
+   left untouched. Below 760px the sidebar collapses into a compact, fully
+   tappable sticky top bar, and every control, row and table is reflowed so the
+   exact same functions stay comfortable on a phone — no squished buttons, no
+   text crammed next to tiles, no clipped controls.
+   ========================================================================== */
 @media (max-width: 760px) {
   .admin-shell { grid-template-columns: 1fr; }
+
+  /* Sidebar → sticky top bar with wrapping, clearly tappable pills. */
   .admin-side {
-    display: flex; flex-wrap: wrap; gap: 6px;
-    position: sticky; top: 0; height: auto; overflow: visible; z-index: 40;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    height: auto;
+    overflow: visible;
+    z-index: 40;
+    padding: 12px 14px;
   }
-  .admin-side .logo { width: 100%; margin-bottom: 10px; }
-  .admin-side a { margin: 0; }
+  .admin-side .logo { flex: 1 1 100%; margin-bottom: 2px; }
   .admin-side .spacer { display: none; }
+  .admin-side a,
+  .admin-side .side-action {
+    width: auto;
+    margin: 0;
+    padding: 9px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 0.9rem;
+    line-height: 1.1;
+  }
+  .admin-side a:hover,
+  .admin-side .side-action:hover { background: rgba(255, 255, 255, 0.16); }
+  .admin-side a.active { background: var(--primary); color: #fff; }
+  .admin-side .side-user {
+    order: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .admin-side .side-action {
+    order: 2;
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+  }
+
+  /* Roomier content with smaller side gutters. */
+  .admin-main { padding: 18px 14px 48px; }
+  .admin-main h1 { font-size: 1.4rem; }
+  .admin-main .card { padding: 18px 16px; }
+  .admin-main .card + .card { margin-top: 14px; }
+
+  /* Full-width, easy-to-tap form controls (overrides the fixed inline widths
+     used purely for the desktop layout). */
+  .admin-main input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  .admin-main select,
+  .admin-main textarea { width: 100% !important; max-width: 100%; }
+  .admin-main input[type='file'] { max-width: 100%; }
+
+  /* Tighter, gracefully-wrapping rows so nothing is squeezed side-by-side. */
+  .admin-main .row { gap: 10px; }
+
+  /* Wide data tables scroll horizontally instead of squishing every column. */
+  .admin-main table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+  .admin-main th,
+  .admin-main td { padding: 9px 10px; }
+
+  /* Auftrag-detail photo rows: thumbnail + details stay on top, the action
+     buttons drop onto their own full-width, tappable line underneath. */
+  .admin-photo-row {
+    flex-wrap: wrap;
+    align-items: flex-start !important;
+  }
+  .admin-photo-row .admin-photo-actions {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .admin-photo-row .admin-photo-actions .btn { flex: 1 1 auto; }
 }
 
 /* ==========================================================================
