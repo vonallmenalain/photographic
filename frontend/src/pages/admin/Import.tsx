@@ -3,16 +3,14 @@ import { api, ApiError } from '../../api/client';
 import { Alert, Spinner } from '../../components/common';
 import { parseFile, parseDelimited } from '../../lib/tabular';
 
-type Role = 'email' | 'name' | 'first_name' | 'last_name' | 'child' | 'event' | 'note' | 'ignore';
+type Role = 'email' | 'name' | 'child' | 'event' | 'note' | 'ignore';
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: 'ignore', label: '— ignorieren —' },
   { value: 'email', label: 'E-Mail' },
-  { value: 'name', label: 'Eltern-/Familienname' },
-  { value: 'first_name', label: 'Vorname' },
-  { value: 'last_name', label: 'Nachname' },
+  { value: 'name', label: 'Name Eltern' },
   { value: 'child', label: 'Kind' },
-  { value: 'event', label: 'Auftrag / Klasse' },
+  { value: 'event', label: 'Auftrag' },
   { value: 'note', label: 'Notiz' },
 ];
 
@@ -59,9 +57,9 @@ interface EventRow {
   name: string;
 }
 
-const EXAMPLE = `E-Mail\tVorname\tNachname\tKind\tAuftrag
-anna@beispiel.de\tAnna\tMüller\tLena Müller\tKlasse 3b
-paul@beispiel.de\tPaul\tWeber\tTim Weber, Lisa Weber\tKlasse 3b`;
+const EXAMPLE = `E-Mail\tKind\tName Eltern\tAuftrag
+anna@beispiel.de\tLena Müller\tAnna Müller\tKlasse 3b
+paul@beispiel.de\tTim Weber, Lisa Weber\tPaul Weber\tKlasse 3b`;
 
 /** Mirrors the backend `normalizeName`: lowercases, strips accents/ß, collapses whitespace. */
 function normalizeName(input: string): string {
@@ -282,10 +280,10 @@ export default function Import() {
       <div className="card mb">
         <h2>1. Daten einfügen oder Datei hochladen</h2>
         <p className="muted" style={{ fontSize: '0.85rem' }}>
-          Empfohlene Spalten: <strong>E-Mail</strong>, <strong>Vorname</strong>,
-          {' '}<strong>Nachname</strong>, <strong>Kind</strong>, optional <strong>Auftrag</strong> und
-          {' '}<strong>Notiz</strong>. Die Reihenfolge und Schreibweise der Spalten ist egal – sie
-          werden automatisch erkannt und lassen sich unten anpassen.
+          Empfohlene Spalten: <strong>E-Mail</strong>, <strong>Kind</strong> (vollständiger Name),
+          {' '}optional <strong>Name Eltern</strong>, <strong>Auftrag</strong> und <strong>Notiz</strong>.
+          {' '}Die Reihenfolge und Schreibweise der Spalten ist egal – sie werden automatisch erkannt
+          {' '}und lassen sich unten anpassen.
         </p>
         <textarea
           value={text}

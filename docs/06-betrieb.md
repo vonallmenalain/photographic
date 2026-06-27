@@ -53,27 +53,30 @@ Empfohlene Spalten (Reihenfolge **egal**, Schreibweise tolerant erkannt):
 | Spalte | Bedeutung |
 |---|---|
 | `E-Mail` | Eltern-Adresse (zentrale Identität) |
-| `Vorname`, `Nachname` | Name (siehe Hinweis unten) |
-| `Kind` | Name des Kindes – mehrere Geschwister mit `,` `;` `/` `&` oder „und“ trennen |
-| `Event` *(optional)* | Klasse/Gruppe; landet im passenden Event |
+| `Kind` | **Vollständiger** Name des Kindes – mehrere Geschwister mit `,` `;` `/` `&` oder „und“ trennen |
+| `Name Eltern` *(optional)* | Name der Eltern/Familie |
+| `Auftrag` *(optional)* | Klasse/Gruppe; landet im passenden Auftrag |
 | `Notiz` *(optional)* | interne Notiz zur E-Mail |
 
 Beispiel (Kopiervorlage):
 
 ```
-E-Mail        Vorname   Nachname   Kind                    Event
-anna@x.de     Anna      Müller     Lena Müller             Klasse 3b
-paul@x.de     Paul      Weber      Tim Weber, Lisa Weber   Klasse 3b
+E-Mail        Kind                    Name Eltern   Auftrag
+anna@x.de     Lena Müller             Anna Müller   Klasse 3b
+paul@x.de     Tim Weber, Lisa Weber   Paul Weber    Klasse 3b
 ```
 
 **Toleranz / Hinweise:**
 
-- Spalten dürfen **vertauscht** sein und andere Bezeichnungen tragen
-  (z. B. „Mail“, „E-Mail-Adresse“, „Nachname“ statt „Name“). Die Erkennung
-  läuft automatisch und lässt sich in der Vorschau **pro Spalte korrigieren**.
+- Spalten dürfen **vertauscht** sein und andere Bezeichnungen tragen. Die
+  Erkennung läuft automatisch und lässt sich in der Vorschau **pro Spalte
+  korrigieren**:
+  - Spalten mit `Kind`, `Name` oder `Vorname` werden als **Kind** erkannt.
+  - Spalten mit `Eltern` (z. B. `Name Eltern`) werden als **Name Eltern** erkannt.
+  - Spalten mit `Auftrag`/`Klasse` werden als **Auftrag** erkannt.
 - Ohne erkennbare Kopfzeile wird die E-Mail-Spalte am `@` erkannt.
-- Gibt es eine **`Kind`-Spalte**, gelten `Vorname`/`Nachname` als **Eltern**-Name.
-  Fehlt sie, werden `Vorname`/`Nachname` als **Kind**-Name verwendet.
+- Die **`Kind`-Spalte** enthält den kompletten Namen des Kindes. Gibt es zusätzlich
+  eine **`Name Eltern`-Spalte**, wird diese der E-Mail als Eltern-Name zugeordnet.
 - Vor dem Import siehst du eine **Vorschau** mit Hinweisen (z. B. ungültige
   E-Mail). Bereits vorhandene Adressen/Kinder/Verknüpfungen werden **nicht
   doppelt** angelegt.

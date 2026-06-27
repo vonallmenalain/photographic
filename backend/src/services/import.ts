@@ -26,8 +26,6 @@ import { retentionExpiry } from './events';
 export type ImportRole =
   | 'email'
   | 'name'
-  | 'first_name'
-  | 'last_name'
   | 'child'
   | 'event'
   | 'note'
@@ -37,22 +35,37 @@ export type Mapping = Partial<Record<Exclude<ImportRole, 'ignore'>, number>>;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Header aliases (normalized) → role. Order matters for ambiguous words. */
-const ALIASES: Record<string, Exclude<ImportRole, 'ignore'>> = {};
-function alias(role: Exclude<ImportRole, 'ignore'>, words: string[]) {
-  for (const w of words) ALIASES[normalizeName(w).replace(/[^a-z0-9]+/g, '')] = role;
-}
-alias('email', ['email', 'e-mail', 'mail', 'emailadresse', 'e-mail-adresse', 'mailadresse', 'emailaddress', 'adresse']);
-alias('first_name', ['vorname', 'first name', 'firstname', 'first', 'rufname']);
-alias('last_name', ['nachname', 'last name', 'lastname', 'surname', 'familienname']);
-alias('name', ['name', 'elternname', 'eltern', 'parent', 'parent name', 'kontakt', 'kontaktname']);
-alias('child', ['kind', 'kinder', 'child', 'children', 'kindname', 'kindername', 'schueler', 'schuelerin', 'schuelername', 'student']);
-alias('event', ['auftrag', 'auftraege', 'event', 'veranstaltung', 'klasse', 'class', 'gruppe', 'group', 'kindergarten', 'schule', 'set', 'fotoset', 'galerie', 'gallery']);
-alias('note', ['notiz', 'note', 'bemerkung', 'info', 'kommentar', 'comment', 'hinweis']);
+/**
+ * Substring keywords per role. Detection is tolerant: a header is mapped to a
+ * role as soon as it *contains* one of the role's keywords (after normalizing
+ * away case, accents and separators). The order below is the priority order –
+ * more specific roles must come first so that, e.g. "Name Eltern" is read as
+ * the parents' name and "Kindergarten" as the order, not as a child name.
+ */
+const ROLE_KEYWORDS: { role: Exclude<ImportRole, 'ignore'>; keywords: string[] }[] = [
+  { role: 'email', keywords: ['mail'] },
+  { role: 'note', keywords: ['notiz', 'note', 'bemerkung', 'kommentar', 'comment', 'hinweis'] },
+  // Parents' name – anything that mentions the parents/family or a contact.
+  { role: 'name', keywords: ['eltern', 'familienname', 'parent', 'kontakt'] },
+  // Order / class – checked before "child" so "Kindergarten" is not read as a child.
+  {
+    role: 'event',
+    keywords: [
+      'auftrag', 'klasse', 'kindergarten', 'schule', 'gruppe', 'group',
+      'class', 'event', 'veranstaltung', 'fotoset', 'galerie', 'gallery',
+    ],
+  },
+  // Child – the full child name. "Name" and "Vorname" both land here.
+  { role: 'child', keywords: ['kind', 'name', 'vorname', 'schueler', 'student', 'child'] },
+];
 
 function roleForHeader(header: string): Exclude<ImportRole, 'ignore'> | null {
   const key = normalizeName(header).replace(/[^a-z0-9]+/g, '');
-  return ALIASES[key] ?? null;
+  if (!key) return null;
+  for (const { role, keywords } of ROLE_KEYWORDS) {
+    if (keywords.some((kw) => key.includes(kw))) return role;
+  }
+  return null;
 }
 
 function looksLikeEmail(value: string): boolean {
@@ -114,16 +127,11 @@ export function detectMapping(rows: string[][]): Detection {
     first.forEach((header, index) => {
       const role = roleForHeader(header);
       if (!role) return;
-      // "Name" alone means surname when a "Vorname" column exists, else full name.
-      if (role === 'name' && first.some((h) => roleForHeader(h) === 'first_name')) {
-        if (mapping.last_name === undefined) mapping.last_name = index;
-        return;
-      }
       if (mapping[role] === undefined) mapping[role] = index;
     });
   } else {
-    // No header: infer the e-mail column from content; map remaining columns to
-    // child/name as a best-effort default the admin can override in the UI.
+    // No header: infer the e-mail column from content; map the first remaining
+    // column to the child name as a best-effort default the admin can override.
     let emailCol = -1;
     let bestHits = 0;
     for (let c = 0; c < width; c += 1) {
@@ -135,12 +143,7 @@ export function detectMapping(rows: string[][]): Detection {
     }
     if (emailCol >= 0) mapping.email = emailCol;
     const others = Array.from({ length: width }, (_, i) => i).filter((i) => i !== emailCol);
-    if (others.length === 1) {
-      mapping.child = others[0];
-    } else if (others.length >= 2) {
-      mapping.first_name = others[0];
-      mapping.last_name = others[1];
-    }
+    if (others.length >= 1) mapping.child = others[0];
   }
 
   return { hasHeader, mapping, columns: describeColumns(rows, mapping, hasHeader) };
@@ -185,24 +188,20 @@ export function buildPlan(rows: string[][], mapping: Mapping, hasHeader: boolean
   dataRows.forEach((row, i) => {
     const warnings: string[] = [];
     const email = cell(row, mapping.email).toLowerCase();
-    const first = cell(row, mapping.first_name);
-    const last = cell(row, mapping.last_name);
-    const fullName = cell(row, mapping.name);
+    const parentNameCell = cell(row, mapping.name);
     const childCell = cell(row, mapping.child);
     const eventName = cell(row, mapping.event);
     const note = cell(row, mapping.note);
-    const partsName = [first, last].filter(Boolean).join(' ').trim();
 
     let parentName = '';
     let childNames: string[] = [];
     if (childCell) {
-      // Explicit child column → the name columns describe the parent/family.
+      // Explicit child column → the name column describes the parent/family.
       childNames = splitNames(childCell);
-      parentName = fullName || partsName;
+      parentName = parentNameCell;
     } else {
-      // No child column → the name columns describe the child.
-      const childName = fullName || partsName;
-      childNames = childName ? [childName] : [];
+      // No child column → the name column describes the child.
+      childNames = parentNameCell ? [parentNameCell] : [];
       parentName = '';
     }
 
