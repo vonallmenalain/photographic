@@ -1,8 +1,411 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import { Alert, Spinner } from '../../components/common';
+import { Alert, Spinner, StatusBadge } from '../../components/common';
 import { parseFile, parseDelimited } from '../../lib/tabular';
+import { PhotoManager, type ManagedChild, type ManagedPhoto } from './PhotoManager';
+import { NotifyAllModal } from './EventEmails';
+
+// ---------------------------------------------------------------------------
+// "Aufträge erfassen" – guided wizard that takes a new order from raw data all
+// the way to the parent invitation:
+//   1. Daten              – import e-mails/children (paste or CSV/Excel)
+//   2. Import der Fotos    – upload photos, auto-assign, confirm assignment
+//   3. Veröffentlichen     – make the gallery visible to parents
+//   4. Versand an die Eltern – send the invitation e-mails
+// Each step turns green once completed. Steps 2–4 unlock once step 1 produced
+// (or selected) a target order.
+// ---------------------------------------------------------------------------
+
+interface WizardEvent {
+  id: string;
+  name: string;
+  status: string;
+  expires_at: string | null;
+  photos_confirmed_at?: string | null;
+  invited_at?: string | null;
+}
+
+const STEP_LABELS = ['Daten', 'Import der Fotos', 'Veröffentlichen', 'Versand an die Eltern'];
+
+export default function AuftraegeErfassen() {
+  const [searchParams] = useSearchParams();
+  const presetEventId = searchParams.get('eventId') ?? '';
+
+  // Target order the wizard is working on (created/selected in step 1).
+  const [eventId, setEventId] = useState<string | null>(null);
+  const [event, setEvent] = useState<WizardEvent | null>(null);
+  const [children, setChildren] = useState<ManagedChild[]>([]);
+  const [photos, setPhotos] = useState<ManagedPhoto[]>([]);
+  const [importDone, setImportDone] = useState(false);
+  const [activeStep, setActiveStep] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [stepError, setStepError] = useState('');
+  const [showNotify, setShowNotify] = useState(false);
+
+  const loadEvent = async (targetId: string) => {
+    const res = await api<{ event: WizardEvent; children: ManagedChild[] }>(
+      `/api/admin/events/${targetId}`,
+      { admin: true },
+    );
+    setEvent(res.event);
+    setChildren(res.children);
+    return res;
+  };
+
+  // When opened from an order ("Importieren" link), preselect it as the target
+  // so the photographer can keep enriching an existing Auftrag.
+  useEffect(() => {
+    if (!presetEventId) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await loadEvent(presetEventId);
+        if (!active) return;
+        setEventId(presetEventId);
+        // An order that already carries children clearly went through the data
+        // step before, so mark step 1 as complete.
+        if (res.children.length > 0) setImportDone(true);
+      } catch {
+        /* ignore – the order may have been deleted */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetEventId]);
+
+  const step1Done = importDone && !!eventId;
+  const step2Done = !!event?.photos_confirmed_at;
+  const step3Done = event?.status === 'published';
+  const step4Done = !!event?.invited_at;
+  const doneFlags = [step1Done, step2Done, step3Done, step4Done];
+
+  // Step n (>1) is reachable once a target order exists.
+  const canGoTo = (step: number) => step === 1 || !!eventId;
+
+  const onImported = async (primaryEventId: string | null) => {
+    setImportDone(true);
+    setStepError('');
+    if (primaryEventId) {
+      setEventId(primaryEventId);
+      try {
+        await loadEvent(primaryEventId);
+      } catch {
+        /* ignore */
+      }
+      setActiveStep(2);
+    }
+  };
+
+  const confirmAssignment = async () => {
+    if (!eventId) return;
+    setBusy(true);
+    setStepError('');
+    try {
+      await api(`/api/admin/events/${eventId}`, {
+        method: 'PATCH',
+        admin: true,
+        body: { photos_confirmed_at: new Date().toISOString() },
+      });
+      await loadEvent(eventId);
+      setActiveStep(3);
+    } catch (err) {
+      setStepError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const publish = async () => {
+    if (!eventId) return;
+    setStepError('');
+    if (photos.length === 0) {
+      setStepError('Es sind noch keine Fotos in diesem Auftrag. Bitte lade zuerst Fotos hoch.');
+      return;
+    }
+    const unassigned = photos.filter((p) => !p.is_class_photo && !p.child_id).length;
+    if (
+      unassigned > 0 &&
+      !confirm(
+        `${unassigned} Foto(s) sind noch keinem Kind zugeordnet und keine Gruppen-/Klassenfotos – sie werden für niemanden sichtbar sein. Trotzdem jetzt veröffentlichen?`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await api(`/api/admin/events/${eventId}`, {
+        method: 'PATCH',
+        admin: true,
+        body: { status: 'published' },
+      });
+      await loadEvent(eventId);
+      setActiveStep(4);
+    } catch (err) {
+      setStepError(err instanceof ApiError ? err.message : 'Veröffentlichen fehlgeschlagen.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unpublish = async () => {
+    if (!eventId) return;
+    setBusy(true);
+    setStepError('');
+    try {
+      await api(`/api/admin/events/${eventId}`, {
+        method: 'PATCH',
+        admin: true,
+        body: { status: 'draft' },
+      });
+      await loadEvent(eventId);
+    } catch (err) {
+      setStepError(err instanceof ApiError ? err.message : 'Aktion fehlgeschlagen.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Reset everything to capture a fresh order from scratch.
+  const startOver = () => {
+    setEventId(null);
+    setEvent(null);
+    setChildren([]);
+    setPhotos([]);
+    setImportDone(false);
+    setActiveStep(1);
+    setStepError('');
+  };
+
+  const unassignedCount = photos.filter((p) => !p.is_class_photo && !p.child_id).length;
+
+  return (
+    <div>
+      <h1>Aufträge erfassen</h1>
+      <p className="soft">
+        Erfasse einen Auftrag Schritt für Schritt – von den Daten über die Fotos bis zum Versand an
+        die Eltern. Jeder Schritt wird grün, sobald er abgeschlossen ist.
+      </p>
+
+      <WizardStepper
+        labels={STEP_LABELS}
+        done={doneFlags}
+        active={activeStep}
+        canGoTo={canGoTo}
+        onSelect={(step) => {
+          if (canGoTo(step)) {
+            setStepError('');
+            setActiveStep(step);
+          }
+        }}
+      />
+
+      {event && (
+        <div className="card mb" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <strong>Auftrag:</strong>
+          <Link to={`/admin/events/${event.id}`}>{event.name}</Link>
+          <StatusBadge status={event.status} />
+          <span className="spacer" style={{ flex: 1 }} />
+          <button className="btn ghost small" type="button" onClick={startOver}>
+            Weiteren Auftrag erfassen
+          </button>
+        </div>
+      )}
+
+      {stepError && <Alert kind="error">{stepError}</Alert>}
+
+      {activeStep === 1 && (
+        <Step1Data presetEventId={presetEventId} onImported={onImported} done={step1Done} />
+      )}
+
+      {activeStep === 2 &&
+        (eventId ? (
+          <div>
+            <p className="soft" style={{ marginTop: 0 }}>
+              Lade die Fotos hoch (eines nach dem anderen, mit Fortschrittsbalken). Anschliessend
+              werden sie – wo möglich – automatisch den Kindern zugeordnet. Prüfe die Zuordnung und
+              bestätige sie am Schluss.
+            </p>
+            <PhotoManager
+              eventId={eventId}
+              children={children}
+              onPhotosChange={setPhotos}
+            />
+            <div className="card mb" style={{ marginTop: 16 }}>
+              <h2 style={{ marginTop: 0 }}>Zuordnung bestätigen</h2>
+              <p className="muted" style={{ fontSize: '0.85rem' }}>
+                {photos.length === 0
+                  ? 'Noch keine Fotos hochgeladen.'
+                  : unassignedCount === 0
+                    ? `Alle ${photos.length} Foto(s) sind zugeordnet oder als Gruppen-/Klassenfoto markiert.`
+                    : `${unassignedCount} von ${photos.length} Foto(s) sind noch keinem Kind zugeordnet und kein Gruppen-/Klassenfoto.`}
+              </p>
+              {step2Done && (
+                <Alert kind="success">Die Zuordnung wurde bestätigt – Schritt 2 ist abgeschlossen.</Alert>
+              )}
+              <div className="row" style={{ marginTop: 8 }}>
+                <button className="btn" onClick={confirmAssignment} disabled={busy || photos.length === 0}>
+                  {step2Done ? 'Zuordnung erneut bestätigen' : 'Zuordnung bestätigen & weiter'}
+                </button>
+                {step2Done && (
+                  <button className="btn secondary" type="button" onClick={() => setActiveStep(3)}>
+                    Weiter zu Veröffentlichen
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <NeedsOrderHint onBack={() => setActiveStep(1)} />
+        ))}
+
+      {activeStep === 3 &&
+        (event ? (
+          <div className="card mb">
+            <h2 style={{ marginTop: 0 }}>Veröffentlichen</h2>
+            <p className="muted" style={{ fontSize: '0.85rem' }}>
+              Erst nach dem Veröffentlichen sind die zugeordneten Fotos für berechtigte Eltern
+              sichtbar.
+            </p>
+            {step3Done ? (
+              <>
+                <Alert kind="success">
+                  Der Auftrag ist veröffentlicht – Schritt 3 ist abgeschlossen.
+                </Alert>
+                <div className="row" style={{ marginTop: 8 }}>
+                  <button className="btn secondary" type="button" onClick={() => setActiveStep(4)}>
+                    Weiter zum Versand
+                  </button>
+                  <button className="btn ghost" type="button" onClick={unpublish} disabled={busy}>
+                    Auf Entwurf zurücksetzen
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="row" style={{ marginTop: 8 }}>
+                <button className="btn" onClick={publish} disabled={busy}>
+                  Jetzt veröffentlichen
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <NeedsOrderHint onBack={() => setActiveStep(1)} />
+        ))}
+
+      {activeStep === 4 &&
+        (event ? (
+          <div className="card mb">
+            <h2 style={{ marginTop: 0 }}>Versand an die Eltern</h2>
+            <p className="muted" style={{ fontSize: '0.85rem' }}>
+              Sende den erfassten Eltern-Adressen die Einladung mit dem Link zur Galerie und der
+              Kurzanleitung zur Verifizierung.
+            </p>
+            {!step3Done && (
+              <Alert kind="info">
+                Der Auftrag ist noch nicht veröffentlicht. Am besten zuerst veröffentlichen, damit
+                die Eltern die Fotos sehen können.
+              </Alert>
+            )}
+            {step4Done && (
+              <Alert kind="success">
+                Die Einladung wurde versendet – Schritt 4 ist abgeschlossen.
+              </Alert>
+            )}
+            <div className="row" style={{ marginTop: 8 }}>
+              <button className="btn" onClick={() => setShowNotify(true)}>
+                {step4Done ? 'Erneut einladen' : 'Einladung per E-Mail senden'}
+              </button>
+            </div>
+            {step4Done && (
+              <p className="soft" style={{ marginTop: 14 }}>
+                Alle Schritte abgeschlossen. Der Auftrag erscheint nun unter{' '}
+                <Link to="/admin/events">Aufträge</Link>.
+              </p>
+            )}
+          </div>
+        ) : (
+          <NeedsOrderHint onBack={() => setActiveStep(1)} />
+        ))}
+
+      {showNotify && eventId && (
+        <NotifyAllModal
+          eventId={eventId}
+          onClose={() => setShowNotify(false)}
+          onSent={async () => {
+            setShowNotify(false);
+            await loadEvent(eventId);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function NeedsOrderHint({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="card mb">
+      <p className="muted" style={{ marginTop: 0 }}>
+        Für diesen Schritt wird zuerst ein Auftrag benötigt. Bitte schliesse Schritt 1 (Daten) ab.
+      </p>
+      <button className="btn secondary" type="button" onClick={onBack}>
+        Zu Schritt 1
+      </button>
+    </div>
+  );
+}
+
+function WizardStepper({
+  labels,
+  done,
+  active,
+  canGoTo,
+  onSelect,
+}: {
+  labels: string[];
+  done: boolean[];
+  active: number;
+  canGoTo: (step: number) => boolean;
+  onSelect: (step: number) => void;
+}) {
+  return (
+    <div className="import-stepper">
+      {labels.map((label, i) => {
+        const step = i + 1;
+        const isDone = done[i];
+        const state = isDone ? 'done' : step === active ? 'current' : 'todo';
+        const reachable = canGoTo(step);
+        return (
+          <button
+            key={label}
+            type="button"
+            className={`import-step ${state}`}
+            disabled={!reachable}
+            onClick={() => onSelect(step)}
+            style={{
+              cursor: reachable ? 'pointer' : 'not-allowed',
+              background: 'none',
+              width: 'auto',
+              font: 'inherit',
+              opacity: reachable ? 1 : 0.55,
+              boxShadow: step === active ? '0 0 0 2px var(--primary)' : undefined,
+            }}
+          >
+            <span className="import-step-marker">{isDone ? '✓' : step}</span>
+            <span className="import-step-label">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ===========================================================================
+// Step 1: data import (paste / CSV / Excel). On "Jetzt importieren" the order
+// is created/selected and the wizard advances to the photo step.
+// ===========================================================================
 
 type Role = 'email' | 'name' | 'child' | 'event' | 'note' | 'ignore';
 
@@ -38,10 +441,6 @@ interface Plan {
   rows: PlanRow[];
   totals: { rows: number; withEmail: number; distinctEmails: number; children: number; skipped: number };
 }
-/**
- * Column mapping. Every role except `email` maps to a single column; `email`
- * may map to several columns (e.g. "E-Mail" + "E-Mail 2").
- */
 interface Mapping {
   email?: number[];
   name?: number;
@@ -66,6 +465,8 @@ interface CommitResult {
   eventsCreated: number;
   rowsSkipped: number;
   warnings: string[];
+  eventIds: string[];
+  primaryEventId: string | null;
 }
 interface EventRow {
   id: string;
@@ -87,7 +488,15 @@ function normalizeName(input: string): string {
     .trim();
 }
 
-export default function Import() {
+function Step1Data({
+  presetEventId,
+  onImported,
+  done,
+}: {
+  presetEventId: string;
+  onImported: (primaryEventId: string | null) => void;
+  done: boolean;
+}) {
   const [text, setText] = useState('');
   const [rows, setRows] = useState<string[][]>([]);
   const [preview, setPreview] = useState<PreviewResp | null>(null);
@@ -99,16 +508,10 @@ export default function Import() {
   const fileRef = useRef<HTMLInputElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
 
-  // target event selection
   const [targetMode, setTargetMode] = useState<'existing' | 'new'>('existing');
   const [defaultEventId, setDefaultEventId] = useState('');
   const [defaultEventName, setDefaultEventName] = useState('');
   const [createMissingEvents, setCreateMissingEvents] = useState(true);
-
-  // When opened from the publish checklist (…/import?eventId=…), preselect that
-  // order as the target for rows that don't carry an "Auftrag" column.
-  const [searchParams] = useSearchParams();
-  const presetEventId = searchParams.get('eventId') ?? '';
 
   useEffect(() => {
     api<{ events: EventRow[] }>('/api/admin/events', { admin: true })
@@ -120,25 +523,21 @@ export default function Import() {
         }
       })
       .catch(() => undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presetEventId]);
 
   const scrollToTop = () => {
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  // Offers a ready-to-fill CSV template (opens in Excel) with the recommended
-  // columns and two example rows, incl. the "several e-mails per child" patterns.
   const downloadTemplate = () => {
-    const rows = [
+    const rowsT = [
       ['E-Mail', 'E-Mail 2', 'Kind', 'Name Eltern', 'Auftrag'],
       ['anna@beispiel.de, oma@beispiel.de', 'papa@beispiel.de', 'Lena Müller', 'Familie Müller', 'Klasse 3b'],
       ['paul@beispiel.de', '', 'Tim Weber, Lisa Weber', 'Paul Weber', 'Klasse 3b'],
     ];
-    const csv = rows
+    const csv = rowsT
       .map((r) => r.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
       .join('\r\n');
-    // UTF-8 BOM so Excel shows umlauts correctly.
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -150,7 +549,6 @@ export default function Import() {
     URL.revokeObjectURL(url);
   };
 
-  // Reset the whole import page back to its initial (empty) state.
   const resetImport = () => {
     setText('');
     setRows([]);
@@ -160,7 +558,7 @@ export default function Import() {
     setLoading(false);
     setCommitting(false);
     setTargetMode('existing');
-    setDefaultEventId('');
+    setDefaultEventId(presetEventId || '');
     setDefaultEventName('');
     setCreateMissingEvents(true);
     if (fileRef.current) fileRef.current.value = '';
@@ -220,13 +618,11 @@ export default function Import() {
       event: preview.mapping.event,
       note: preview.mapping.note,
     };
-    // Detach this column from any role it currently holds.
     next.email = (next.email ?? []).filter((i) => i !== index);
     (['name', 'child', 'event', 'note'] as const).forEach((k) => {
       if (next[k] === index) next[k] = undefined;
     });
     if (role === 'email') {
-      // Several columns may carry the e-mail role at the same time.
       next.email = [...(next.email ?? []), index].sort((a, b) => a - b);
     } else if (role !== 'ignore') {
       next[role] = index;
@@ -240,10 +636,24 @@ export default function Import() {
     runPreview(rows, preview.mapping, checked);
   };
 
+  const planRows = preview?.plan.rows ?? [];
+  const assignedNames = Array.from(
+    new Map(
+      planRows
+        .map((r) => r.eventName.trim())
+        .filter((n) => n !== '')
+        .map((n) => [normalizeName(n), n] as const),
+    ).values(),
+  );
+  const unassignedCount = planRows.filter((r) => !r.eventName.trim()).length;
+  const needsTarget = unassignedCount > 0;
+  const existingNames = new Set(events.map((e) => normalizeName(e.name)));
+  const orderIsNew = (name: string) => !existingNames.has(normalizeName(name));
+  const noValidEmails = (preview?.plan.totals.distinctEmails ?? 0) === 0;
+  const warningRows = preview?.plan.rows.filter((r) => r.warnings.length > 0) ?? [];
+
   const commit = async () => {
     if (!preview) return;
-    // Block the import outright when no valid e-mail address was recognised –
-    // without one there is nothing meaningful to create.
     if (preview.plan.totals.distinctEmails === 0) {
       setError(
         'Es wurde keine gültige E-Mail-Adresse erkannt. Bitte ordne mindestens eine Spalte der Rolle „E-Mail“ zu und prüfe die Schreibweise.',
@@ -251,8 +661,6 @@ export default function Import() {
       scrollToTop();
       return;
     }
-    // A fallback target is only required when at least one row has no order of
-    // its own. Rows that carry an "Auftrag" value are assigned automatically.
     if (needsTarget) {
       if (targetMode === 'existing' && !defaultEventId) {
         setError('Bitte einen Ziel-Auftrag für die nicht zugewiesenen Zeilen wählen oder einen neuen anlegen.');
@@ -285,9 +693,7 @@ export default function Import() {
       setRows([]);
       setText('');
       if (fileRef.current) fileRef.current.value = '';
-      api<{ events: EventRow[] }>('/api/admin/events', { admin: true })
-        .then((r) => setEvents(r.events))
-        .catch(() => undefined);
+      onImported(res.result.primaryEventId);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Import fehlgeschlagen.');
       scrollToTop();
@@ -296,43 +702,21 @@ export default function Import() {
     }
   };
 
-  const warningRows = preview?.plan.rows.filter((r) => r.warnings.length > 0) ?? [];
-
-  // Orders the import file already assigns per row (via the "Auftrag" column).
-  // These are handled automatically – the admin does not have to choose anything.
-  const planRows = preview?.plan.rows ?? [];
-  const assignedNames = Array.from(
-    new Map(
-      planRows
-        .map((r) => r.eventName.trim())
-        .filter((n) => n !== '')
-        .map((n) => [normalizeName(n), n] as const),
-    ).values(),
-  );
-  // Rows without an "Auftrag" value cannot be auto-assigned and need a target.
-  const unassignedCount = planRows.filter((r) => !r.eventName.trim()).length;
-  const needsTarget = unassignedCount > 0;
-  const existingNames = new Set(events.map((e) => normalizeName(e.name)));
-  const orderIsNew = (name: string) => !existingNames.has(normalizeName(name));
-  const noValidEmails = (preview?.plan.totals.distinctEmails ?? 0) === 0;
-
   return (
     <div>
       <div ref={topRef} />
-      <h1>Import</h1>
-      <p className="soft">
-        Lege E-Mail-Adressen, Kinder und ihre Verknüpfungen in einem Schritt an – per Kopieren &amp;
-        Einfügen aus Excel oder über eine CSV-/Excel-Datei.
+      <p className="soft" style={{ marginTop: 0 }}>
+        Lege E-Mail-Adressen, Kinder und ihre Verknüpfungen an – per Kopieren &amp; Einfügen aus
+        Excel oder über eine CSV-/Excel-Datei. Dieser Schritt ist abgeschlossen, sobald du unten auf
+        „Jetzt importieren“ klickst.
       </p>
 
-      <ImportStepper
-        steps={[
-          { label: 'Daten', done: !!preview || !!result },
-          { label: 'Spalten', done: !!preview && (preview.mapping.email ?? []).length > 0 },
-          { label: 'Ziel-Auftrag', done: !!preview && (!needsTarget || (targetMode === 'existing' ? !!defaultEventId : !!defaultEventName.trim())) },
-          { label: 'Import', done: !!result },
-        ]}
-      />
+      {done && (
+        <Alert kind="success">
+          Die Daten wurden importiert – Schritt 1 ist abgeschlossen. Du kannst weitere Daten
+          ergänzen oder oben zum nächsten Schritt wechseln.
+        </Alert>
+      )}
 
       {error && <Alert kind="error">{error}</Alert>}
 
@@ -359,9 +743,9 @@ export default function Import() {
         </div>
       )}
 
-      {/* Step 1: input */}
+      {/* Daten einfügen oder Datei hochladen */}
       <div className="card mb">
-        <h2>1. Daten einfügen oder Datei hochladen</h2>
+        <h2>Daten einfügen oder Datei hochladen</h2>
         <p className="muted" style={{ fontSize: '0.85rem' }}>
           Empfohlene Spalten: <strong>E-Mail</strong>, <strong>Kind</strong> (vollständiger Name),
           {' '}optional <strong>Name Eltern</strong>, <strong>Auftrag</strong> und <strong>Notiz</strong>.
@@ -403,11 +787,10 @@ export default function Import() {
 
       {loading && <Spinner label="Vorschau wird erstellt …" />}
 
-      {/* Step 2: mapping + preview */}
       {preview && !loading && (
         <>
           <div className="card mb">
-            <h2>2. Spalten zuordnen</h2>
+            <h2>Spalten zuordnen</h2>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <input
                 type="checkbox"
@@ -450,7 +833,7 @@ export default function Import() {
           </div>
 
           <div className="card mb">
-            <h2>3. Ziel-Auftrag</h2>
+            <h2>Ziel-Auftrag</h2>
 
             {assignedNames.length > 0 && (
               <div style={{ marginBottom: needsTarget ? 18 : 0 }}>
@@ -537,7 +920,7 @@ export default function Import() {
           </div>
 
           <div className="card mb">
-            <h2>4. Vorschau &amp; Import</h2>
+            <h2>Vorschau &amp; Import</h2>
             <p className="row" style={{ gap: 18 }}>
               <span><strong>{preview.plan.totals.rows}</strong> Zeilen</span>
               <span><strong>{preview.plan.totals.distinctEmails}</strong> E-Mail-Adressen</span>
@@ -548,7 +931,7 @@ export default function Import() {
             </p>
             {noValidEmails && (
               <Alert kind="error">
-                Es wurde keine gültige E-Mail-Adresse erkannt. Bitte ordne oben unter „2. Spalten
+                Es wurde keine gültige E-Mail-Adresse erkannt. Bitte ordne oben unter „Spalten
                 zuordnen“ mindestens eine Spalte der Rolle „E-Mail“ zu. Ohne E-Mail-Adresse kann
                 nicht importiert werden.
               </Alert>
@@ -611,30 +994,12 @@ export default function Import() {
                 disabled={committing}
                 title="Alle eingetragenen Daten verwerfen und die Seite zurücksetzen"
               >
-                Import abbrechen
+                Eingaben verwerfen
               </button>
             </div>
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function ImportStepper({ steps }: { steps: { label: string; done: boolean }[] }) {
-  // The "current" step is the first not-yet-done one.
-  const currentIndex = steps.findIndex((s) => !s.done);
-  return (
-    <div className="import-stepper">
-      {steps.map((s, i) => {
-        const state = s.done ? 'done' : i === currentIndex ? 'current' : 'todo';
-        return (
-          <div key={s.label} className={`import-step ${state}`}>
-            <span className="import-step-marker">{s.done ? '✓' : i + 1}</span>
-            <span className="import-step-label">{s.label}</span>
-          </div>
-        );
-      })}
     </div>
   );
 }
