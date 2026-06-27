@@ -58,9 +58,9 @@ export async function sendMail({ to, subject, html, text }: SendArgs): Promise<v
   await t.sendMail({ from: config.mail.from, to, subject, html, text });
 }
 
-const wrap = (title: string, body: string) => `
+const wrap = (title: string, body: string, maxWidth = 520) => `
 <!doctype html><html lang="de"><body style="margin:0;background:#f4f5f7;font-family:Helvetica,Arial,sans-serif;color:#1f2933;">
-  <div style="max-width:520px;margin:0 auto;padding:32px 20px;">
+  <div style="max-width:${maxWidth}px;margin:0 auto;padding:32px 20px;">
     <div style="background:#fff;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,.08);">
       <h1 style="font-size:20px;margin:0 0 16px;color:#1f2933;">${title}</h1>
       ${body}
@@ -165,6 +165,10 @@ export async function sendGalleryReadyEmail(
          <li>Alle Fotos werden auf einem lokalen Server in der Schweiz gespeichert.</li>
        </ul>
      </div>`,
+    // Doppelt so breite Kachel, damit die "Informationen zu den Fotos" auf
+    // Laptop-Bildschirmen ohne Zeilenumbrüche in einer Zeile stehen. Durch
+    // max-width bleibt die Kachel auf schmalen Displays trotzdem responsiv.
+    1040,
   );
   const text = `Guten Tag
 
