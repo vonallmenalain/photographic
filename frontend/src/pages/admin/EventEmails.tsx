@@ -43,6 +43,7 @@ export default function EventEmails({
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [showNotify, setShowNotify] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
 
@@ -85,13 +86,19 @@ export default function EventEmails({
     <div className="card mb">
       <div className="row between">
         <h2 style={{ marginBottom: 0 }}>E-Mail-Adressen</h2>
-        <button className="btn secondary small" onClick={() => setShowCreate(true)}>
-          + E-Mail anlegen
-        </button>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn small" onClick={() => setShowNotify(true)}>
+            E-Mail an alle senden
+          </button>
+          <button className="btn secondary small" onClick={() => setShowCreate(true)}>
+            + E-Mail anlegen
+          </button>
+        </div>
       </div>
       <p className="muted" style={{ fontSize: '0.82rem' }}>
         Eltern-Adressen dieses Auftrags. Die E-Mail ist die zentrale Identität und entscheidet, welche
-        Fotos eine Familie sieht.
+        Fotos eine Familie sieht. Mit „E-Mail an alle senden“ benachrichtigst du alle erfassten
+        Adressen, sobald die Galerie bereit ist (Link zur App + Anleitung zur Verifizierung).
       </p>
 
       {error && <Alert kind="error">{error}</Alert>}
@@ -184,7 +191,111 @@ export default function EventEmails({
           }}
         />
       )}
+
+      {showNotify && (
+        <NotifyAllModal
+          eventId={eventId}
+          onClose={() => setShowNotify(false)}
+          onSent={(message) => {
+            setShowNotify(false);
+            setMsg(message);
+            setError('');
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Bestätigungs-Dialog für die Sammel-E-Mail an alle Adressen des Auftrags. Lädt
+ * zuerst die Empfängerzahl und versendet erst nach ausdrücklicher Bestätigung.
+ */
+function NotifyAllModal({
+  eventId,
+  onClose,
+  onSent,
+}: {
+  eventId: string;
+  onClose: () => void;
+  onSent: (msg: string) => void;
+}) {
+  const [info, setInfo] = useState<{ recipientCount: number; devLogOnly: boolean } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api<{ recipientCount: number; devLogOnly: boolean }>(
+      `/api/admin/events/${eventId}/notify`,
+      { admin: true },
+    )
+      .then(setInfo)
+      .catch((err) =>
+        setError(err instanceof ApiError ? err.message : 'Empfänger konnten nicht ermittelt werden.'),
+      )
+      .finally(() => setLoading(false));
+  }, [eventId]);
+
+  const send = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await api<{ sent: number; failed: number; total: number; devLogOnly: boolean }>(
+        `/api/admin/events/${eventId}/notify`,
+        { method: 'POST', admin: true, body: {} },
+      );
+      const extra = res.failed > 0 ? ` ${res.failed} konnten nicht zugestellt werden.` : '';
+      const note = res.devLogOnly
+        ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
+        : '';
+      onSent(`E-Mail an ${res.sent} von ${res.total} Adresse(n) gesendet.${extra}${note}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Versand fehlgeschlagen.');
+      setBusy(false);
+    }
+  };
+
+  const canSend = !loading && !busy && !!info && info.recipientCount > 0;
+
+  return (
+    <Modal
+      title="E-Mail an alle senden"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
+            Abbrechen
+          </button>
+          <button type="button" className="btn" onClick={send} disabled={!canSend}>
+            {busy ? 'Wird gesendet …' : 'Jetzt senden'}
+          </button>
+        </>
+      }
+    >
+      {error && <Alert kind="error">{error}</Alert>}
+      <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
+        Es wird eine E-Mail an <strong>alle erfassten Adressen dieses Auftrags</strong> gesendet.
+        Sie enthält den Link zur App, eine Kurzanleitung zur Verifizierung sowie die Hinweise zum
+        Schutz der Fotos und zur Aufbewahrungsfrist (30 Tage).
+      </p>
+      {loading ? (
+        <p className="muted">Empfänger werden ermittelt …</p>
+      ) : info ? (
+        info.recipientCount === 0 ? (
+          <Alert kind="error">
+            Diesem Auftrag sind noch keine (aktiven) E-Mail-Adressen zugeordnet.
+          </Alert>
+        ) : (
+          <p className="muted" style={{ fontSize: '0.85rem', marginBottom: 0 }}>
+            Empfänger: <strong>{info.recipientCount}</strong> Adresse(n).
+            {info.devLogOnly
+              ? ' Achtung: Kein SMTP konfiguriert – die E-Mails landen nur im Server-Log.'
+              : ''}
+          </p>
+        )
+      ) : null}
+    </Modal>
   );
 }
 
