@@ -184,7 +184,7 @@ export default function GalleryPreview() {
 
       <div className="gp-foot">
         <Link to="/galerie/fotos" className="preview-enter">
-          Zur Auswahl
+          Bestellen
           <span aria-hidden="true">→</span>
         </Link>
       </div>
