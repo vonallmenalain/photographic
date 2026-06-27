@@ -185,9 +185,10 @@ router.get(
     ]);
 
     // Resolve the (internal) child names so each individual order can be titled
-    // "Auftrag – <Name des Kindes>". A child name is only ever shown for THIS
-    // family's own children (those linked to this e-mail); for any other child
-    // we fall back to the neutral order/event name so no foreign name leaks.
+    // "<Auftragstitel> – <Name des Kindes>" (e.g. the event/order name followed
+    // by the child's name). A child name is only ever shown for THIS family's
+    // own children (those linked to this e-mail); for any other child we fall
+    // back to the plain order/event name so no foreign name leaks.
     const linkedRows = await runQuery<{ child_id: string }>(
       col(COL.emailChildren).where('email_id', '==', req.parent!.emailId),
     );
@@ -220,7 +221,7 @@ router.get(
     });
 
     // Build the presentation groups:
-    //  • one section per child ("Auftrag – <Name>") for that child's own photos
+    //  • one section per child ("<Auftragstitel> – <Name>") for that child's own photos
     //  • a single "Gruppenfotos" section pooling every group/class photo of the
     //    family (across all siblings/orders).
     // When two siblings are linked to the same e-mail, the same group photo can
@@ -243,7 +244,8 @@ router.get(
       let section = orderSections.get(sectionKey);
       if (!section) {
         const childName = p.child_id ? childNames.get(p.child_id) : '';
-        const title = childName ? `Auftrag – ${childName}` : p.event_name || 'Auftrag';
+        const orderTitle = p.event_name || 'Auftrag';
+        const title = childName ? `${orderTitle} – ${childName}` : orderTitle;
         section = { id: sectionKey, title, kind: 'order', photos: [] };
         orderSections.set(sectionKey, section);
       }
