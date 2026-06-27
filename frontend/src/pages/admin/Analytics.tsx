@@ -71,7 +71,7 @@ export default function Analytics() {
       <h1>Auswertung</h1>
       <p className="soft">
         Übersicht je Auftrag/Klasse: Umsatz, wie viele Eltern bestellt haben und der zeitliche
-        Verlauf. So siehst du auf einen Blick, wann sich ein Reminder lohnt – und ob er gewirkt hat.
+        Verlauf. So siehst du auf einen Blick, wann sich eine Erinnerung lohnt – und ob sie gewirkt hat.
       </p>
 
       <div className="stat-grid mb">
@@ -151,7 +151,7 @@ function EventCard({
             label="Verifizierte E-Mails"
             value={`${ev.email_verified} von ${ev.email_total}`}
           />
-          <SummaryStat label="Reminder verschickt" value={String(ev.reminders.length)} />
+          <SummaryStat label="Erinnerungen" value={String(ev.reminders.length)} />
           <OrderableUntilStat status={ev.status} expiresAt={ev.expires_at} />
         </div>
       </button>
@@ -276,7 +276,7 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
       setNote('');
       onReload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Reminder konnte nicht gespeichert werden.');
+      setError(err instanceof ApiError ? err.message : 'Erinnerung konnte nicht gespeichert werden.');
     } finally {
       setBusy(false);
     }
@@ -289,10 +289,10 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
 
   return (
     <div className="card" style={{ marginTop: 14, background: 'var(--surface-2)' }}>
-      <strong>Reminder festhalten</strong>
+      <strong>Erinnerung protokollieren</strong>
       <p className="muted" style={{ fontSize: '0.82rem', marginTop: 4 }}>
         Trage ein, wann du eine Einladung oder Erinnerung verschickt hast. Die Markierung erscheint
-        im Umsatzverlauf, damit du den Effekt ablesen kannst. Mit „Reminder per E-Mail versenden“
+        im Umsatzverlauf, damit du den Effekt ablesen kannst. Mit „Erinnerung versenden“
         erinnerst du gezielt Eltern, die noch keine Bestellung erfasst haben.
       </p>
       {error && <Alert kind="error">{error}</Alert>}
@@ -311,7 +311,7 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
           />
         </div>
         <button className="btn small" disabled={busy} onClick={add} type="button">
-          + Reminder
+          + Protokollieren
         </button>
         <button
           className="btn secondary small"
@@ -321,7 +321,7 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
             setShowEmail(true);
           }}
         >
-          Reminder per E-Mail versenden
+          Erinnerung versenden
         </button>
       </div>
       {event.reminders.length > 0 && (
@@ -451,7 +451,7 @@ function ReminderEmailModal({
       const note = res.devLogOnly
         ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
         : '';
-      onSent(`Reminder an ${res.sent} von ${res.total} Adresse(n) gesendet.${extra}${self}${note}`);
+      onSent(`Erinnerung an ${res.sent} von ${res.total} Adresse(n) gesendet.${extra}${self}${note}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Versand fehlgeschlagen.');
       setBusy(false);
@@ -463,7 +463,7 @@ function ReminderEmailModal({
 
   return (
     <Modal
-      title="Reminder per E-Mail versenden"
+      title="Erinnerung versenden"
       width={760}
       onClose={onClose}
       footer={
@@ -692,7 +692,7 @@ function RevenueChart({
                 points={`${cx - 5},${padT} ${cx + 5},${padT} ${cx},${padT + 8}`}
                 fill="#c026d3"
               />
-              <title>{`Reminder ${formatDateShort(r.sent_at)}${r.note ? ` – ${r.note}` : ''}`}</title>
+              <title>{`Erinnerung ${formatDateShort(r.sent_at)}${r.note ? ` – ${r.note}` : ''}`}</title>
             </g>
           );
         })}
@@ -739,7 +739,7 @@ function RevenueChart({
       </svg>
       {reminderMarks.length > 0 && (
         <p className="muted" style={{ fontSize: '0.78rem', marginTop: 4 }}>
-          <span style={{ color: '#c026d3' }}>▮</span> = verschickter Reminder
+          <span style={{ color: '#c026d3' }}>▮</span> = protokollierte Erinnerung
         </p>
       )}
     </div>
