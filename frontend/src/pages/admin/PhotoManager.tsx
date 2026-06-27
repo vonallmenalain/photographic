@@ -296,21 +296,6 @@ export function PhotoManager({
       {mode !== 'assign' && (
       <div className="card mb" id="ev-upload">
         <h2>Fotos hochladen</h2>
-        <p className="muted" style={{ fontSize: '0.85rem' }}>
-          Lade nur die Originale hoch. Thumbnail und Wasserzeichen-Preview werden automatisch erzeugt.
-          Enthält der Dateiname den Namen eines Kindes – auch nur den <strong>Vornamen</strong> samt
-          Nummer wie „Elin 1“ –, wird das Foto automatisch zugeordnet. Passt ein Vorname auf mehrere
-          Kinder, bleibt das Foto bewusst unzugeordnet.
-        </p>
-        <p className="muted" style={{ fontSize: '0.85rem' }}>
-          Enthält der Dateiname <strong>„Gruppenfoto“</strong>, <strong>„Klassenfoto“</strong> oder{' '}
-          <strong>„Klassenspiegel“</strong>, wird das Foto automatisch als Gruppen-/Klassenfoto
-          markiert und für die ganze Klasse sichtbar gesetzt.
-        </p>
-        <p className="muted" style={{ fontSize: '0.85rem' }}>
-          Die Fotos werden einzeln nacheinander hochgeladen und verarbeitet – so funktioniert auch
-          das Hochladen vieler Fotos auf einmal zuverlässig.
-        </p>
         {uploadMsg && <Alert kind="success">{uploadMsg}</Alert>}
         {duplicateWarning && <Alert kind="error">{duplicateWarning}</Alert>}
         <div
