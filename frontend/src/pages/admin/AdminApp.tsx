@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { api, getAdminToken } from '../../api/client';
+import { api } from '../../api/client';
 import { Spinner } from '../../components/common';
 import AdminLogin from './AdminLogin';
 import AdminLayout from './AdminLayout';
@@ -21,10 +21,8 @@ function AuthGatedAdmin() {
   const [username, setUsername] = useState('');
 
   const check = async () => {
-    if (!getAdminToken()) {
-      setState('out');
-      return;
-    }
+    // Auth is carried by the httpOnly admin cookie. We simply ask the backend who
+    // we are; a 401 (no/invalid cookie) means "not logged in".
     try {
       const me = await api<{ username: string }>('/api/admin/me', { admin: true });
       setUsername(me.username);

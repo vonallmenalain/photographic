@@ -1,15 +1,5 @@
 export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000').replace(/\/$/, '');
 
-const ADMIN_TOKEN_KEY = 'admin_token';
-
-export function getAdminToken(): string | null {
-  return localStorage.getItem(ADMIN_TOKEN_KEY);
-}
-export function setAdminToken(token: string | null) {
-  if (token) localStorage.setItem(ADMIN_TOKEN_KEY, token);
-  else localStorage.removeItem(ADMIN_TOKEN_KEY);
-}
-
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -21,6 +11,14 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: string;
   body?: unknown;
+  /**
+   * Marks a request as belonging to the admin area. Admin authentication is
+   * carried solely by the httpOnly `admin_token` cookie (set on login and sent
+   * automatically via `credentials: 'include'`). The token is intentionally NOT
+   * stored in localStorage anymore, so it cannot be stolen via XSS. This flag is
+   * kept for readability/back-compat at the call sites and currently has no
+   * additional effect.
+   */
   admin?: boolean;
   formData?: FormData;
 }
@@ -32,11 +30,6 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
     credentials: 'include',
     headers,
   };
-
-  if (opts.admin) {
-    const token = getAdminToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-  }
 
   if (opts.formData) {
     init.body = opts.formData;
@@ -56,11 +49,12 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
   return data as T;
 }
 
-/** Fetches an admin-protected image (bearer auth) and returns an object URL. */
+/**
+ * Fetches an admin-protected image and returns an object URL. Authentication is
+ * carried by the httpOnly `admin_token` cookie (`credentials: 'include'`).
+ */
 export async function fetchAdminImage(path: string): Promise<string> {
-  const token = getAdminToken();
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     credentials: 'include',
   });
   if (!res.ok) throw new ApiError(res.status, 'Bild konnte nicht geladen werden.');

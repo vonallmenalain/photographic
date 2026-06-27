@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { api, setAdminToken } from '../../api/client';
+import { api } from '../../api/client';
 
 const links = [
   { to: 'events', label: 'Aufträge' },
@@ -20,12 +20,12 @@ export default function AdminLayout({
   children: ReactNode;
 }) {
   const logout = async () => {
+    // Clears the httpOnly admin cookie on the server.
     try {
       await api('/api/admin/logout', { method: 'POST', admin: true });
     } catch {
       /* ignore */
     }
-    setAdminToken(null);
     onLogout();
   };
 

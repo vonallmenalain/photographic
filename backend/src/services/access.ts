@@ -1,4 +1,5 @@
 import { COL, col, getById, runQuery } from '../db';
+import { eventIsAvailable } from './events';
 
 export interface VisiblePhoto {
   id: string;
@@ -79,13 +80,6 @@ async function directPhotoIds(emailId: string): Promise<string[]> {
   return rows.map((r) => r.photo_id);
 }
 
-function eventIsLive(ev: EventDoc | null): boolean {
-  if (!ev) return false;
-  if (ev.status !== 'published') return false;
-  if (ev.expires_at && new Date(ev.expires_at).getTime() <= Date.now()) return false;
-  return true;
-}
-
 function photoIsLive(p: PhotoDoc): boolean {
   // Per-photo publishing was removed; visibility is gated by the event status
   // (and the explicit link). A photo only stays hidden when it was disabled
@@ -156,7 +150,7 @@ export async function getVisiblePhotos(emailId: string): Promise<VisiblePhoto[]>
   const visible: VisiblePhoto[] = [];
   for (const p of livePhotos) {
     const ev = events.get(p.event_id) ?? null;
-    if (!eventIsLive(ev)) continue;
+    if (!eventIsAvailable(ev)) continue;
     visible.push({
       id: p.id,
       event_id: p.event_id,
