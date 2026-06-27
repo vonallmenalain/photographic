@@ -1193,8 +1193,6 @@ const mappingSchema = z
   .object({
     email: z.number().int().nonnegative().optional(),
     name: z.number().int().nonnegative().optional(),
-    first_name: z.number().int().nonnegative().optional(),
-    last_name: z.number().int().nonnegative().optional(),
     child: z.number().int().nonnegative().optional(),
     event: z.number().int().nonnegative().optional(),
     note: z.number().int().nonnegative().optional(),
