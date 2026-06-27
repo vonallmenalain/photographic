@@ -86,8 +86,9 @@ export function SendToSelfCheckbox({
   const hasEmail = !!adminEmail;
   return (
     <label
-      className="row"
       style={{
+        display: 'grid',
+        gridTemplateColumns: 'auto minmax(0, 1fr)',
         alignItems: 'center',
         gap: 10,
         marginTop: 12,
@@ -101,8 +102,9 @@ export function SendToSelfCheckbox({
         checked={checked && hasEmail}
         disabled={!hasEmail}
         onChange={(e) => onChange(e.target.checked)}
+        style={{ width: 'auto', margin: 0 }}
       />
-      <span>
+      <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
         E-Mail an mich senden
         {hasEmail ? (
           <span className="muted"> ({adminEmail})</span>

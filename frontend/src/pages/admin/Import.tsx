@@ -219,10 +219,6 @@ export default function AuftraegeErfassen() {
   return (
     <div>
       <h1>Aufträge erfassen</h1>
-      <p className="soft">
-        Erfasse einen Auftrag Schritt für Schritt – von den Daten über die Fotos bis zum Versand an
-        die Eltern. Jeder Schritt wird grün, sobald er abgeschlossen ist.
-      </p>
 
       <WizardStepper
         labels={STEP_LABELS}
@@ -266,9 +262,6 @@ export default function AuftraegeErfassen() {
                     + Kind anlegen
                   </button>
                 </div>
-                <p className="muted" style={{ fontSize: '0.82rem' }}>
-                  Namen sind nur intern – sie werden Eltern niemals angezeigt.
-                </p>
                 {children.length === 0 ? (
                   <p className="muted">Noch keine Kinder angelegt.</p>
                 ) : (
@@ -305,11 +298,7 @@ export default function AuftraegeErfassen() {
       {activeStep === 2 &&
         (eventId ? (
           <div>
-            <p className="soft" style={{ marginTop: 0 }}>
-              Lade die Fotos hoch (eines nach dem anderen, mit Fortschrittsbalken). Enthält der
-              Dateiname den Namen eines Kindes, wird das Foto automatisch zugeordnet. Die Zuordnung
-              prüfst du im nächsten Schritt.
-            </p>
+            <ChildrenOverview children={children} />
             <PhotoManager
               eventId={eventId}
               children={children}
@@ -533,6 +522,26 @@ function AddChildModal({
   );
 }
 
+// Compact list of all children of the order, shown above the photo upload so
+// the photographer can verify they are uploading photos of the right kids.
+function ChildrenOverview({ children }: { children: ManagedChild[] }) {
+  if (children.length === 0) return null;
+  return (
+    <div className="card mb">
+      <h2 style={{ marginTop: 0, marginBottom: 8 }}>
+        Kinder dieses Auftrags ({children.length})
+      </h2>
+      <div>
+        {children.map((c) => (
+          <span className="chip" key={c.id}>
+            {c.name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function NeedsOrderHint({ onBack }: { onBack: () => void }) {
   return (
     <div className="card mb">
@@ -718,26 +727,6 @@ function Step1Data({
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const downloadTemplate = () => {
-    const rowsT = [
-      ['E-Mail', 'E-Mail 2', 'Kind', 'Name Eltern', 'Auftrag'],
-      ['anna@beispiel.de, oma@beispiel.de', 'papa@beispiel.de', 'Lena Müller', 'Familie Müller', 'Klasse 3b'],
-      ['paul@beispiel.de', '', 'Tim Weber, Lisa Weber', 'Paul Weber', 'Klasse 3b'],
-    ];
-    const csv = rowsT
-      .map((r) => r.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
-      .join('\r\n');
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'import-vorlage.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   const resetImport = () => {
     setText('');
     setRows([]);
@@ -894,11 +883,6 @@ function Step1Data({
   return (
     <div>
       <div ref={topRef} />
-      <p className="soft" style={{ marginTop: 0 }}>
-        Lege E-Mail-Adressen, Kinder und ihre Verknüpfungen an – per Kopieren &amp; Einfügen aus
-        Excel oder über eine CSV-/Excel-Datei. Dieser Schritt ist abgeschlossen, sobald du unten auf
-        „Jetzt importieren“ klickst.
-      </p>
 
       {done && (
         <Alert kind="success">
@@ -938,14 +922,6 @@ function Step1Data({
         <p className="muted" style={{ fontSize: '0.85rem' }}>
           Empfohlene Spalten: <strong>E-Mail</strong>, <strong>Kind</strong> (vollständiger Name),
           {' '}optional <strong>Name Eltern</strong>, <strong>Auftrag</strong> und <strong>Notiz</strong>.
-          {' '}Die Reihenfolge und Schreibweise der Spalten ist egal – sie werden automatisch erkannt
-          {' '}und lassen sich unten anpassen.
-        </p>
-        <p className="muted" style={{ fontSize: '0.85rem' }}>
-          <strong>Mehrere E-Mail-Adressen pro Kind</strong> sind möglich: Trage entweder mehrere
-          {' '}Adressen durch Komma getrennt in <strong>eine</strong> E-Mail-Spalte ein
-          {' '}(z. B. <em>mama@…, papa@…</em>) oder lege weitere E-Mail-Spalten an
-          {' '}(z. B. <strong>E-Mail 2</strong>). Alle erkannten Adressen werden mit dem Kind verknüpft.
         </p>
         <textarea
           value={text}
@@ -958,17 +934,14 @@ function Step1Data({
           <button className="btn" onClick={previewFromPaste} disabled={loading || !text.trim()}>
             Tabelle auswerten
           </button>
-          <button className="btn secondary" type="button" onClick={() => setText(EXAMPLE)}>
-            Beispiel einfügen
+          <button className="btn secondary" type="button" onClick={() => fileRef.current?.click()}>
+            Datei auswählen
           </button>
-          <button className="btn secondary" type="button" onClick={downloadTemplate}>
-            Excel-Vorlage herunterladen
-          </button>
-          <span className="muted" style={{ fontSize: '0.85rem' }}>oder</span>
           <input
             ref={fileRef}
             type="file"
             accept=".csv,.tsv,.txt,.xlsx,.xls"
+            style={{ display: 'none' }}
             onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
           />
         </div>

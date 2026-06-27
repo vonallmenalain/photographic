@@ -95,13 +95,6 @@ export default function EventEmails({
           </button>
         </div>
       </div>
-      <p className="muted" style={{ fontSize: '0.82rem' }}>
-        Eltern-Adressen dieses Auftrags. Die E-Mail ist die zentrale Identität und entscheidet, welche
-        Fotos eine Familie sieht. Mit „Einladung per E-Mail senden“ benachrichtigst du die erfassten
-        Adressen, sobald die Galerie bereit ist (Link zur App + Anleitung zur Verifizierung). Im Popup
-        kannst du einzelne Adressen abwählen – standardmässig sind alle ausgewählt.
-      </p>
-
       {error && <Alert kind="error">{error}</Alert>}
       {msg && <Alert kind="success">{msg}</Alert>}
 
@@ -337,20 +330,18 @@ export function NotifyAllModal({
           </div>
           <RecipientCheckboxList>
             {info.recipients.map((r) => (
-              <label key={r.id} className="row" style={recipientRowStyle}>
+              <label key={r.id} style={recipientRowStyle}>
                 <input
                   type="checkbox"
                   checked={selected.has(r.id)}
                   onChange={() => toggle(r.id)}
-                  style={{ marginRight: 10, flex: 'none' }}
+                  style={{ width: 'auto', margin: 0 }}
                 />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ wordBreak: 'break-all' }}>{r.email}</span>
+                <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                  {r.email}
                   {r.name ? <span className="muted"> · {r.name}</span> : null}
                 </span>
-                <span style={{ flexShrink: 0 }}>
-                  <StatusBadge status={r.status === 'verified' ? 'verified' : 'not_verified'} />
-                </span>
+                <StatusBadge status={r.status === 'verified' ? 'verified' : 'not_verified'} />
               </label>
             ))}
           </RecipientCheckboxList>
@@ -371,10 +362,11 @@ export function NotifyAllModal({
 }
 
 const recipientRowStyle: React.CSSProperties = {
-  flexWrap: 'nowrap',
+  display: 'grid',
+  gridTemplateColumns: 'auto minmax(0, 1fr) auto',
   alignItems: 'center',
-  gap: 8,
-  padding: '7px 10px',
+  gap: 10,
+  padding: '8px 12px',
   borderBottom: '1px solid var(--border)',
   fontSize: '0.85rem',
   cursor: 'pointer',
