@@ -18,6 +18,7 @@ const TYPE_LABELS: Record<string, string> = {
   wrong_email: 'Falsche E-Mail',
   link_problem: 'Link-/Code-Problem',
   purchase_problem: 'Kauf-Problem',
+  allow_additional_email: 'Weitere E-Mail-Adresse freigeben',
   other: 'Sonstiges',
 };
 
