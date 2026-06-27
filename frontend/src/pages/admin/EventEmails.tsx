@@ -228,7 +228,7 @@ interface NotifyInfo {
  * mich senden“ aktivieren, um eine Kopie an das angemeldete Admin-Konto zu
  * schicken.
  */
-function NotifyAllModal({
+export function NotifyAllModal({
   eventId,
   onClose,
   onSent,

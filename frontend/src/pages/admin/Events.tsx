@@ -4,6 +4,10 @@ import { api, ApiError } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
 import { formatDateShort } from '../../lib/format';
 
+// Note: new orders are no longer created here. Capturing a new Auftrag (data
+// import → photos → publish → invite) now happens in the guided "Aufträge
+// erfassen" wizard. This page is purely the list of existing orders.
+
 interface EventRow {
   id: string;
   name: string;
@@ -18,9 +22,7 @@ interface EventRow {
 export default function Events() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [name, setName] = useState('');
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
 
   const load = () =>
     api<{ events: EventRow[] }>('/api/admin/events', { admin: true })
@@ -30,21 +32,6 @@ export default function Events() {
   useEffect(() => {
     load();
   }, []);
-
-  const create = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setBusy(true);
-    try {
-      await api('/api/admin/events', { method: 'POST', admin: true, body: { name } });
-      setName('');
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Konnte nicht angelegt werden.');
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const remove = async (e: React.MouseEvent, ev: EventRow) => {
     e.preventDefault();
@@ -68,26 +55,25 @@ export default function Events() {
 
   return (
     <div>
-      <h1>Aufträge</h1>
-      <div className="card mb">
-        {error && <Alert kind="error">{error}</Alert>}
-        <form onSubmit={create} className="row">
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <input
-              placeholder="Titel des Auftrags (z. B. Kindergarten Sonnenschein, Klasse 3b)"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
-          <button className="btn" disabled={busy || !name.trim()}>
-            Auftrag anlegen
-          </button>
-        </form>
+      <div className="row between">
+        <h1 style={{ marginBottom: 4 }}>Aufträge</h1>
+        <Link to="/admin/import" className="btn">
+          + Auftrag erfassen
+        </Link>
       </div>
+      <p className="soft" style={{ marginTop: 0 }}>
+        Übersicht aller Aufträge. Einen neuen Auftrag legst du über{' '}
+        <Link to="/admin/import">Aufträge erfassen</Link> an – dort wirst du Schritt für Schritt
+        durch Daten, Fotos, Veröffentlichung und Versand geführt.
+      </p>
+
+      {error && <Alert kind="error">{error}</Alert>}
 
       {events.length === 0 ? (
-        <p className="muted">Noch keine Aufträge. Lege oben deinen ersten Auftrag an.</p>
+        <p className="muted">
+          Noch keine Aufträge. Erfasse deinen ersten Auftrag über{' '}
+          <Link to="/admin/import">Aufträge erfassen</Link>.
+        </p>
       ) : (
         <div className="job-grid">
           {events.map((ev) => (
