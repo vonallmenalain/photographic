@@ -426,7 +426,15 @@ router.post(
   asyncHandler(async (req, res) => {
     const { type, message, email } = parse(
       z.object({
-        type: z.enum(['wrong_photo', 'missing_photo', 'wrong_email', 'link_problem', 'purchase_problem', 'other']),
+        type: z.enum([
+          'wrong_photo',
+          'missing_photo',
+          'wrong_email',
+          'link_problem',
+          'purchase_problem',
+          'allow_additional_email',
+          'other',
+        ]),
         message: z.string().trim().min(1).max(2000),
         email: emailSchema.optional(),
       }),

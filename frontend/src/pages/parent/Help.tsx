@@ -8,6 +8,10 @@ const TYPES = [
   { value: 'wrong_photo', label: 'Ein Foto scheint nicht zu meinem Kind zu gehören' },
   { value: 'link_problem', label: 'Problem mit dem Bestätigungslink / Code' },
   { value: 'purchase_problem', label: 'Problem beim Kauf' },
+  {
+    value: 'allow_additional_email',
+    label: 'Ich möchte einer weiteren E-Mail-Adresse erlauben, meine Fotos zu sehen und zu kaufen',
+  },
   { value: 'other', label: 'Etwas anderes' },
 ];
 
