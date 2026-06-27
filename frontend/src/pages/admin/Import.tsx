@@ -365,11 +365,6 @@ export default function AuftraegeErfassen() {
                 <Alert kind="success">
                   Der Auftrag ist veröffentlicht – Schritt 4 ist abgeschlossen.
                 </Alert>
-                <p className="soft" style={{ marginTop: 14 }}>
-                  Alle Schritte abgeschlossen. Der Auftrag erscheint nun unter{' '}
-                  <Link to="/admin/events">Aufträge</Link>. Die Eltern lädst du dort über die
-                  E-Mail-Adressen des Auftrags ein.
-                </p>
                 <div className="row" style={{ marginTop: 8 }}>
                   <button className="btn ghost" type="button" onClick={unpublish} disabled={busy}>
                     Auf „In Bearbeitung“ zurücksetzen
