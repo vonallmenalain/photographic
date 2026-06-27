@@ -50,22 +50,34 @@ export default function EventDetail() {
   const [emailModalPhoto, setEmailModalPhoto] = useState<Photo | null>(null);
   const [zoomPhoto, setZoomPhoto] = useState<Photo | null>(null);
   const [showAddChild, setShowAddChild] = useState(false);
+  const [emailCount, setEmailCount] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const [photoFilter, setPhotoFilter] = useState<'all' | 'unassigned' | 'class' | 'duplicates'>('all');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const load = async () => {
     try {
-      const res = await api<{ event: EventObj; children: Child[]; photos: Photo[] }>(
-        `/api/admin/events/${id}`,
-        { admin: true },
-      );
+      const [res, emailRes] = await Promise.all([
+        api<{ event: EventObj; children: Child[]; photos: Photo[] }>(`/api/admin/events/${id}`, {
+          admin: true,
+        }),
+        api<{ emails: { id: string }[] }>(`/api/admin/emails?eventId=${id}`, { admin: true }).catch(
+          () => ({ emails: [] as { id: string }[] }),
+        ),
+      ]);
       setEvent(res.event);
       setChildren(res.children);
       setPhotos(res.photos);
+      setEmailCount(emailRes.emails.length);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Auftrag konnte nicht geladen werden.');
     } finally {
       setLoading(false);
     }
   };
+
+  const scrollToCard = (elId: string) =>
+    document.getElementById(elId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   useEffect(() => {
     load();
@@ -100,7 +112,18 @@ export default function EventDetail() {
   const upload = async () => {
     const files = fileRef.current?.files;
     if (!files || files.length === 0) return;
-    const fileList = Array.from(files);
+    await uploadFiles(Array.from(files));
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (uploading) return;
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+    if (files.length > 0) void uploadFiles(files);
+  };
+
+  const uploadFiles = async (fileList: File[]) => {
     setUploading(true);
     setUploadMsg('');
     setError('');
@@ -240,6 +263,63 @@ export default function EventDetail() {
     }
   };
 
+  const toggleSelect = (photoId: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(photoId)) next.delete(photoId);
+      else next.add(photoId);
+      return next;
+    });
+
+  // Applies the same change to every selected photo, then reloads once.
+  const bulkPatch = async (data: Record<string, unknown>) => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    setError('');
+    try {
+      await Promise.all(
+        ids.map((pid) => api(`/api/admin/photos/${pid}`, { method: 'PATCH', admin: true, body: data })),
+      );
+      setSelected(new Set());
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Aktion fehlgeschlagen.');
+    }
+  };
+
+  const bulkDelete = async () => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    if (!confirm(`${ids.length} ausgewählte Foto(s) wirklich löschen? Dies entfernt auch alle Varianten.`))
+      return;
+    setError('');
+    try {
+      await Promise.all(ids.map((pid) => api(`/api/admin/photos/${pid}`, { method: 'DELETE', admin: true })));
+      setSelected(new Set());
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Löschen fehlgeschlagen.');
+    }
+  };
+
+  const publish = async () => {
+    setError('');
+    if (photos.length === 0) {
+      alert('Es sind noch keine Fotos in diesem Auftrag. Bitte lade zuerst Fotos hoch.');
+      return;
+    }
+    const unassigned = photos.filter((p) => !p.is_class_photo && !p.child_id).length;
+    if (
+      unassigned > 0 &&
+      !confirm(
+        `${unassigned} Foto(s) sind noch keinem Kind zugeordnet und keine Gruppen-/Klassenfotos – sie werden für niemanden sichtbar sein. Trotzdem jetzt veröffentlichen?`,
+      )
+    ) {
+      return;
+    }
+    await patchEvent({ status: 'published' });
+  };
+
   if (loading) return <Spinner />;
   if (!event) return <Alert kind="error">{error || 'Auftrag nicht gefunden.'}</Alert>;
 
@@ -255,6 +335,89 @@ export default function EventDetail() {
     return !!key && (filenameCounts.get(key) ?? 0) > 1;
   };
   const duplicateCount = photos.filter(isDuplicateFilename).length;
+  const unassignedCount = photos.filter((p) => !p.is_class_photo && !p.child_id).length;
+  const classCount = photos.filter((p) => !!p.is_class_photo).length;
+
+  const displayedPhotos = photos.filter((p) => {
+    if (photoFilter === 'unassigned') return !p.is_class_photo && !p.child_id;
+    if (photoFilter === 'class') return !!p.is_class_photo;
+    if (photoFilter === 'duplicates') return isDuplicateFilename(p);
+    return true;
+  });
+
+  const isPublished = event.status === 'published';
+  const checklist = [
+    {
+      label: 'Kinder & E-Mails erfassen',
+      done: children.length > 0 && emailCount > 0,
+      detail: `${children.length} Kind(er) · ${emailCount} E-Mail-Adresse(n)`,
+      action: (
+        <div className="row" style={{ gap: 8 }}>
+          <Link to={`/admin/import?eventId=${event.id}`} className="btn secondary small">
+            Importieren
+          </Link>
+          <button className="btn ghost small" onClick={() => scrollToCard('ev-emails')}>
+            Zu E-Mails &amp; Kindern
+          </button>
+        </div>
+      ),
+    },
+    {
+      label: 'Fotos hochladen',
+      done: photos.length > 0,
+      detail: `${photos.length} Foto(s) hochgeladen`,
+      action: (
+        <button className="btn ghost small" onClick={() => scrollToCard('ev-upload')}>
+          Zum Upload
+        </button>
+      ),
+    },
+    {
+      label: 'Zuordnung prüfen',
+      done: photos.length > 0 && unassignedCount === 0 && duplicateCount === 0,
+      detail:
+        photos.length === 0
+          ? 'Noch keine Fotos'
+          : `${unassignedCount} unzugeordnet · ${duplicateCount} Duplikat(e)`,
+      action: (
+        <button className="btn ghost small" onClick={() => scrollToCard('ev-photos')}>
+          Zur Zuordnung
+        </button>
+      ),
+    },
+    {
+      label: 'Veröffentlichen',
+      done: isPublished,
+      detail: isPublished
+        ? 'Der Auftrag ist veröffentlicht – Fotos sind für berechtigte Eltern sichtbar.'
+        : 'Sichtbar für Eltern erst nach dem Veröffentlichen.',
+      action: isPublished ? (
+        <button className="btn ghost small" onClick={() => patchEvent({ status: 'draft' })}>
+          Auf Entwurf zurücksetzen
+        </button>
+      ) : (
+        <button className="btn small" onClick={publish}>
+          Jetzt veröffentlichen
+        </button>
+      ),
+    },
+    {
+      label: 'Eltern einladen',
+      done: false,
+      optional: true,
+      detail: 'Sende den Eltern den Link zur Galerie (am besten nach dem Veröffentlichen).',
+      action: (
+        <button
+          className="btn ghost small"
+          onClick={() => scrollToCard('ev-emails')}
+          disabled={!isPublished}
+          title={isPublished ? '' : 'Erst veröffentlichen, dann einladen'}
+        >
+          Einladung senden
+        </button>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -266,6 +429,28 @@ export default function EventDetail() {
         <StatusBadge status={event.status} />
       </div>
       {error && <Alert kind="error">{error}</Alert>}
+
+      {/* Guided publication checklist */}
+      <div className="card mb publish-checklist">
+        <h2 style={{ marginTop: 0 }}>So veröffentlichst du diesen Auftrag</h2>
+        <ol className="checklist">
+          {checklist.map((step, i) => (
+            <li key={step.label} className={`checklist-step${step.done ? ' done' : ''}`}>
+              <span className="checklist-marker" aria-hidden="true">
+                {step.done ? '✓' : i + 1}
+              </span>
+              <div className="checklist-body">
+                <div className="checklist-title">
+                  {step.label}
+                  {step.optional ? <span className="muted"> (optional)</span> : null}
+                </div>
+                <div className="muted checklist-detail">{step.detail}</div>
+              </div>
+              <div className="checklist-action">{step.action}</div>
+            </li>
+          ))}
+        </ol>
+      </div>
 
       {/* Auftrag settings */}
       <div className="card mb">
@@ -327,10 +512,12 @@ export default function EventDetail() {
       </div>
 
       {/* E-Mail-Adressen (Eltern) dieses Auftrags */}
-      <EventEmails eventId={event.id} eventChildren={children} />
+      <div id="ev-emails">
+        <EventEmails eventId={event.id} eventChildren={children} />
+      </div>
 
       {/* Upload */}
-      <div className="card mb">
+      <div className="card mb" id="ev-upload">
         <h2>Fotos hochladen</h2>
         <p className="muted" style={{ fontSize: '0.85rem' }}>
           Lade nur die Originale hoch. Thumbnail und Wasserzeichen-Preview werden automatisch erzeugt.
@@ -349,22 +536,35 @@ export default function EventDetail() {
         </p>
         {uploadMsg && <Alert kind="success">{uploadMsg}</Alert>}
         {duplicateWarning && <Alert kind="error">{duplicateWarning}</Alert>}
-        <div className="row">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            multiple
-            disabled={uploading}
-            style={{ flex: 1 }}
-          />
-          <button className="btn" onClick={upload} disabled={uploading}>
-            {uploading
-              ? uploadProgress
-                ? `Wird hochgeladen … (${uploadProgress.done}/${uploadProgress.total})`
-                : 'Wird hochgeladen …'
-              : 'Hochladen & verarbeiten'}
-          </button>
+        <div
+          className={`dropzone${dragOver ? ' is-dragover' : ''}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!uploading) setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+        >
+          <p className="muted" style={{ margin: '0 0 10px', fontSize: '0.85rem' }}>
+            Fotos hierher ziehen &amp; ablegen – oder Dateien auswählen.
+          </p>
+          <div className="row">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              multiple
+              disabled={uploading}
+              style={{ flex: 1 }}
+            />
+            <button className="btn" onClick={upload} disabled={uploading}>
+              {uploading
+                ? uploadProgress
+                  ? `Wird hochgeladen … (${uploadProgress.done}/${uploadProgress.total})`
+                  : 'Wird hochgeladen …'
+                : 'Hochladen & verarbeiten'}
+            </button>
+          </div>
         </div>
         {uploadProgress && (
           <div style={{ marginTop: 12 }} aria-live="polite">
@@ -408,7 +608,7 @@ export default function EventDetail() {
       </div>
 
       {/* Photos */}
-      <div className="card">
+      <div className="card" id="ev-photos">
         <h2>Fotos &amp; Zuordnung</h2>
         {duplicateCount > 0 && (
           <Alert kind="error">
@@ -417,11 +617,72 @@ export default function EventDetail() {
             doppelt hochgeladen wurde.
           </Alert>
         )}
+
+        {photos.length > 0 && (
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            <PhotoFilterButton active={photoFilter === 'all'} onClick={() => setPhotoFilter('all')}>
+              Alle ({photos.length})
+            </PhotoFilterButton>
+            <PhotoFilterButton
+              active={photoFilter === 'unassigned'}
+              onClick={() => setPhotoFilter('unassigned')}
+            >
+              Unzugeordnet ({unassignedCount})
+            </PhotoFilterButton>
+            <PhotoFilterButton active={photoFilter === 'class'} onClick={() => setPhotoFilter('class')}>
+              Klassenfotos ({classCount})
+            </PhotoFilterButton>
+            <PhotoFilterButton
+              active={photoFilter === 'duplicates'}
+              onClick={() => setPhotoFilter('duplicates')}
+            >
+              Duplikate ({duplicateCount})
+            </PhotoFilterButton>
+          </div>
+        )}
+
+        {selected.size > 0 && (
+          <div className="bulk-bar">
+            <strong>{selected.size} ausgewählt</strong>
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                const v = e.target.value;
+                e.target.value = '';
+                if (v) bulkPatch({ child_id: v, status: 'assigned', is_class_photo: false, visible_to_event: false });
+              }}
+              style={{ width: 200 }}
+              aria-label="Kind für Auswahl zuweisen"
+            >
+              <option value="">Kind zuweisen …</option>
+              {children.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn secondary small"
+              onClick={() => bulkPatch({ is_class_photo: true, visible_to_event: true, child_id: null })}
+            >
+              Als Gruppenfoto markieren
+            </button>
+            <button className="btn ghost small" style={{ color: 'var(--danger)' }} onClick={bulkDelete}>
+              Löschen
+            </button>
+            <button className="btn ghost small" onClick={() => setSelected(new Set())}>
+              Auswahl aufheben
+            </button>
+          </div>
+        )}
+
         {photos.length === 0 ? (
           <p className="muted">Noch keine Fotos in diesem Auftrag.</p>
+        ) : displayedPhotos.length === 0 ? (
+          <p className="muted">Keine Fotos für diesen Filter.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {photos.map((p) => (
+            {displayedPhotos.map((p) => (
               <div
                 key={p.id}
                 className="admin-photo-row"
@@ -434,6 +695,13 @@ export default function EventDetail() {
                   borderRadius: 12,
                 }}
               >
+                <input
+                  type="checkbox"
+                  checked={selected.has(p.id)}
+                  onChange={() => toggleSelect(p.id)}
+                  style={{ width: 'auto', flex: 'none' }}
+                  aria-label={`Foto ${p.original_filename} auswählen`}
+                />
                 <AdminThumb photoId={p.id} onClick={() => setZoomPhoto(p)} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -588,6 +856,22 @@ export default function EventDetail() {
 
       {zoomPhoto && <AdminPhotoLightbox photo={zoomPhoto} onClose={() => setZoomPhoto(null)} />}
     </div>
+  );
+}
+
+function PhotoFilterButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button type="button" className={`btn small ${active ? '' : 'ghost'}`} onClick={onClick}>
+      {children}
+    </button>
   );
 }
 
