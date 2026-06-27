@@ -62,10 +62,23 @@ const STATUS_OPTIONS = [
 
 type Filter = 'all' | 'print' | 'pending';
 
+const FILTER_STORAGE_KEY = 'admin_orders_filter';
+
+function initialFilter(): Filter {
+  const stored = sessionStorage.getItem(FILTER_STORAGE_KEY);
+  return stored === 'print' || stored === 'pending' || stored === 'all' ? stored : 'all';
+}
+
 export default function AdminOrders() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Filter>('print');
+  // Default to "Alle" so digital-only orders are never hidden behind a filter,
+  // and remember the admin's last choice for the rest of the session.
+  const [filter, setFilterState] = useState<Filter>(initialFilter);
+  const setFilter = (f: Filter) => {
+    sessionStorage.setItem(FILTER_STORAGE_KEY, f);
+    setFilterState(f);
+  };
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [details, setDetails] = useState<Record<string, OrderDetail>>({});
   const [loadingDetail, setLoadingDetail] = useState<Record<string, boolean>>({});
@@ -138,20 +151,21 @@ export default function AdminOrders() {
     <div>
       <h1>Bestellungen</h1>
       <p className="soft">
-        Im Fokus stehen Bestellungen mit einem Produkt zum Ausdrucken. Klicke auf eine Bestellung,
-        um alle Details aufzuklappen. Den Status kannst du direkt hier anpassen.
+        Alle bestätigten Bestellungen. Klicke auf eine Bestellung, um alle Details aufzuklappen. Den
+        Status kannst du direkt hier anpassen. Mit den Filtern kannst du gezielt nur Bestellungen mit
+        Druckprodukt oder pendente Bestellungen anzeigen.
       </p>
 
       <div className="card mb">
         <div className="row" style={{ gap: 8 }}>
+          <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
+            Alle ({counts.all})
+          </FilterButton>
           <FilterButton active={filter === 'print'} onClick={() => setFilter('print')}>
             Nur mit Druck ({counts.print})
           </FilterButton>
           <FilterButton active={filter === 'pending'} onClick={() => setFilter('pending')}>
             Pendent ({counts.pending})
-          </FilterButton>
-          <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
-            Alle ({counts.all})
           </FilterButton>
         </div>
       </div>
