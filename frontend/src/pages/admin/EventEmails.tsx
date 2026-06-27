@@ -300,7 +300,7 @@ function NotifyAllModal({
   return (
     <Modal
       title="Einladung per E-Mail senden"
-      width={560}
+      width={680}
       onClose={onClose}
       footer={
         <>
@@ -342,13 +342,15 @@ function NotifyAllModal({
                   type="checkbox"
                   checked={selected.has(r.id)}
                   onChange={() => toggle(r.id)}
-                  style={{ marginRight: 10 }}
+                  style={{ marginRight: 10, flex: 'none' }}
                 />
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ wordBreak: 'break-all' }}>{r.email}</span>
                   {r.name ? <span className="muted"> · {r.name}</span> : null}
                 </span>
-                <StatusBadge status={r.status} />
+                <span style={{ flexShrink: 0 }}>
+                  <StatusBadge status={r.status} />
+                </span>
               </label>
             ))}
           </RecipientCheckboxList>
@@ -369,6 +371,7 @@ function NotifyAllModal({
 }
 
 const recipientRowStyle: React.CSSProperties = {
+  flexWrap: 'nowrap',
   alignItems: 'center',
   gap: 8,
   padding: '7px 10px',
