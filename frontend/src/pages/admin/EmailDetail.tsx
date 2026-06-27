@@ -34,15 +34,6 @@ interface Child {
   name: string;
 }
 
-const EMAIL_STATUSES = [
-  'created',
-  'not_verified',
-  'verification_sent',
-  'verified',
-  'disabled',
-  'support',
-] as const;
-
 export default function EmailDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -144,28 +135,27 @@ export default function EmailDetail() {
       </p>
       <div className="row between">
         <h1 style={{ marginBottom: 4 }}>{email.email}</h1>
-        <StatusBadge status={email.status} />
+        <StatusBadge status={email.status === 'verified' ? 'verified' : 'not_verified'} />
       </div>
       {error && <Alert kind="error">{error}</Alert>}
       {msg && <Alert kind="success">{msg}</Alert>}
 
       <div className="card mb">
         <h2>Einstellungen</h2>
-        <div className="row">
-          <div style={{ minWidth: 220 }}>
-            <label>Status</label>
-            <select value={email.status} onChange={(e) => patch({ status: e.target.value })}>
-              {EMAIL_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label>Verifizierung</label>
+          <div className="row" style={{ alignItems: 'center', gap: 10 }}>
+            <StatusBadge status={email.status === 'verified' ? 'verified' : 'not_verified'} />
+            <span className="muted" style={{ fontSize: '0.82rem' }}>
+              {email.status === 'verified'
+                ? `Von den Eltern bestätigt${email.verified_at ? ` am ${formatDate(email.verified_at)}` : ''}.`
+                : 'Noch nicht von den Eltern bestätigt. Der Status wird automatisch gesetzt, sobald sich die Eltern per E-Mail anmelden.'}
+            </span>
           </div>
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <label>E-Mail-Adresse korrigieren</label>
-            <EmailEditor current={email.email} onSave={(v) => patch({ email: v })} />
-          </div>
+        </div>
+        <div className="field">
+          <label>E-Mail-Adresse korrigieren</label>
+          <EmailEditor current={email.email} onSave={(v) => patch({ email: v })} />
         </div>
         <div className="field mt">
           <label>Name (intern)</label>

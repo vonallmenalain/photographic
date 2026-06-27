@@ -1116,6 +1116,57 @@ tr:hover td { background: var(--surface-2); }
 }
 
 /* ---------------------------------------------------------------------------
+   Admin: publication checklist, photo bulk bar, dropzone, import stepper,
+   reports (added with the admin-UX simplification)
+   --------------------------------------------------------------------------- */
+
+.publish-checklist h2 { font-size: 1.05rem; }
+.checklist { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.checklist-step {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface);
+}
+.checklist-step.done { background: #e7f6ee; border-color: #b8e6cf; }
+.checklist-marker {
+  flex: none; width: 26px; height: 26px; border-radius: 999px;
+  display: grid; place-items: center; font-weight: 700; font-size: 0.85rem;
+  background: var(--surface-2); color: var(--text-soft);
+}
+.checklist-step.done .checklist-marker { background: #1b7a52; color: #fff; }
+.checklist-body { flex: 1; min-width: 0; }
+.checklist-title { font-weight: 600; }
+.checklist-detail { font-size: 0.8rem; }
+.checklist-action { flex: none; }
+
+.bulk-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 12px;
+  border: 1px solid var(--primary); border-radius: 10px; background: var(--surface-2);
+}
+
+.dropzone {
+  border: 2px dashed var(--border); border-radius: 12px; padding: 14px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone.is-dragover { border-color: var(--primary); background: rgba(47, 111, 237, 0.06); }
+
+.import-stepper { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.import-step { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); font-size: 0.85rem; color: var(--text-soft); }
+.import-step .import-step-marker { width: 20px; height: 20px; border-radius: 999px; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; background: var(--surface-2); }
+.import-step.current { border-color: var(--primary); color: var(--primary); }
+.import-step.current .import-step-marker { background: var(--primary); color: #fff; }
+.import-step.done { border-color: #b8e6cf; color: #1b7a52; }
+.import-step.done .import-step-marker { background: #1b7a52; color: #fff; }
+
+/* Reports: clamped message preview + link-styled cell */
+.report-message-clamp {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.link-look { color: var(--primary); font-weight: 600; }
+
+/* ---------------------------------------------------------------------------
    Shared helpers (added with the parent-UX simplification)
    --------------------------------------------------------------------------- */
 

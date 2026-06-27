@@ -159,7 +159,7 @@ export default function EventEmails({
                     )}
                   </td>
                   <td>
-                    <StatusBadge status={e.status} />
+                    <StatusBadge status={e.status === 'verified' ? 'verified' : 'not_verified'} />
                   </td>
                   <td>
                     <div className="row" style={{ gap: 10 }}>
@@ -349,7 +349,7 @@ function NotifyAllModal({
                   {r.name ? <span className="muted"> · {r.name}</span> : null}
                 </span>
                 <span style={{ flexShrink: 0 }}>
-                  <StatusBadge status={r.status} />
+                  <StatusBadge status={r.status === 'verified' ? 'verified' : 'not_verified'} />
                 </span>
               </label>
             ))}

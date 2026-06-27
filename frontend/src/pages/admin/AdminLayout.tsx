@@ -32,7 +32,7 @@ export default function AdminLayout({
   return (
     <div className="admin-shell">
       <aside className="admin-side">
-        <div className="logo">🔒 Foto-Admin</div>
+        <div className="logo">🔒 Photographic</div>
         {links.map((l) => (
           <NavLink key={l.to} to={l.to} className={({ isActive }) => (isActive ? 'active' : '')}>
             {l.label}

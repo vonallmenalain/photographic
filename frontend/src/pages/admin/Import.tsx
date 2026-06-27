@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { Alert, Spinner } from '../../components/common';
 import { parseFile, parseDelimited } from '../../lib/tabular';
@@ -104,14 +105,49 @@ export default function Import() {
   const [defaultEventName, setDefaultEventName] = useState('');
   const [createMissingEvents, setCreateMissingEvents] = useState(true);
 
+  // When opened from the publish checklist (…/import?eventId=…), preselect that
+  // order as the target for rows that don't carry an "Auftrag" column.
+  const [searchParams] = useSearchParams();
+  const presetEventId = searchParams.get('eventId') ?? '';
+
   useEffect(() => {
     api<{ events: EventRow[] }>('/api/admin/events', { admin: true })
-      .then((r) => setEvents(r.events))
+      .then((r) => {
+        setEvents(r.events);
+        if (presetEventId && r.events.some((e) => e.id === presetEventId)) {
+          setTargetMode('existing');
+          setDefaultEventId(presetEventId);
+        }
+      })
       .catch(() => undefined);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetEventId]);
 
   const scrollToTop = () => {
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Offers a ready-to-fill CSV template (opens in Excel) with the recommended
+  // columns and two example rows, incl. the "several e-mails per child" patterns.
+  const downloadTemplate = () => {
+    const rows = [
+      ['E-Mail', 'E-Mail 2', 'Kind', 'Name Eltern', 'Auftrag'],
+      ['anna@beispiel.de, oma@beispiel.de', 'papa@beispiel.de', 'Lena Müller', 'Familie Müller', 'Klasse 3b'],
+      ['paul@beispiel.de', '', 'Tim Weber, Lisa Weber', 'Paul Weber', 'Klasse 3b'],
+    ];
+    const csv = rows
+      .map((r) => r.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
+      .join('\r\n');
+    // UTF-8 BOM so Excel shows umlauts correctly.
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'import-vorlage.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   // Reset the whole import page back to its initial (empty) state.
@@ -206,6 +242,15 @@ export default function Import() {
 
   const commit = async () => {
     if (!preview) return;
+    // Block the import outright when no valid e-mail address was recognised –
+    // without one there is nothing meaningful to create.
+    if (preview.plan.totals.distinctEmails === 0) {
+      setError(
+        'Es wurde keine gültige E-Mail-Adresse erkannt. Bitte ordne mindestens eine Spalte der Rolle „E-Mail“ zu und prüfe die Schreibweise.',
+      );
+      scrollToTop();
+      return;
+    }
     // A fallback target is only required when at least one row has no order of
     // its own. Rows that carry an "Auftrag" value are assigned automatically.
     if (needsTarget) {
@@ -269,6 +314,7 @@ export default function Import() {
   const needsTarget = unassignedCount > 0;
   const existingNames = new Set(events.map((e) => normalizeName(e.name)));
   const orderIsNew = (name: string) => !existingNames.has(normalizeName(name));
+  const noValidEmails = (preview?.plan.totals.distinctEmails ?? 0) === 0;
 
   return (
     <div>
@@ -278,6 +324,15 @@ export default function Import() {
         Lege E-Mail-Adressen, Kinder und ihre Verknüpfungen in einem Schritt an – per Kopieren &amp;
         Einfügen aus Excel oder über eine CSV-/Excel-Datei.
       </p>
+
+      <ImportStepper
+        steps={[
+          { label: 'Daten', done: !!preview || !!result },
+          { label: 'Spalten', done: !!preview && (preview.mapping.email ?? []).length > 0 },
+          { label: 'Ziel-Auftrag', done: !!preview && (!needsTarget || (targetMode === 'existing' ? !!defaultEventId : !!defaultEventName.trim())) },
+          { label: 'Import', done: !!result },
+        ]}
+      />
 
       {error && <Alert kind="error">{error}</Alert>}
 
@@ -332,6 +387,9 @@ export default function Import() {
           </button>
           <button className="btn secondary" type="button" onClick={() => setText(EXAMPLE)}>
             Beispiel einfügen
+          </button>
+          <button className="btn secondary" type="button" onClick={downloadTemplate}>
+            Excel-Vorlage herunterladen
           </button>
           <span className="muted" style={{ fontSize: '0.85rem' }}>oder</span>
           <input
@@ -488,7 +546,14 @@ export default function Import() {
                 <span className="muted">{preview.plan.totals.skipped} leere Zeilen übersprungen</span>
               )}
             </p>
-            {warningRows.length > 0 && (
+            {noValidEmails && (
+              <Alert kind="error">
+                Es wurde keine gültige E-Mail-Adresse erkannt. Bitte ordne oben unter „2. Spalten
+                zuordnen“ mindestens eine Spalte der Rolle „E-Mail“ zu. Ohne E-Mail-Adresse kann
+                nicht importiert werden.
+              </Alert>
+            )}
+            {!noValidEmails && warningRows.length > 0 && (
               <Alert kind="info">
                 {warningRows.length} Zeile(n) mit Hinweisen (z. B. ohne gültige E-Mail). Diese werden
                 trotzdem so gut wie möglich verarbeitet.
@@ -536,7 +601,7 @@ export default function Import() {
               </p>
             )}
             <div className="row" style={{ marginTop: 12 }}>
-              <button className="btn" onClick={commit} disabled={committing}>
+              <button className="btn" onClick={commit} disabled={committing || noValidEmails}>
                 {committing ? 'Import läuft …' : 'Jetzt importieren'}
               </button>
               <button
@@ -552,6 +617,24 @@ export default function Import() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function ImportStepper({ steps }: { steps: { label: string; done: boolean }[] }) {
+  // The "current" step is the first not-yet-done one.
+  const currentIndex = steps.findIndex((s) => !s.done);
+  return (
+    <div className="import-stepper">
+      {steps.map((s, i) => {
+        const state = s.done ? 'done' : i === currentIndex ? 'current' : 'todo';
+        return (
+          <div key={s.label} className={`import-step ${state}`}>
+            <span className="import-step-marker">{s.done ? '✓' : i + 1}</span>
+            <span className="import-step-label">{s.label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
