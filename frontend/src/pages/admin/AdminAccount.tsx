@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, ApiError, setAdminToken } from '../../api/client';
+import { api, ApiError } from '../../api/client';
 import { Alert, Spinner } from '../../components/common';
 
 interface AccountResponse {
@@ -37,7 +37,7 @@ export default function AdminAccount({ onUsernameChange }: { onUsernameChange?: 
         admin: true,
         body: { username: username.trim(), email: email.trim() },
       });
-      if (res.token) setAdminToken(res.token);
+      // Renaming re-issues the admin cookie server-side; nothing to store here.
       setUsername(res.username);
       setEmail(res.email ?? '');
       onUsernameChange?.(res.username);
