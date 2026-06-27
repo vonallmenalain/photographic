@@ -31,9 +31,52 @@ export type ImportRole =
   | 'note'
   | 'ignore';
 
-export type Mapping = Partial<Record<Exclude<ImportRole, 'ignore'>, number>>;
+/** Roles that map to exactly one column. */
+export type SingleRole = 'name' | 'child' | 'event' | 'note';
+
+/**
+ * Column mapping. Every role except `email` maps to a single column. The
+ * `email` role may map to *several* columns (e.g. a sheet with both an
+ * "E-Mail" and an "E-Mail 2" column, or two columns that share the title
+ * "E-Mail"). For backwards compatibility a single number is also accepted.
+ */
+export interface Mapping {
+  email?: number | number[];
+  name?: number;
+  child?: number;
+  event?: number;
+  note?: number;
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Separators that may be used to list several e-mail addresses in one cell. */
+const EMAIL_SPLIT_RE = /[\s,;/|]+/;
+
+/**
+ * Splits a single cell into individual, normalized e-mail addresses. Tolerates
+ * the separators admins typically use to put more than one address into one
+ * field: comma, semicolon, slash, pipe and plain whitespace/line breaks.
+ */
+export function splitEmails(cell: string): string[] {
+  return String(cell ?? '')
+    .split(EMAIL_SPLIT_RE)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** Returns the (deduplicated) list of column indices mapped to the e-mail role. */
+export function emailIndices(mapping: Mapping): number[] {
+  const raw = mapping.email;
+  if (raw === undefined || raw === null) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  return Array.from(new Set(arr.filter((n) => Number.isInteger(n) && n >= 0)));
+}
+
+/** True when the cell contains at least one address that looks like an e-mail. */
+function cellHasEmail(value: string): boolean {
+  return splitEmails(value).some((e) => EMAIL_RE.test(e));
+}
 
 /**
  * Substring keywords per role. Detection is tolerant: a header is mapped to a
@@ -68,10 +111,6 @@ function roleForHeader(header: string): Exclude<ImportRole, 'ignore'> | null {
   return null;
 }
 
-function looksLikeEmail(value: string): boolean {
-  return EMAIL_RE.test(String(value ?? '').trim().toLowerCase());
-}
-
 export interface DetectedColumn {
   index: number;
   header: string;
@@ -93,9 +132,17 @@ export function describeColumns(
 ): DetectedColumn[] {
   const width = rows.reduce((m, r) => Math.max(m, r.length), 0);
   const first = rows[0] ?? [];
+  const emailCols = new Set(emailIndices(mapping));
+  const singleRoleByIndex = new Map<number, ImportRole>();
+  (['name', 'child', 'event', 'note'] as const).forEach((role) => {
+    const idx = mapping[role];
+    if (typeof idx === 'number') singleRoleByIndex.set(idx, role);
+  });
   const columns: DetectedColumn[] = [];
   for (let i = 0; i < width; i += 1) {
-    const role = (Object.entries(mapping).find(([, idx]) => idx === i)?.[0] as ImportRole) ?? 'ignore';
+    const role: ImportRole = emailCols.has(i)
+      ? 'email'
+      : singleRoleByIndex.get(i) ?? 'ignore';
     const sampleRow = rows.find((r, ri) => (hasHeader ? ri > 0 : true) && (r[i] ?? '').trim());
     columns.push({
       index: i,
@@ -117,42 +164,62 @@ export function detectMapping(rows: string[][]): Detection {
 
   // A header row is one where at least one cell matches a known alias and no
   // cell already looks like an e-mail address (which would mean it is data).
-  const firstHasEmail = first.some(looksLikeEmail);
+  const firstHasEmail = first.some(cellHasEmail);
   const headerMatches = first.filter((c) => roleForHeader(c)).length;
   const hasHeader = !firstHasEmail && headerMatches >= 1;
 
   const mapping: Mapping = {};
 
   if (hasHeader) {
+    // Collect *all* columns whose header maps to the e-mail role so a second
+    // "E-Mail"/"E-Mail 2" column is picked up as well. Other roles stay single.
+    const emailCols: number[] = [];
     first.forEach((header, index) => {
       const role = roleForHeader(header);
       if (!role) return;
+      if (role === 'email') {
+        emailCols.push(index);
+        return;
+      }
       if (mapping[role] === undefined) mapping[role] = index;
     });
+    if (emailCols.length > 0) mapping.email = emailCols;
   } else {
-    // No header: infer the e-mail column from content; map the first remaining
-    // column to the child name as a best-effort default the admin can override.
-    let emailCol = -1;
-    let bestHits = 0;
+    // No header: infer the e-mail columns from content. A column counts as an
+    // e-mail column when at least half of its non-empty cells contain an
+    // address. The first remaining column becomes the child name (a best-effort
+    // default the admin can override).
+    const emailCols: number[] = [];
     for (let c = 0; c < width; c += 1) {
-      const hits = rows.filter((r) => looksLikeEmail(r[c] ?? '')).length;
-      if (hits > bestHits) {
-        bestHits = hits;
-        emailCol = c;
+      let nonEmpty = 0;
+      let hits = 0;
+      for (const r of rows) {
+        const v = String(r[c] ?? '').trim();
+        if (!v) continue;
+        nonEmpty += 1;
+        if (cellHasEmail(v)) hits += 1;
       }
+      if (hits > 0 && hits * 2 >= nonEmpty) emailCols.push(c);
     }
-    if (emailCol >= 0) mapping.email = emailCol;
-    const others = Array.from({ length: width }, (_, i) => i).filter((i) => i !== emailCol);
+    if (emailCols.length > 0) mapping.email = emailCols;
+    const others = Array.from({ length: width }, (_, i) => i).filter(
+      (i) => !emailCols.includes(i),
+    );
     if (others.length >= 1) mapping.child = others[0];
   }
 
   return { hasHeader, mapping, columns: describeColumns(rows, mapping, hasHeader) };
 }
 
+export interface PlanEmail {
+  email: string;
+  valid: boolean;
+}
+
 export interface PlanRow {
   rowIndex: number;
-  email: string;
-  emailValid: boolean;
+  /** All e-mail addresses found for the row (across columns and split cells). */
+  emails: PlanEmail[];
   parentName: string;
   childNames: string[];
   eventName: string;
@@ -185,9 +252,24 @@ export function buildPlan(rows: string[][], mapping: Mapping, hasHeader: boolean
   let children = 0;
   let skipped = 0;
 
+  const idxs = emailIndices(mapping);
+
   dataRows.forEach((row, i) => {
     const warnings: string[] = [];
-    const email = cell(row, mapping.email).toLowerCase();
+    // Gather e-mails across every mapped e-mail column and split multi-address
+    // cells; deduplicate while keeping the first occurrence's order.
+    const seen = new Set<string>();
+    const emails: PlanEmail[] = [];
+    for (const idx of idxs) {
+      for (const addr of splitEmails(cell(row, idx))) {
+        if (seen.has(addr)) continue;
+        seen.add(addr);
+        emails.push({ email: addr, valid: EMAIL_RE.test(addr) });
+      }
+    }
+    const validEmails = emails.filter((e) => e.valid);
+    const hasInvalid = emails.some((e) => !e.valid);
+
     const parentNameCell = cell(row, mapping.name);
     const childCell = cell(row, mapping.child);
     const eventName = cell(row, mapping.event);
@@ -205,27 +287,27 @@ export function buildPlan(rows: string[][], mapping: Mapping, hasHeader: boolean
       parentName = '';
     }
 
-    const emailValid = !!email && EMAIL_RE.test(email);
-
-    if (!email && childNames.length === 0) {
+    if (emails.length === 0 && childNames.length === 0) {
       skipped += 1;
       return; // genuinely empty row
     }
 
-    if (email && !emailValid) warnings.push('Ungültige E-Mail-Adresse – Zeile wird nicht verknüpft.');
-    if (!email && childNames.length > 0) warnings.push('Keine E-Mail – Kind wird angelegt, aber nicht verknüpft.');
-    if (emailValid && childNames.length === 0) warnings.push('Nur E-Mail – ohne Kind-Verknüpfung.');
+    if (hasInvalid)
+      warnings.push('Ungültige E-Mail-Adresse(n) – diese werden nicht verknüpft.');
+    if (validEmails.length === 0 && childNames.length > 0)
+      warnings.push('Keine gültige E-Mail – Kind wird angelegt, aber nicht verknüpft.');
+    if (validEmails.length > 0 && childNames.length === 0)
+      warnings.push('Nur E-Mail – ohne Kind-Verknüpfung.');
 
-    if (emailValid) {
+    if (validEmails.length > 0) {
       withEmail += 1;
-      emailSet.add(email);
+      for (const e of validEmails) emailSet.add(e.email);
     }
     children += childNames.length;
 
     planRows.push({
       rowIndex: i,
-      email,
-      emailValid,
+      emails,
       parentName,
       childNames,
       eventName,
@@ -408,9 +490,11 @@ export async function commitImport(
 
   for (const row of plan.rows) {
     const eventId = await resolveEvent(row.eventName);
-    let emailId = '';
-    if (row.emailValid) {
-      emailId = await upsertEmail(row.email, row.parentName, row.note);
+    // Upsert every valid e-mail of the row so siblings/co-parents all get linked.
+    const emailIds: string[] = [];
+    for (const pe of row.emails) {
+      if (!pe.valid) continue;
+      emailIds.push(await upsertEmail(pe.email, row.parentName, row.note));
     }
 
     if (row.childNames.length > 0) {
@@ -423,7 +507,7 @@ export async function commitImport(
       }
       for (const childName of row.childNames) {
         const childId = await upsertChild(eventId, childName);
-        if (emailId) await linkEmailChild(emailId, childId);
+        for (const emailId of emailIds) await linkEmailChild(emailId, childId);
       }
     }
   }
