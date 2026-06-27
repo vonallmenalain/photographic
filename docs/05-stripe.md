@@ -50,32 +50,55 @@ Backend neu starten:
 docker compose up -d backend
 ```
 
-## 5.2a Zahlungsarten (nur Karte & TWINT)
+## 5.2a Zahlungsarten (Karte, TWINT, Apple Pay & Google Pay)
 
 Welche Zahlungsarten auf der Stripe-Checkout-Seite erscheinen, steuert die App
-**im Code** über `STRIPE_PAYMENT_METHODS` (Standard: `card,twint`). Diese feste
-Liste hat Vorrang vor den „automatischen Zahlungsmethoden“ im Stripe-Dashboard –
-so ist garantiert reproduzierbar, dass Eltern **nur mit Karte und TWINT** zahlen.
+**im Code** über `STRIPE_PAYMENT_METHODS` (Standard:
+`card,twint,apple_pay,google_pay`). Diese feste Liste hat Vorrang vor den
+„automatischen Zahlungsmethoden“ im Stripe-Dashboard – so ist garantiert
+reproduzierbar, dass Eltern genau die vier vorgesehenen Methoden sehen.
 
 ```ini
-# Standard: nur Karte und TWINT
-STRIPE_PAYMENT_METHODS=card,twint
+# Standard: Karte, TWINT, Apple Pay und Google Pay
+STRIPE_PAYMENT_METHODS=card,twint,apple_pay,google_pay
 ```
+
+**Wie Apple Pay & Google Pay funktionieren (wichtig):** Apple Pay und Google Pay
+sind keine eigenen Zahlungsarten, sondern **„Wallets“ der Methode „Karte“
+(`card`)**. Stripe blendet sie auf der Checkout-Seite **automatisch** ein, sobald
+
+- sie im **Dashboard aktiviert** sind (Settings → Payment methods → Apple Pay /
+  Google Pay), und
+- das **Gerät bzw. der Browser** sie unterstützt (z. B. Apple Pay in Safari auf
+  iPhone/Mac, Google Pay in Chrome/Android) und eine Karte im Wallet hinterlegt
+  ist.
+
+Deshalb genügt es, dass `card` in der Liste steht. Damit du die vier Methoden
+trotzdem **explizit** notieren kannst, akzeptiert die App auch
+`apple_pay`/`google_pay` in `STRIPE_PAYMENT_METHODS` und bildet sie intern auf
+`card` ab (würde man sie direkt an Stripe als eigenen `payment_method_type`
+schicken, lehnt die API die Anfrage ab).
 
 Wichtig dazu:
 
-1. **TWINT muss im Stripe-Dashboard aktiviert sein** (Settings → Payment methods →
-   TWINT aktivieren). Stripe zeigt eine Methode nur an, wenn sie für dein Konto
-   freigeschaltet ist. Die Liste im Code *begrenzt* die Auswahl, sie kann eine
-   im Dashboard deaktivierte Methode aber nicht erzwingen.
+1. **Methoden müssen im Stripe-Dashboard aktiviert sein** (Settings → Payment
+   methods → Karte, TWINT, Apple Pay, Google Pay aktivieren). Stripe zeigt eine
+   Methode nur an, wenn sie für dein Konto freigeschaltet ist. Die Liste im Code
+   *begrenzt* die Auswahl, sie kann eine im Dashboard deaktivierte Methode aber
+   nicht erzwingen.
 2. **TWINT funktioniert nur in CHF** – `CURRENCY=chf` muss gesetzt sein (Standard).
-3. Möchtest du die Auswahl doch über das Dashboard steuern, lass
+3. **Apple Pay** benötigt eine registrierte Domain; bei der von Stripe gehosteten
+   Checkout-Seite übernimmt Stripe diese Registrierung automatisch – du musst
+   dafür nichts tun.
+4. Möchtest du die Auswahl doch über das Dashboard steuern, lass
    `STRIPE_PAYMENT_METHODS` **leer**; dann nutzt Stripe die dort aktivierten
    automatischen Zahlungsmethoden.
 
-> Antwort auf „Code oder Dashboard?“: Die **Begrenzung auf Karte + TWINT ist im
-> Code** gesetzt (`STRIPE_PAYMENT_METHODS`). Du musst im **Dashboard nur einmal
-> sicherstellen, dass TWINT (und Karte) aktiviert** ist.
+> **Cartes Bancaires deaktivieren?** Ja, deine Annahme stimmt: Da die App die
+> Methoden **im Code** auf `card,twint,apple_pay,google_pay` begrenzt, erscheint
+> **Cartes Bancaires nicht** auf der Checkout-Seite – auch wenn es sich im
+> Dashboard nicht abschalten lässt. Nur was in `STRIPE_PAYMENT_METHODS` steht
+> (bzw. als Wallet zu `card` gehört), wird angeboten.
 
 ## 5.3 Testmodus
 

@@ -28,6 +28,41 @@ function int(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/**
+ * Normalises the configured Stripe Checkout payment methods.
+ *
+ * Apple Pay and Google Pay are *wallets* that Stripe surfaces through the
+ * `card` payment method – they are NOT standalone Checkout `payment_method_types`.
+ * Passing `apple_pay`/`google_pay` (or `link`) in `payment_method_types` makes
+ * the Stripe API reject the request. When `card` is enabled and the wallets are
+ * activated in the Dashboard, Stripe shows Apple Pay / Google Pay automatically
+ * on supported devices ("Checkout supports Apple Pay and Google Pay with no
+ * integration changes").
+ *
+ * To let operators list all four methods (card, twint, apple_pay, google_pay)
+ * in `STRIPE_PAYMENT_METHODS` without breaking checkout, we translate the wallet
+ * aliases (and common spelling variants) to `card`, drop empty entries and
+ * de-duplicate while preserving order.
+ */
+function normalizePaymentMethods(raw: string): string[] {
+  const walletAliases = new Set([
+    'apple_pay',
+    'applepay',
+    'apple-pay',
+    'google_pay',
+    'googlepay',
+    'google-pay',
+  ]);
+  const result: string[] = [];
+  for (const entry of raw.split(',')) {
+    const method = entry.trim().toLowerCase();
+    if (!method) continue;
+    const normalized = walletAliases.has(method) ? 'card' : method;
+    if (!result.includes(normalized)) result.push(normalized);
+  }
+  return result;
+}
+
 const isProd = (process.env.NODE_ENV ?? 'development') === 'production';
 
 /**
@@ -141,13 +176,14 @@ export const config = {
     enabled: !!optional('STRIPE_SECRET_KEY'),
     // Which payment methods the Stripe Checkout page offers. We pin this in code
     // (instead of relying on the Stripe Dashboard's "automatic payment methods")
-    // so the available methods are explicit and reproducible. Default: only card
-    // and TWINT (TWINT requires the currency to be CHF). Comma-separated list of
-    // Stripe payment_method_types; leave empty to let Stripe/Dashboard decide.
-    paymentMethods: optional('STRIPE_PAYMENT_METHODS', 'card,twint')
-      .split(',')
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean),
+    // so the available methods are explicit and reproducible. Default: card +
+    // TWINT (TWINT requires the currency to be CHF). Apple Pay and Google Pay are
+    // wallets that ride on `card` and appear automatically when enabled in the
+    // Dashboard – listing them here is allowed and simply maps to `card`.
+    // Comma-separated list; leave empty to let Stripe/Dashboard decide.
+    paymentMethods: normalizePaymentMethods(
+      optional('STRIPE_PAYMENT_METHODS', 'card,twint,apple_pay,google_pay'),
+    ),
   },
 
   // Cookie settings.

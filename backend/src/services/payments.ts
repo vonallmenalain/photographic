@@ -32,9 +32,12 @@ export async function createCheckoutSession(args: {
   const s = getStripe();
   if (!s) return null;
 
-  // Restrict the offered payment methods (default: card + TWINT). When the list
-  // is empty we omit the field so Stripe falls back to the methods enabled in
-  // the Dashboard ("automatic payment methods").
+  // Restrict the offered payment methods (default: card + TWINT). Apple Pay and
+  // Google Pay are wallets carried by `card` and are surfaced automatically by
+  // Stripe Checkout when enabled in the Dashboard – they are intentionally not
+  // separate entries here (see config.normalizePaymentMethods). When the list is
+  // empty we omit the field so Stripe falls back to the methods enabled in the
+  // Dashboard ("automatic payment methods").
   const paymentMethodTypes = config.stripe.paymentMethods.filter(Boolean);
 
   const session = await s.checkout.sessions.create({
