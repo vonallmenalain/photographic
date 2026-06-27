@@ -61,7 +61,12 @@ export function EventAnalyticsPanel({
           value={`${ev.email_verified} von ${ev.email_total}`}
         />
         <SummaryStat label="Erinnerungen" value={String(ev.reminders.length)} />
-        <OrderableUntilStat status={ev.status} expiresAt={ev.expires_at} />
+        <OrderableUntilStat
+          eventId={ev.id}
+          status={ev.status}
+          expiresAt={ev.expires_at}
+          onReload={onReload}
+        />
       </div>
 
       <h3 style={{ marginTop: 20, marginBottom: 8 }}>Umsatzverlauf</h3>
@@ -123,12 +128,18 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
  * bestellbar gekennzeichnet.
  */
 function OrderableUntilStat({
+  eventId,
   status,
   expiresAt,
+  onReload,
 }: {
+  eventId: string;
   status: string;
   expiresAt: string | null;
+  onReload: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+
   let value = '—';
   let hint = 'Kein Enddatum';
 
@@ -148,12 +159,107 @@ function OrderableUntilStat({
 
   return (
     <div className="analytics-stat">
-      <span className="analytics-stat-num">{value}</span>
+      <div className="row between" style={{ gap: 6, alignItems: 'flex-start' }}>
+        <span className="analytics-stat-num">{value}</span>
+        <button
+          type="button"
+          className="stat-edit-btn"
+          onClick={() => setEditing(true)}
+          title="Bestellzeitraum manuell anpassen"
+          aria-label="Bestellzeitraum manuell anpassen"
+        >
+          ✎
+        </button>
+      </div>
       <span className="analytics-stat-lbl">Bestellbar bis</span>
       <span className="analytics-stat-lbl" style={{ marginTop: 0 }}>
         {hint}
       </span>
+      {editing && (
+        <OrderableUntilEditor
+          eventId={eventId}
+          expiresAt={expiresAt}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            onReload();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Kleiner Dialog, um das Enddatum ("Bestellbar bis") eines Auftrags manuell zu
+ * setzen – z. B. um einen einmal veröffentlichten Bestellzeitraum gezielt zu
+ * verlängern, ohne dass sich das Fenster beim erneuten Veröffentlichen ändert.
+ */
+function OrderableUntilEditor({
+  eventId,
+  expiresAt,
+  onClose,
+  onSaved,
+}: {
+  eventId: string;
+  expiresAt: string | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toDateInput = (iso: string | null) => {
+    const d = iso ? new Date(iso) : new Date();
+    if (isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
+    return d.toISOString().slice(0, 10);
+  };
+  const [date, setDate] = useState(() => toDateInput(expiresAt));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      // Auf das Tagesende setzen, damit der gewählte Tag noch vollständig
+      // bestellbar bleibt.
+      const end = new Date(`${date}T23:59:59`);
+      await api(`/api/admin/events/${eventId}`, {
+        method: 'PATCH',
+        admin: true,
+        body: { expires_at: end.toISOString() },
+      });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Datum konnte nicht gespeichert werden.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Bestellzeitraum anpassen"
+      width={420}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
+            Abbrechen
+          </button>
+          <button type="button" className="btn" onClick={save} disabled={busy}>
+            {busy ? 'Wird gespeichert …' : 'Speichern'}
+          </button>
+        </>
+      }
+    >
+      {error && <Alert kind="error">{error}</Alert>}
+      <p style={{ fontSize: '0.9rem', lineHeight: 1.6, marginTop: 0 }}>
+        Lege fest, bis zu welchem Tag Eltern in diesem Auftrag bestellen können. Der Zeitraum
+        bleibt unverändert, wenn der Auftrag erneut veröffentlicht wird.
+      </p>
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label style={{ fontSize: '0.8rem' }}>Bestellbar bis</label>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      </div>
+    </Modal>
   );
 }
 
@@ -250,6 +356,7 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
         <EmailDispatchModal
           eventId={event.id}
           mode={mode}
+          expiresAt={event.expires_at}
           onClose={() => setShowEmail(false)}
           onSent={(message) => {
             setShowEmail(false);
@@ -297,11 +404,13 @@ interface ReminderRecipients {
 function EmailDispatchModal({
   eventId,
   mode,
+  expiresAt,
   onClose,
   onSent,
 }: {
   eventId: string;
   mode: 'invitation' | 'reminder';
+  expiresAt: string | null;
   onClose: () => void;
   onSent: (msg: string) => void;
 }) {
@@ -311,6 +420,7 @@ function EmailDispatchModal({
   const [data, setData] = useState<ReminderRecipients | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sendToSelf, setSendToSelf] = useState(false);
+  const [mentionExtension, setMentionExtension] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -366,7 +476,11 @@ function EmailDispatchModal({
         {
           method: 'POST',
           admin: true,
-          body: { emailIds: Array.from(selected), sendToSelf },
+          body: {
+            emailIds: Array.from(selected),
+            sendToSelf,
+            ...(isReminder ? { mentionExtension } : {}),
+          },
         },
       );
       const extra = res.failed > 0 ? ` ${res.failed} konnten nicht zugestellt werden.` : '';
@@ -487,6 +601,35 @@ function EmailDispatchModal({
               </tbody>
             </table>
           </div>
+          {isReminder && (
+            <label
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'auto minmax(0, 1fr)',
+                alignItems: 'center',
+                gap: 10,
+                marginTop: 12,
+                fontSize: '0.88rem',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={mentionExtension}
+                onChange={(e) => setMentionExtension(e.target.checked)}
+                style={{ width: 'auto', margin: 0 }}
+              />
+              <span>
+                Info über Verlängerung Bestellzeitraum integrieren
+                {mentionExtension && expiresAt && (
+                  <span className="muted" style={{ display: 'block', fontSize: '0.8rem' }}>
+                    Die Erinnerung weist darauf hin, dass bis zum {formatDateShort(expiresAt)} bestellt
+                    werden kann.
+                  </span>
+                )}
+              </span>
+            </label>
+          )}
           <SendToSelfCheckbox
             checked={sendToSelf}
             onChange={setSendToSelf}

@@ -406,11 +406,12 @@ router.get(
   asyncHandler(async (_req, res) => {
     // Keep statuses current (auto-archive expired galleries) before listing.
     await archiveExpiredEvents();
-    const [events, children, emailLinks, totals] = await Promise.all([
+    const [events, children, emailLinks, totals, reminders] = await Promise.all([
       runQuery<Record<string, unknown>>(col(COL.events)),
       runQuery<{ id: string; event_id: string }>(col(COL.children)),
       runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
       eventRevenueTotals(),
+      runQuery<{ event_id: string }>(col(COL.reminders)),
     ]);
     // Photo counts via server-side aggregation per event instead of streaming
     // the ENTIRE photos collection into memory. The photos collection grows
@@ -425,6 +426,13 @@ router.get(
     const photoCounts = new Map<string, number>(photoCountEntries);
     const childCounts = new Map<string, number>();
     for (const c of children) childCounts.set(c.event_id, (childCounts.get(c.event_id) ?? 0) + 1);
+
+    // Versendete Einladungen + Erinnerungen je Auftrag (jeder Eintrag in der
+    // reminders-Sammlung steht für einen Versand bzw. einen protokollierten
+    // Kontakt). Für die kompakte Auftragsliste summiert dargestellt.
+    const reminderCounts = new Map<string, number>();
+    for (const r of reminders)
+      reminderCounts.set(r.event_id, (reminderCounts.get(r.event_id) ?? 0) + 1);
 
     // Distinct e-mail addresses per event: resolve every child→event link and
     // collect the unique e-mail ids that point at any child of that event.
@@ -450,6 +458,7 @@ router.get(
         email_count: emailsByEvent.get(e.id)?.size ?? 0,
         order_count: totals.orderCount.get(e.id) ?? 0,
         revenue_cents: totals.revenue.get(e.id) ?? 0,
+        reminder_count: reminderCounts.get(e.id) ?? 0,
       }))
       .sort((a, b) =>
         String((b as Record<string, unknown>).created_at ?? '').localeCompare(
@@ -538,8 +547,20 @@ router.patch(
     const event = await getById<{ expires_at: string | null }>(COL.events, req.params.id);
     if (!event) throw new ApiError(404, 'Event nicht gefunden.');
     const updates: Record<string, unknown> = { ...data };
-    // Re-publishing an already-expired event refreshes its retention window so
-    // the auto-archive sweep does not immediately archive it again.
+    // Manuell gesetztes "Bestellbar bis": Datum normalisieren (akzeptiert sowohl
+    // einen reinen Tag "2026-06-30" als auch einen vollständigen ISO-Zeitstempel)
+    // und gegen Unsinn absichern.
+    if (data.expires_at !== undefined) {
+      const when = new Date(data.expires_at);
+      if (isNaN(when.getTime())) throw new ApiError(400, 'Ungültiges Datum für „Bestellbar bis“.');
+      updates.expires_at = when.toISOString();
+    }
+    // Eine bereits laufende Bestellfrist bleibt beim erneuten Veröffentlichen
+    // unverändert – wird ein Auftrag also kurz bearbeitet und wieder
+    // veröffentlicht, verschiebt sich der 30-Tage-Zeitraum NICHT. Nur wenn noch
+    // kein (oder ein bereits abgelaufenes) Enddatum hinterlegt ist, wird ein
+    // frisches Aufbewahrungsfenster gesetzt, damit die Auto-Archivierung den
+    // Auftrag nicht sofort wieder archiviert.
     if (data.status === 'published' && data.expires_at === undefined) {
       const exp = event.expires_at ? new Date(event.expires_at).getTime() : 0;
       if (!exp || exp <= Date.now()) updates.expires_at = retentionExpiry();
@@ -1976,10 +1997,13 @@ router.get(
 router.post(
   '/events/:id/send-reminder',
   asyncHandler(async (req, res) => {
-    const { emailIds, sendToSelf } = parse(
+    const { emailIds, sendToSelf, mentionExtension } = parse(
       z.object({
         emailIds: z.array(z.string()).optional(),
         sendToSelf: z.boolean().default(false),
+        // Wenn gesetzt, weist die Erinnerung darauf hin, dass der
+        // Bestellzeitraum (bis expires_at) verlängert wurde.
+        mentionExtension: z.boolean().default(false),
       }),
       req.body ?? {},
     );
@@ -2009,6 +2033,7 @@ router.post(
       retentionDays: config.retentionDaysDefault,
       reminder: true as const,
       daysLeft,
+      extendedUntil: mentionExtension ? event.expires_at ?? null : null,
     };
     const results = await Promise.allSettled(
       recipients.map((r) => sendGalleryReadyEmail(r.email, link, mailOpts)),

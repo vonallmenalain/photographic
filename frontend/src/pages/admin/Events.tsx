@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
-import { formatPrice } from '../../lib/format';
 import { EventAnalyticsPanel, type EventAnalytics } from './EventAnalyticsPanel';
 
 // Note: new orders are no longer created here. Capturing a new Auftrag (data
@@ -21,6 +20,8 @@ interface EventRow {
   email_count: number;
   order_count: number;
   revenue_cents: number;
+  // Summe aller versendeten Einladungen + Erinnerungen (reminders-Sammlung).
+  reminder_count: number;
   expires_at: string | null;
   created_at: string;
 }
@@ -173,56 +174,57 @@ function EventCard({
   return (
     <div className={`order-row${expanded ? ' expanded' : ''}`}>
       <div className="order-row-head">
-        <button
-          type="button"
-          className="order-row-toggle"
-          onClick={onToggle}
-          aria-expanded={expanded}
-        >
-          <span className="order-row-chevron" aria-hidden>
-            {expanded ? '▾' : '▸'}
-          </span>
-          <span className="order-row-title" title={ev.name}>
-            {ev.name}
-          </span>
-          <StatusBadge status={ev.status} />
-        </button>
+        <div className="order-row-bar">
+          <button
+            type="button"
+            className="order-row-toggle"
+            onClick={onToggle}
+            aria-expanded={expanded}
+          >
+            <span className="order-row-chevron" aria-hidden>
+              {expanded ? '▾' : '▸'}
+            </span>
+            <span className="order-row-title" title={ev.name}>
+              {ev.name}
+            </span>
+            <StatusBadge status={ev.status} />
+          </button>
+
+          <div className="order-row-actions" onClick={(e) => e.stopPropagation()}>
+            <select
+              value={ev.status}
+              disabled={busy}
+              onChange={(e) => changeStatus(e.target.value)}
+              aria-label="Status ändern"
+              title="Status des Auftrags ändern"
+            >
+              {STATUS_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {ev.status === 'draft' && (
+              <button className="btn secondary small" type="button" onClick={edit} disabled={busy}>
+                Auftrag bearbeiten
+              </button>
+            )}
+            <button
+              className="btn ghost small"
+              type="button"
+              style={{ color: 'var(--danger)' }}
+              onClick={remove}
+              disabled={busy}
+            >
+              Löschen
+            </button>
+          </div>
+        </div>
 
         <div className="order-row-stats">
           <Stat num={ev.child_count} lbl="Kinder" />
-          <Stat num={ev.photo_count} lbl="Fotos" />
           <Stat num={ev.order_count} lbl="Bestellungen" />
-          <Stat num={formatPrice(ev.revenue_cents, currency)} lbl="Umsatz" />
-        </div>
-
-        <div className="order-row-actions" onClick={(e) => e.stopPropagation()}>
-          <select
-            value={ev.status}
-            disabled={busy}
-            onChange={(e) => changeStatus(e.target.value)}
-            aria-label="Status ändern"
-            title="Status des Auftrags ändern"
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          {ev.status === 'draft' && (
-            <button className="btn secondary small" type="button" onClick={edit} disabled={busy}>
-              Auftrag bearbeiten
-            </button>
-          )}
-          <button
-            className="btn ghost small"
-            type="button"
-            style={{ color: 'var(--danger)' }}
-            onClick={remove}
-            disabled={busy}
-          >
-            Löschen
-          </button>
+          <Stat num={ev.reminder_count} lbl="Einladungen + Erinnerungen" />
         </div>
       </div>
 
