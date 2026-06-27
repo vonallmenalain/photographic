@@ -5,7 +5,6 @@ import { api } from '../../api/client';
 const links = [
   { to: 'events', label: 'Aufträge' },
   { to: 'import', label: 'Aufträge erfassen' },
-  { to: 'analytics', label: 'Auswertung' },
   { to: 'orders', label: 'Bestellungen' },
   { to: 'reports', label: 'Meldungen' },
 ];

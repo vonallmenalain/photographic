@@ -64,7 +64,9 @@ export default function Events() {
       <p className="soft" style={{ marginTop: 0 }}>
         Übersicht aller Aufträge. Einen neuen Auftrag legst du über{' '}
         <Link to="/admin/import">Aufträge erfassen</Link> an – dort wirst du Schritt für Schritt
-        durch Daten, Fotos, Veröffentlichung und Versand geführt.
+        durch Daten, Fotos, Veröffentlichung und Versand geführt. Aufträge mit dem Status{' '}
+        <strong>„In Bearbeitung“</strong> öffnen sich beim Anklicken wieder in der Erfassung;
+        fertige Aufträge zeigen ihre Auswertung.
       </p>
 
       {error && <Alert kind="error">{error}</Alert>}
@@ -77,7 +79,13 @@ export default function Events() {
       ) : (
         <div className="job-grid">
           {events.map((ev) => (
-            <Link key={ev.id} to={ev.id} className="job-card">
+            <Link
+              key={ev.id}
+              // Orders still in capture ("In Bearbeitung" = draft) reopen in the
+              // guided wizard; finished orders open their read-only detail view.
+              to={ev.status === 'draft' ? `/admin/import?eventId=${ev.id}` : ev.id}
+              className="job-card"
+            >
               <div className="job-card-head">
                 <strong className="job-card-title" title={ev.name}>
                   {ev.name}
