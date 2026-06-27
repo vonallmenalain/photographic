@@ -123,7 +123,7 @@ export async function sendGalleryReadyEmail(
      <ol style="font-size:15px;line-height:1.7;padding-left:20px;margin:0 0 4px;">
        <li>Öffnen Sie die Galerie über den Button unten.</li>
        <li>Geben Sie <strong>diese E-Mail-Adresse</strong> ein – Sie erhalten dann einen Bestätigungslink bzw. einen Code.</li>
-       <li>Nach der Bestätigung sehen Sie ausschließlich die Ihnen zugeordneten Fotos.</li>
+       <li>Nach der Bestätigung sehen Sie ausschliesslich die Ihnen zugeordneten Fotos.</li>
      </ol>
      <p style="text-align:center;margin:24px 0;">
        <a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:600;font-size:15px;">Zu meinen Fotos</a>
@@ -132,9 +132,9 @@ export async function sendGalleryReadyEmail(
      <div style="background:#f0f4f8;border-radius:12px;padding:16px 18px;margin-top:18px;">
        <p style="font-size:14px;line-height:1.6;margin:0 0 8px;"><strong>Zum Schutz der Fotos:</strong></p>
        <ul style="font-size:14px;line-height:1.6;padding-left:20px;margin:0;">
-         <li>Die Bilder sind nur nach Bestätigung Ihrer E-Mail-Adresse sichtbar – es gibt keine offenen oder erratbaren Galerien.</li>
-         <li>Vorschauen sind mit einem Wasserzeichen geschützt; die Originale erhalten Sie erst nach dem Kauf.</li>
-         <li>Die Fotos stehen <strong>${retentionDays} Tage</strong> zur Verfügung und werden danach automatisch gelöscht.</li>
+         <li>Die Bilder sind nur nach Bestätigung genau dieser E-Mail-Adresse sichtbar.</li>
+         <li>Vorschaubilder sind mit einem Wasserzeichen geschützt; die Originale erhalten Sie erst nach dem Kauf.</li>
+         <li>Die Fotos stehen <strong>${retentionDays} Tage</strong> zur Verfügung und werden danach automatisch archiviert.</li>
          <li>Bitte geben Sie Ihren Bestätigungslink bzw. Code nicht weiter.</li>
        </ul>
      </div>`,
@@ -145,12 +145,12 @@ die Fotos sind jetzt für Sie freigeschaltet. So sehen Sie Ihre persönlichen Bi
 
 1. Öffnen Sie die Galerie: ${link}
 2. Geben Sie DIESE E-Mail-Adresse ein – Sie erhalten dann einen Bestätigungslink bzw. einen Code.
-3. Nach der Bestätigung sehen Sie ausschließlich die Ihnen zugeordneten Fotos.
+3. Nach der Bestätigung sehen Sie ausschliesslich die Ihnen zugeordneten Fotos.
 
 Zum Schutz der Fotos:
-- Die Bilder sind nur nach Bestätigung Ihrer E-Mail-Adresse sichtbar – es gibt keine offenen oder erratbaren Galerien.
-- Vorschauen sind mit einem Wasserzeichen geschützt; die Originale erhalten Sie erst nach dem Kauf.
-- Die Fotos stehen ${retentionDays} Tage zur Verfügung und werden danach automatisch gelöscht.
+- Die Bilder sind nur nach Bestätigung genau dieser E-Mail-Adresse sichtbar.
+- Vorschaubilder sind mit einem Wasserzeichen geschützt; die Originale erhalten Sie erst nach dem Kauf.
+- Die Fotos stehen ${retentionDays} Tage zur Verfügung und werden danach automatisch archiviert.
 - Bitte geben Sie Ihren Bestätigungslink bzw. Code nicht weiter.`;
   await sendMail({ to, subject, html, text });
 }
