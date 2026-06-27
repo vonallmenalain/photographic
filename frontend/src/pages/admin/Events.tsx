@@ -49,18 +49,11 @@ export default function Events() {
   return (
     <div>
       <div className="row between">
-        <h1 style={{ marginBottom: 4 }}>Aufträge</h1>
+        <h1 style={{ marginBottom: 16 }}>Aufträge</h1>
         <Link to="/admin/import" className="btn">
           + Auftrag erfassen
         </Link>
       </div>
-      <p className="soft" style={{ marginTop: 0 }}>
-        Übersicht aller Aufträge. Einen neuen Auftrag legst du über{' '}
-        <Link to="/admin/import">Aufträge erfassen</Link> an. Klicke einen Auftrag an, um die
-        Auswertung (Umsatz, Bestellungen und Erinnerungen) ein- und auszuklappen. Über das Dropdown
-        änderst du den Status – bei <strong>„In Bearbeitung“</strong> erscheint zusätzlich der Knopf
-        „Auftrag bearbeiten“, der die Erfassung wieder öffnet.
-      </p>
 
       {error && <Alert kind="error">{error}</Alert>}
 

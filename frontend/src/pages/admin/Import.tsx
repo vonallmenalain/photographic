@@ -318,11 +318,6 @@ export default function AuftraegeErfassen() {
       {activeStep === 3 &&
         (eventId ? (
           <div>
-            <p className="soft" style={{ marginTop: 0 }}>
-              Prüfe die automatische Zuordnung der Fotos zu den Kindern, korrigiere sie wo nötig und
-              bestätige sie am Schluss. Unzugeordnete Fotos, die keine Gruppen-/Klassenfotos sind,
-              sind für niemanden sichtbar.
-            </p>
             <PhotoManager
               eventId={eventId}
               children={children}
