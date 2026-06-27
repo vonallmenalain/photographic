@@ -202,32 +202,6 @@ export function PhotoManager({
     load();
   };
 
-  const autoAssign = async () => {
-    setUploadMsg('');
-    setError('');
-    try {
-      const res = await api<{
-        assigned: number;
-        ambiguous: number;
-        unmatched: number;
-        groupPhotos?: number;
-      }>(`/api/admin/events/${eventId}/photos/auto-assign`, { method: 'POST', admin: true, body: {} });
-      setUploadMsg(
-        `${res.assigned} Foto(s) automatisch nach Dateiname zugeordnet.` +
-          (res.groupPhotos && res.groupPhotos > 0
-            ? ` ${res.groupPhotos} als Gruppen-/Klassenfoto markiert (für die ganze Klasse sichtbar).`
-            : '') +
-          (res.ambiguous > 0 ? ` ${res.ambiguous} mehrdeutig – bitte manuell prüfen.` : '') +
-          (res.unmatched > 0
-            ? ` ${res.unmatched} ohne Treffer – als Gruppen-/Klassenfoto markieren oder manuell zuordnen.`
-            : ''),
-      );
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Automatische Zuordnung fehlgeschlagen.');
-    }
-  };
-
   const toggleSelect = (photoId: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -356,16 +330,6 @@ export function PhotoManager({
               {uploadProgress.done} von {uploadProgress.total} Fotos verarbeitet …
             </p>
           </div>
-        )}
-        {children.length > 0 && photos.length > 0 && (
-          <button
-            className="btn secondary small"
-            onClick={autoAssign}
-            style={{ marginTop: 10 }}
-            title="Vorhandene Fotos anhand des Dateinamens den Kindern zuordnen"
-          >
-            Vorhandene Fotos automatisch zuordnen (nach Dateiname)
-          </button>
         )}
       </div>
       )}

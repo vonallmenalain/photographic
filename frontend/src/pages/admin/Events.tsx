@@ -48,12 +48,7 @@ export default function Events() {
 
   return (
     <div>
-      <div className="row between">
-        <h1 style={{ marginBottom: 16 }}>Aufträge</h1>
-        <Link to="/admin/import" className="btn">
-          + Auftrag erfassen
-        </Link>
-      </div>
+      <h1 style={{ marginBottom: 16 }}>Aufträge</h1>
 
       {error && <Alert kind="error">{error}</Alert>}
 
