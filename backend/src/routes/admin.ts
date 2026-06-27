@@ -479,6 +479,11 @@ router.patch(
         description: z.string().max(2000).optional(),
         status: z.enum(EVENT_STATUSES).optional(),
         expires_at: z.string().optional(),
+        // Milestone of the "Aufträge erfassen" wizard: set once the photographer
+        // has confirmed the photo↔child assignment of this order. Pass null to
+        // reset. Surfaced again via GET /events/:id so the wizard step can show
+        // green when revisited.
+        photos_confirmed_at: z.string().nullable().optional(),
       }),
       req.body,
     );
@@ -623,7 +628,9 @@ router.post(
       }
     }
 
-    // Record a reminder marker so the moment shows up in the Auswertung chart.
+    // Record a reminder marker so the moment shows up in the Auswertung chart,
+    // and stamp the order's "invited" milestone so the capture wizard can show
+    // step 4 (Versand an die Eltern) as completed when revisited.
     if (sent > 0) {
       await setById(COL.reminders, newId('rem'), {
         event_id: req.params.id,
@@ -631,6 +638,7 @@ router.post(
         note: `Einladung per E-Mail an ${sent} Adresse(n)`,
         created_at: nowIso(),
       });
+      await updateById(COL.events, req.params.id, { invited_at: nowIso(), updated_at: nowIso() });
     }
 
     await audit(

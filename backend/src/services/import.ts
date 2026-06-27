@@ -344,6 +344,15 @@ export interface CommitResult {
   eventsCreated: number;
   rowsSkipped: number;
   warnings: string[];
+  /** Distinct Auftrag (event) ids touched by this import, in order of first use. */
+  eventIds: string[];
+  /**
+   * The single Auftrag the capture wizard should continue with after the
+   * import. Resolves to the chosen target order (existing or newly created) or,
+   * when none was given, the only/first order referenced by the imported rows.
+   * Null when the import did not touch any order at all.
+   */
+  primaryEventId: string | null;
 }
 
 interface EventLike {
@@ -379,6 +388,19 @@ export async function commitImport(
     eventsCreated: 0,
     rowsSkipped: 0,
     warnings: [],
+    eventIds: [],
+    primaryEventId: null,
+  };
+
+  // Tracks every distinct order id we actually wrote children into, in the
+  // order they were first used, so the capture wizard knows which Auftrag to
+  // continue with (photos → publish → invite).
+  const touchedEvents: string[] = [];
+  const touchedSet = new Set<string>();
+  const markEvent = (id: string) => {
+    if (!id || touchedSet.has(id)) return;
+    touchedSet.add(id);
+    touchedEvents.push(id);
   };
 
   // Resolve events by (normalized) name so per-row event columns can be reused.
@@ -490,6 +512,7 @@ export async function commitImport(
 
   for (const row of plan.rows) {
     const eventId = await resolveEvent(row.eventName);
+    if (eventId) markEvent(eventId);
     // Upsert every valid e-mail of the row so siblings/co-parents all get linked.
     const emailIds: string[] = [];
     for (const pe of row.emails) {
@@ -512,5 +535,9 @@ export async function commitImport(
     }
   }
 
+  result.eventIds = touchedEvents;
+  // Prefer the explicitly chosen target order; otherwise continue with the only
+  // (or first) order the rows referenced.
+  result.primaryEventId = defaultEventId || touchedEvents[0] || null;
   return result;
 }
