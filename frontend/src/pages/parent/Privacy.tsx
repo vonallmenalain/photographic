@@ -1,35 +1,55 @@
+import { Link } from 'react-router-dom';
+
 export default function Privacy() {
   return (
     <div className="narrow" style={{ margin: '0 auto' }}>
       <h1>Datenschutz &amp; Vertrauen</h1>
       <div className="card">
         <p>
-          Diese Plattform wurde gebaut, um Kinderfotos bestmöglich zu schützen. Wir gehen sparsam mit
-          Ihren Daten um – für den Zugang reicht im Kern Ihre E-Mail-Adresse, ohne Passwort.
+          Diese Plattform wurde entwickelt, um Kinderfotos bestmöglich zu schützen und den Zugang
+          klar, sicher und kontrolliert zu gestalten. Für den Zugang benötigen Sie im Kern nur Ihre
+          E-Mail-Adresse – ein Passwort ist nicht erforderlich.
+        </p>
+        <h2>So funktioniert der sichere Zugang</h2>
+        <p>
+          Die Fotos werden erst sichtbar, nachdem Sie die von Ihnen angegebene E-Mail-Adresse
+          bestätigt haben. Diese E-Mail-Adresse dient als persönliche Zuordnung: Es werden
+          ausschliesslich Fotos angezeigt, die dieser Adresse zugeordnet wurden.
+        </p>
+        <p>
+          Auch der Kauf und der spätere Download der Fotos sind nur über diese bestätigte
+          E-Mail-Adresse möglich. So stellen wir sicher, dass Fotos nicht über offene Galerien oder
+          frei zugängliche Links aufgerufen werden können. Bei Bedarf können die Fotos mit weiteren
+          E-Mail Adressen verknüpft werden. Melden Sie sich dazu unter{' '}
+          <Link to="/hilfe">Hilfe &amp; Kontakt</Link>.
         </p>
         <h2>Wie die Fotos geschützt sind</h2>
-        <ul>
-          <li>Fotos sind erst nach Bestätigung Ihrer E-Mail-Adresse sichtbar.</li>
-          <li>Es sind ausschliesslich Fotos ersichtlich, die Ihrer E-Mail Adresse zugeordnet wurden.</li>
-          <li>Es gibt keine offenen Galerien und keine erratbaren Links.</li>
-          <li>Vorschaubilder sind mit Wasserzeichen versehen und bewusst nicht druckfähig.</li>
-          <li>Originaldateien werden ausschliesslich nach dem Kauf bereitgestellt.</li>
-        </ul>
-        <h2>Welche Daten wir speichern</h2>
-        <ul>
-          <li>Ihre E-Mail-Adresse (als Zugang &amp; zur Zuordnung der Fotos).</li>
-          <li>Die Ihnen zugeordneten Fotos und Ihre Bestellungen.</li>
-        </ul>
-        <h2>Aufbewahrung</h2>
         <p>
-          Foto-Galerien sind standardmässig für einen begrenzten Zeitraum (in der Regel 30 Tage)
-          verfügbar. Danach werden sie archiviert oder gelöscht. Eine spätere Nachbestellung ist auf
-          Anfrage möglich.
+          Es gibt keine offenen Galerien und keine erratbaren Links. Vorschaubilder sind bewusst mit
+          einem Wasserzeichen versehen und nicht als druckfähige Dateien gedacht. Die
+          Originaldateien erhalten Sie erst nach dem Kauf.
+        </p>
+        <p>Alle Fotos werden auf einem lokalen Server in der Schweiz gespeichert.</p>
+        <h2>Welche Daten wir speichern</h2>
+        <p>
+          Wir speichern nur die Daten, die für den sicheren Zugang und die Bestellabwicklung
+          notwendig sind:
+        </p>
+        <ul>
+          <li>Ihre E-Mail-Adresse als Zugang und zur Zuordnung der Fotos</li>
+          <li>die Ihnen zugeordneten Fotos</li>
+          <li>Ihre Bestellungen</li>
+        </ul>
+        <h2>Aufbewahrung der Fotos</h2>
+        <p>
+          Ihre Fotos stehen Ihnen während 30 Tagen zur Verfügung. Danach werden sie automatisch
+          archiviert. Eine spätere Nachbestellung ist auf Anfrage möglich.
         </p>
         <h2>Falsche Zuordnung melden</h2>
         <p>
-          Wenn Ihnen etwas auffällt – etwa ein falsches oder fehlendes Foto – melden Sie es uns bitte
-          über die <a href="/hilfe">Hilfe-Seite</a>. Wir korrigieren das umgehend.
+          Wenn Ihnen etwas auffällt – zum Beispiel ein falsches oder fehlendes Foto – melden Sie
+          sich bitte über die <Link to="/hilfe">Hilfe-Seite</Link>. Wir prüfen die Zuordnung und
+          korrigieren sie so rasch wie möglich.
         </p>
       </div>
     </div>
