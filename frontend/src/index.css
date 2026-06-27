@@ -830,22 +830,12 @@ tr:hover td { background: var(--surface-2); }
   isolation: isolate;
   min-height: 100vh;
   color: var(--text);
-  /* Layered dark-wood backdrop: warm corner glows (the "bokeh" lights), a faint
-     vertical wood grain, and a deep espresso vertical gradient base. Animated
-     glowing orbs are layered on top via `.parent-bg` (see Layout). */
-  background-color: #160e07;
-  background-image:
-    radial-gradient(46% 38% at 16% 8%, rgba(232, 158, 70, 0.20) 0%, rgba(232, 158, 70, 0) 60%),
-    radial-gradient(42% 34% at 86% 16%, rgba(214, 120, 46, 0.16) 0%, rgba(214, 120, 46, 0) 60%),
-    radial-gradient(60% 44% at 50% 108%, rgba(196, 110, 40, 0.22) 0%, rgba(196, 110, 40, 0) 62%),
-    repeating-linear-gradient(
-      90deg,
-      rgba(0, 0, 0, 0.16) 0px,
-      rgba(0, 0, 0, 0.16) 2px,
-      rgba(0, 0, 0, 0) 2px,
-      rgba(0, 0, 0, 0) 9px
-    ),
-    linear-gradient(180deg, #2c1d10 0%, #20150b 52%, #160e07 100%);
+  /* Smooth deep-espresso/walnut backdrop — the exact same radial glow used by the
+     Galerie-Vorschau stage (see `.parent-theme .gp-stage`), so the page background
+     looks identical everywhere (gallery, cart, …) as in the preview, with no
+     vertical wood-grain stripes. Animated glowing "bokeh" orbs are layered on top
+     via `.parent-bg` (see Layout). */
+  background: radial-gradient(120% 120% at 50% 0%, #2c1d10 0%, #1a1009 60%, #120b06 100%);
   background-attachment: fixed;
 }
 
