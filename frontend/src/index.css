@@ -671,6 +671,23 @@ tr:hover td { background: var(--surface-2); }
 }
 .analytics-stat-num { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
 .analytics-stat-lbl { color: var(--text-muted); font-size: 0.76rem; margin-top: 2px; }
+.stat-edit-btn {
+  flex: none;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 3px 6px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.stat-edit-btn:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--surface);
+}
 
 /* Full-width, expandable Auftrag rows (Aufträge overview) */
 .order-list {
@@ -691,10 +708,16 @@ tr:hover td { background: var(--surface-2); }
 }
 .order-row-head {
   display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 18px;
+}
+.order-row-bar {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  padding: 14px 18px;
 }
 .order-row-toggle {
   display: flex;
@@ -727,10 +750,14 @@ tr:hover td { background: var(--surface-2); }
 }
 .order-row-stats {
   display: flex;
-  gap: 22px;
+  gap: 40px;
   flex-wrap: wrap;
+  padding: 12px 4px 2px;
+  border-top: 1px solid var(--border);
 }
-.order-row-stats .job-stat-num { font-size: 1.25rem; }
+.order-row-stats .job-stat { align-items: flex-start; text-align: left; }
+.order-row-stats .job-stat-num { font-size: 1.35rem; }
+.order-row-stats .job-stat-lbl { font-size: 0.8rem; }
 .order-row-actions {
   display: flex;
   align-items: center;
@@ -746,7 +773,7 @@ tr:hover td { background: var(--surface-2); }
   padding: 16px 18px 20px;
 }
 @media (max-width: 720px) {
-  .order-row-stats { gap: 16px; }
+  .order-row-stats { gap: 24px; }
   .order-row-actions { width: 100%; }
 }
 

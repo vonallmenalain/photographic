@@ -115,12 +115,24 @@ export async function sendPasswordResetEmail(to: string, username: string, link:
 export async function sendGalleryReadyEmail(
   to: string,
   link: string,
-  opts: { retentionDays?: number; reminder?: boolean; daysLeft?: number | null } = {},
+  opts: {
+    retentionDays?: number;
+    reminder?: boolean;
+    daysLeft?: number | null;
+    // Wenn gesetzt, weist die Erinnerung zusätzlich darauf hin, dass der
+    // Bestellzeitraum bis zu diesem Datum verlängert wurde.
+    extendedUntil?: string | null;
+  } = {},
 ) {
   const retentionDays = opts.retentionDays ?? config.retentionDaysDefault;
   const reminder = opts.reminder ?? false;
   const daysLeft =
     typeof opts.daysLeft === 'number' && opts.daysLeft > 0 ? opts.daysLeft : null;
+  const extendedUntilDate = opts.extendedUntil ? new Date(opts.extendedUntil) : null;
+  const extendedUntil =
+    extendedUntilDate && !isNaN(extendedUntilDate.getTime())
+      ? extendedUntilDate.toLocaleDateString('de-CH', { dateStyle: 'long' })
+      : null;
 
   const subject = reminder
     ? daysLeft != null
@@ -147,10 +159,20 @@ export async function sendGalleryReadyEmail(
       ? `Ihre Fotos sind noch ${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'} verfügbar und werden danach automatisch archiviert.`
       : `Ihre Fotos stehen Ihnen während ${retentionDays} Tagen zur Verfügung und werden danach automatisch archiviert.`;
 
+  const extensionHtml = extendedUntil
+    ? `<p style="font-size:15px;line-height:1.6;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:14px 16px;">
+         <strong>Gute Nachricht:</strong> Der Bestellzeitraum wurde verlängert – Sie können noch bis zum <strong>${extendedUntil}</strong> bestellen.
+       </p>`
+    : '';
+  const extensionText = extendedUntil
+    ? `\n\nGute Nachricht: Der Bestellzeitraum wurde verlängert – Sie können noch bis zum ${extendedUntil} bestellen.`
+    : '';
+
   const html = wrap(
     heading,
     `<p style="font-size:15px;line-height:1.6;">Guten Tag</p>
      <p style="font-size:15px;line-height:1.6;">${intro}</p>
+     ${extensionHtml}
      <p style="text-align:center;margin:24px 0;">
        <a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:600;font-size:15px;">Zu meinen Fotos</a>
      </p>
@@ -172,7 +194,7 @@ export async function sendGalleryReadyEmail(
   );
   const text = `Guten Tag
 
-${introText}
+${introText}${extensionText}
 
 Zu meinen Fotos: ${link}
 
