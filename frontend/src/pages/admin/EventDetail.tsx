@@ -43,6 +43,7 @@ export default function EventDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [uploadMsg, setUploadMsg] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -70,41 +71,87 @@ export default function EventDetail() {
     load();
   }, [id]);
 
+  // Photos are uploaded one at a time instead of in a single large request.
+  // A big batch is processed synchronously on the server (each photo writes the
+  // original plus three sharp variants) and, behind the Cloudflare tunnel, a
+  // long-running request runs into the ~100s gateway timeout or body-size limit
+  // and fails as a whole ("Upload fehlgeschlagen"). Sending one photo per
+  // request keeps every request small and fast, lets us show real progress, and
+  // a single retry absorbs transient network blips. Duplicate detection is
+  // unchanged: each request sees the already-stored photos of this Auftrag.
+  type UploadResult = {
+    ok: boolean;
+    matchedChildId?: string;
+    duplicate?: boolean;
+    filename: string;
+  };
+
+  const uploadOne = async (file: File): Promise<UploadResult[]> => {
+    const fd = new FormData();
+    fd.append('photos', file);
+    const res = await api<{ results: UploadResult[] }>(`/api/admin/events/${id}/photos`, {
+      method: 'POST',
+      admin: true,
+      formData: fd,
+    });
+    return res.results;
+  };
+
   const upload = async () => {
     const files = fileRef.current?.files;
     if (!files || files.length === 0) return;
+    const fileList = Array.from(files);
     setUploading(true);
     setUploadMsg('');
     setError('');
-    const fd = new FormData();
-    Array.from(files).forEach((f) => fd.append('photos', f));
-    try {
-      const res = await api<{
-        results: { ok: boolean; matchedChildId?: string; duplicate?: boolean; filename: string }[];
-      }>(`/api/admin/events/${id}/photos`, { method: 'POST', admin: true, formData: fd });
-      const ok = res.results.filter((r) => r.ok).length;
-      const matched = res.results.filter((r) => r.matchedChildId).length;
-      const dupes = res.results.filter((r) => r.duplicate);
-      setUploadMsg(
-        `${ok} von ${res.results.length} Fotos hochgeladen und verarbeitet.` +
-          (matched > 0 ? ` ${matched} automatisch einem Kind zugeordnet (Dateiname).` : ''),
-      );
-      if (dupes.length > 0) {
-        const names = dupes.map((d) => d.filename).join(', ');
-        setDuplicateWarning(
-          `${dupes.length} Foto(s) haben einen Dateinamen, der in diesem Auftrag bereits vorkommt: ${names}. ` +
-            'Bitte prüfe, ob dasselbe Kind doppelt hochgeladen wurde – betroffene Fotos sind unten mit „Doppelter Dateiname“ markiert.',
-        );
-      } else {
-        setDuplicateWarning('');
+    setDuplicateWarning('');
+    setUploadProgress({ done: 0, total: fileList.length });
+
+    const results: UploadResult[] = [];
+    const failed: string[] = [];
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      try {
+        results.push(...(await uploadOne(file)));
+      } catch {
+        // One retry to ride out transient failures (flaky network, brief
+        // gateway hiccup) before giving up on this single photo.
+        try {
+          results.push(...(await uploadOne(file)));
+        } catch {
+          failed.push(file.name);
+          results.push({ ok: false, filename: file.name });
+        }
       }
-      if (fileRef.current) fileRef.current.value = '';
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Upload fehlgeschlagen.');
-    } finally {
-      setUploading(false);
+      setUploadProgress({ done: i + 1, total: fileList.length });
     }
+
+    const ok = results.filter((r) => r.ok).length;
+    const matched = results.filter((r) => r.matchedChildId).length;
+    const dupes = results.filter((r) => r.duplicate);
+    setUploadMsg(
+      `${ok} von ${results.length} Fotos hochgeladen und verarbeitet.` +
+        (matched > 0 ? ` ${matched} automatisch einem Kind zugeordnet (Dateiname).` : ''),
+    );
+    if (dupes.length > 0) {
+      const names = dupes.map((d) => d.filename).join(', ');
+      setDuplicateWarning(
+        `${dupes.length} Foto(s) haben einen Dateinamen, der in diesem Auftrag bereits vorkommt: ${names}. ` +
+          'Bitte prüfe, ob dasselbe Kind doppelt hochgeladen wurde – betroffene Fotos sind unten mit „Doppelter Dateiname“ markiert.',
+      );
+    }
+    if (failed.length > 0) {
+      const names = failed.join(', ');
+      setError(
+        `${failed.length} Foto(s) konnten nicht hochgeladen werden: ${names}. ` +
+          'Bitte lade diese erneut hoch.',
+      );
+    }
+    if (fileRef.current) fileRef.current.value = '';
+    setUploadProgress(null);
+    setUploading(false);
+    load();
   };
 
   const patchEvent = async (data: Partial<EventObj>) => {
@@ -286,14 +333,58 @@ export default function EventDetail() {
           Nummer wie „Elin 1“ –, wird das Foto automatisch zugeordnet. Passt ein Vorname auf mehrere
           Kinder, bleibt das Foto bewusst unzugeordnet.
         </p>
+        <p className="muted" style={{ fontSize: '0.85rem' }}>
+          Die Fotos werden einzeln nacheinander hochgeladen und verarbeitet – so funktioniert auch
+          das Hochladen vieler Fotos auf einmal zuverlässig.
+        </p>
         {uploadMsg && <Alert kind="success">{uploadMsg}</Alert>}
         {duplicateWarning && <Alert kind="error">{duplicateWarning}</Alert>}
         <div className="row">
-          <input ref={fileRef} type="file" accept="image/*" multiple style={{ flex: 1 }} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            disabled={uploading}
+            style={{ flex: 1 }}
+          />
           <button className="btn" onClick={upload} disabled={uploading}>
-            {uploading ? 'Wird hochgeladen …' : 'Hochladen & verarbeiten'}
+            {uploading
+              ? uploadProgress
+                ? `Wird hochgeladen … (${uploadProgress.done}/${uploadProgress.total})`
+                : 'Wird hochgeladen …'
+              : 'Hochladen & verarbeiten'}
           </button>
         </div>
+        {uploadProgress && (
+          <div style={{ marginTop: 12 }} aria-live="polite">
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={uploadProgress.total}
+              aria-valuenow={uploadProgress.done}
+              style={{
+                height: 10,
+                borderRadius: 999,
+                background: 'var(--surface-2)',
+                overflow: 'hidden',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  width: `${uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%`,
+                  background: 'var(--primary)',
+                  transition: 'width 0.25s ease',
+                }}
+              />
+            </div>
+            <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6 }}>
+              {uploadProgress.done} von {uploadProgress.total} Fotos verarbeitet …
+            </p>
+          </div>
+        )}
         {children.length > 0 && photos.length > 0 && (
           <button
             className="btn secondary small"
