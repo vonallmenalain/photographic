@@ -37,7 +37,7 @@ import {
 import { sendPasswordResetEmail, sendGalleryReadyEmail } from '../lib/email';
 import { requestVerification } from '../services/verification';
 import { EVENT_STATUSES, archiveExpiredEvents, retentionExpiry } from '../services/events';
-import { matchChildByFilename } from '../lib/names';
+import { matchChildByFilename, isGroupPhotoFilename } from '../lib/names';
 import {
   detectMapping,
   describeColumns,
@@ -678,14 +678,19 @@ router.post(
       const id = newId('pho');
       const ext = (path.extname(file.originalname).replace('.', '').toLowerCase() || 'jpg').slice(0, 5);
       const storageKey = `${req.params.id}/${id}`;
+      // File names like "Gruppenfoto", "Klassenfoto" or "Klassenspiegel" mark a
+      // photo for the whole class: tick "Gruppen-/Klassenfoto" and make it
+      // visible to everyone in the Auftrag. These never get assigned to a single
+      // child, so we skip the per-child filename matching for them.
+      const isGroupPhoto = isGroupPhotoFilename(file.originalname);
       // Try to recognise the child from the file name (tolerant matching).
-      const match = autoAssign ? matchChildByFilename(file.originalname, children) : null;
+      const match = autoAssign && !isGroupPhoto ? matchChildByFilename(file.originalname, children) : null;
       const childId = match && !match.ambiguous ? match.childId : null;
       await setById(COL.photos, id, {
         event_id: req.params.id,
-        child_id: childId,
-        is_class_photo: 0,
-        visible_to_event: 0,
+        child_id: isGroupPhoto ? null : childId,
+        is_class_photo: isGroupPhoto ? 1 : 0,
+        visible_to_event: isGroupPhoto ? 1 : 0,
         original_filename: file.originalname.slice(0, 255),
         storage_key: storageKey,
         ext,
@@ -762,9 +767,22 @@ router.post(
     let assigned = 0;
     let ambiguous = 0;
     let unmatched = 0;
+    let groupPhotos = 0;
     const details: { id: string; filename: string; childName: string }[] = [];
     for (const p of photos) {
       if (p.is_class_photo) continue;
+      // File names like "Gruppenfoto"/"Klassenfoto"/"Klassenspiegel" mark a photo
+      // for the whole class instead of a single child.
+      if (isGroupPhotoFilename(p.original_filename)) {
+        await updateById(COL.photos, p.id, {
+          is_class_photo: 1,
+          visible_to_event: 1,
+          child_id: null,
+          updated_at: nowIso(),
+        });
+        groupPhotos += 1;
+        continue;
+      }
       if (p.child_id && !overwrite) continue;
       const match = matchChildByFilename(p.original_filename, children);
       if (!match) {
@@ -784,8 +802,11 @@ router.post(
       assigned += 1;
       details.push({ id: p.id, filename: p.original_filename, childName: match.childName });
     }
-    await audit('photo.autoassign', `${req.params.id}: ${assigned} assigned`);
-    res.json({ assigned, ambiguous, unmatched, details });
+    await audit(
+      'photo.autoassign',
+      `${req.params.id}: ${assigned} assigned, ${groupPhotos} group photos`,
+    );
+    res.json({ assigned, ambiguous, unmatched, groupPhotos, details });
   }),
 );
 
