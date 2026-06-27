@@ -222,7 +222,7 @@ export default function GalleryPreview() {
             key={current.id}
             className="gp-lb-img"
             src={imageUrl(current.previewUrl)}
-            alt=""
+            alt="Vergrösserte Vorschau des Fotos (mit Wasserzeichen)"
             draggable={false}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.preventDefault()}
