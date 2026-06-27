@@ -48,7 +48,6 @@ import {
 
 const router = Router();
 
-const EMAIL_STATUSES = ['created', 'not_verified', 'verification_sent', 'verified', 'disabled', 'support'] as const;
 const PHOTO_STATUSES = ['uploaded', 'processed', 'assigned', 'disabled'] as const;
 // Simplified order life cycle. `cart`/`checkout_started` remain internal states
 // of the shopping flow and are never shown as real orders. Admins only ever set
@@ -1185,11 +1184,12 @@ router.get(
 router.patch(
   '/emails/:id',
   asyncHandler(async (req, res) => {
+    // The verification status is derived automatically from whether the parent
+    // has verified their e-mail – it is intentionally NOT editable by the admin.
     const data = parse(
       z.object({
         email: emailSchema.optional(),
         name: z.string().max(200).optional(),
-        status: z.enum(EMAIL_STATUSES).optional(),
         note: z.string().max(1000).optional(),
       }),
       req.body,
@@ -1205,7 +1205,6 @@ router.patch(
     const map: Record<string, unknown> = {};
     if (data.email) map.email = normalizeEmail(data.email);
     if (data.name !== undefined) map.name = data.name;
-    if (data.status) map.status = data.status;
     if (data.note !== undefined) map.note = data.note;
     if (Object.keys(map).length) {
       await updateById(COL.parentEmails, req.params.id, { ...map, updated_at: nowIso() });
