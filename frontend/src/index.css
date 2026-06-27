@@ -334,165 +334,90 @@ input:focus, select:focus, textarea:focus {
 .badge.gray { background: var(--surface-2); color: var(--text-soft); }
 
 /* ==========================================================================
-   Galerie-Vorschau — immersive, text-free showcase ("wow" intro).
-   A full-bleed dark stage sits below the sticky header. The photos ride a
-   3-D coverflow carousel (modelled on the DreamTeam project): the photo in the
-   centre stands full-height while its neighbours recede with a slight rotation
-   and fade. The photos are decorative only (not clickable); an ambient blur of
-   the centred photo tints the stage, and a single glass button at the bottom
-   leads to the shopping gallery.
+   Galerie-Vorschau — Elfsight-style responsive photo gallery.
+   A dark, full-bleed stage below the sticky header holds a responsive masonry
+   grid of photos; tapping one opens a lightbox. This deliberately avoids the
+   old 3-D coverflow carousel (preserve-3d + requestAnimationFrame transforms +
+   per-frame blur toggling), which is what made mobile GPUs flicker. A plain
+   CSS-columns grid with one-shot entrance/hover transitions has none of those
+   failure modes, so it stays perfectly stable on phones.
    ========================================================================== */
 .gp-stage {
   position: fixed;
   top: 64px; /* sit just below the sticky app header */
   left: 0; right: 0; bottom: 0;
   z-index: 20;
-  overflow: hidden;
   display: flex; flex-direction: column;
   background: radial-gradient(120% 120% at 50% 0%, #11131c 0%, #07070c 60%, #050509 100%);
   isolation: isolate;
 }
 .gp-stage.is-loading { display: grid; place-items: center; }
 
-/* Ambient: blurred, enlarged copy of the photo currently centre stage. */
-.gp-ambient { position: absolute; inset: 0; z-index: 0; }
-.gp-ambient img {
-  position: absolute; inset: -8%;
-  width: 116%; height: 116%;
-  object-fit: cover; object-position: center;
-  filter: blur(54px) saturate(1.25) brightness(0.5);
-  opacity: 0;
-  /* `translateZ(0)` keeps each ambient layer permanently on the GPU so the
-     cross-fade below is a pure compositor opacity change (no re-raster of the
-     expensive blur) — this removes a source of flicker on mobile. */
-  transform: scale(1.08) translateZ(0);
-  will-change: opacity;
-  transition: opacity 1.4s ease;
-  user-select: none; -webkit-user-drag: none;
-}
-.gp-ambient img.on { opacity: 0.6; }
-
-/* Darken the edges so the centre photo pops to the foreground. */
-.gp-vignette {
-  position: absolute; inset: 0; z-index: 1; pointer-events: none;
-  background:
-    radial-gradient(82% 82% at 50% 46%, rgba(5, 5, 9, 0) 42%, rgba(5, 5, 9, 0.7) 100%),
-    linear-gradient(to bottom, rgba(5, 5, 9, 0.45) 0%, rgba(5, 5, 9, 0) 20%, rgba(5, 5, 9, 0) 60%, rgba(5, 5, 9, 0.85) 100%);
-}
-
-/* Carousel fills the stage above the footer. */
-.gp-carousel {
-  position: relative; z-index: 3;
+/* The grid scrolls inside the stage; the call-to-action bar floats over it. */
+.gp-scroll {
   flex: 1 1 auto; min-height: 0;
-  display: flex; align-items: center; justify-content: center;
-}
-.gp-outer { position: relative; flex: 1 1 auto; min-width: 0; height: 100%; overflow: hidden; }
-
-/* Subtle fade-out at the very edges to hint at more photos. */
-.gp-outer::before, .gp-outer::after {
-  content: ""; position: absolute; top: 0; bottom: 0; width: 9%;
-  z-index: 5; pointer-events: none;
-}
-.gp-outer::before { left: 0; background: linear-gradient(to right, rgba(5, 5, 9, 0.65), transparent); }
-.gp-outer::after { right: 0; background: linear-gradient(to left, rgba(5, 5, 9, 0.65), transparent); }
-
-/* Perspective stage — the carousel is driven purely by GPU transforms in a
-   continuous requestAnimationFrame loop (no native scroll), which keeps the
-   motion perfectly fluid. */
-.gp-viewport {
-  position: relative;
-  height: 100%;
-  perspective: 1700px;
-  perspective-origin: 50% 50%;
-  overflow: visible;
-  outline: none;
-  touch-action: pan-y;
-  user-select: none; -webkit-user-select: none;
-  cursor: grab;
-}
-.gp-viewport:active { cursor: grabbing; }
-
-/* All cards are absolutely stacked at the centre; transforms fan them out. */
-.gp-track {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  transform-style: preserve-3d;
-  will-change: transform;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
-.gp-slide {
-  position: absolute;
-  width: var(--gp-slide-w, 60vh);
-  height: var(--gp-slide-h, 80vh);
-  display: flex; align-items: center; justify-content: center;
-  pointer-events: none; /* the viewport handles drag; photos aren't clickable */
-  will-change: transform, opacity, filter;
-  backface-visibility: hidden; -webkit-backface-visibility: hidden;
-  transform-style: preserve-3d;
+/* Masonry via CSS columns — no JS, no layout thrash, no flicker. */
+.gp-grid {
+  column-count: 2;
+  column-gap: 12px;
+  padding: 12px;
+  max-width: 1400px;
+  margin: 0 auto;
 }
-.gp-slide img {
-  max-width: 100%; max-height: 100%;
-  width: auto; height: 100%;
-  object-fit: contain;
-  border-radius: 16px;
-  background: #0b0b11;
-  box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
+@media (min-width: 640px)  { .gp-grid { column-count: 3; column-gap: 14px; padding: 16px; } }
+@media (min-width: 1024px) { .gp-grid { column-count: 4; column-gap: 16px; padding: 20px; } }
+@media (min-width: 1500px) { .gp-grid { column-count: 5; } }
+
+/* Clears the last row from under the floating CTA bar. */
+.gp-grid-spacer { height: 104px; }
+
+.gp-cell {
+  display: block; width: 100%; padding: 0; margin: 0 0 12px; border: none;
+  background: #0b0b11; border-radius: 14px; overflow: hidden;
+  cursor: pointer; position: relative;
+  break-inside: avoid; -webkit-column-break-inside: avoid;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  /* One-shot entrance: hidden until the image decodes, then it fades up. */
+  opacity: 0; transform: translateY(10px);
+  transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.25s ease;
+}
+@media (min-width: 640px)  { .gp-cell { margin-bottom: 14px; } }
+@media (min-width: 1024px) { .gp-cell { margin-bottom: 16px; } }
+.gp-cell.is-loaded { opacity: 1; transform: none; }
+.gp-cell img {
+  display: block; width: 100%; height: auto;
   user-select: none; -webkit-user-drag: none;
-  transition: box-shadow 0.45s ease;
 }
-.gp-slide.is-center img {
-  box-shadow:
-    0 36px 90px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    0 0 120px rgba(120, 150, 255, 0.16);
+.gp-cell-overlay {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to top, rgba(5, 5, 9, 0.4), rgba(5, 5, 9, 0) 45%);
+  opacity: 0; transition: opacity 0.25s ease;
 }
-
-/* Nav arrows (desktop only). */
-.gp-arrow {
-  position: relative; z-index: 6; flex: none;
-  width: 48px; height: 48px; margin: 0 8px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff; font-size: 1.6rem; line-height: 1; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  backdrop-filter: blur(8px);
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
-}
-.gp-arrow:hover {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.4);
-  transform: scale(1.08);
-}
-.gp-arrow:active { transform: scale(0.94); }
-@media (max-width: 760px) {
-  .gp-arrow { display: none; }
-  /* A lighter blur is far cheaper to raster on mobile GPUs, which keeps the
-     ambient cross-fade smooth and flicker-free. */
-  .gp-ambient img { filter: blur(30px) saturate(1.2) brightness(0.52); }
-  .gp-ambient img.on { opacity: 0.55; }
-  /* A slightly flatter perspective + smaller depth keeps the 3-D transforms
-     light on mobile, where deep perspective layers can shimmer. */
-  .gp-viewport { perspective: 1300px; }
+/* Hover effects only on devices that truly hover (avoids sticky hover on touch). */
+@media (hover: hover) and (pointer: fine) {
+  .gp-cell:hover {
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+  .gp-cell:hover .gp-cell-overlay { opacity: 1; }
+  .gp-cell img { transition: transform 0.4s ease; }
+  .gp-cell:hover img { transform: scale(1.05); }
 }
 
-/* Footer: progress dots + one glass button to enter the gallery. */
+/* Floating call-to-action bar with a gradient fade over the bottom of the grid. */
 .gp-foot {
-  position: relative; z-index: 6;
-  flex: none;
-  display: flex; flex-direction: column; align-items: center; gap: 16px;
-  padding: 12px 20px max(20px, 3vh);
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
+  display: flex; justify-content: center;
+  padding: 24px 20px max(18px, 3vh);
+  background: linear-gradient(to top, rgba(5, 5, 9, 0.94) 35%, rgba(5, 5, 9, 0));
+  pointer-events: none; /* let the gradient area pass clicks through to the grid */
 }
-.gp-dots { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 320px; }
-.gp-dot {
-  width: 8px; height: 8px; padding: 0; border: none; border-radius: 999px;
-  background: rgba(255, 255, 255, 0.32); cursor: pointer;
-  transition: background 0.3s ease, transform 0.3s ease, width 0.3s ease;
-}
-.gp-dot.on { background: #fff; width: 22px; }
 .preview-enter {
+  pointer-events: auto;
   display: inline-flex; align-items: center; gap: 10px;
   font-weight: 600; font-size: 1rem; color: #0b0b11;
   padding: 13px 26px; border-radius: 999px;
@@ -510,8 +435,64 @@ input:focus, select:focus, textarea:focus {
 
 .spinner.light { border-color: rgba(255, 255, 255, 0.22); border-top-color: #fff; }
 
+/* ── Lightbox ─────────────────────────────────────────────────────────────── */
+.gp-lightbox {
+  position: fixed; inset: 0; z-index: 80;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(4, 4, 8, 0.92);
+  backdrop-filter: blur(6px);
+  padding: 24px;
+  animation: gpLbFade 0.2s ease;
+}
+@keyframes gpLbFade { from { opacity: 0; } to { opacity: 1; } }
+.gp-lb-img {
+  max-width: min(94vw, 1200px); max-height: 86vh;
+  width: auto; height: auto; object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7);
+  user-select: none; -webkit-user-drag: none;
+}
+.gp-lb-close, .gp-lb-nav {
+  position: absolute; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff; cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background 0.2s ease;
+}
+.gp-lb-close:hover, .gp-lb-nav:hover { background: rgba(255, 255, 255, 0.2); }
+.gp-lb-close {
+  top: 16px; right: 16px; width: 44px; height: 44px;
+  border-radius: 50%; font-size: 1.7rem; line-height: 1;
+}
+.gp-lb-close:active { transform: scale(0.94); }
+.gp-lb-nav {
+  top: 50%; transform: translateY(-50%);
+  width: 52px; height: 52px; border-radius: 50%;
+  font-size: 2rem; line-height: 1;
+}
+.gp-lb-nav:active { transform: translateY(-50%) scale(0.94); }
+.gp-lb-prev { left: 16px; }
+.gp-lb-next { right: 16px; }
+.gp-lb-count {
+  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.85); font-size: 0.9rem; letter-spacing: 0.04em;
+  background: rgba(0, 0, 0, 0.35); padding: 5px 12px; border-radius: 999px;
+  backdrop-filter: blur(6px);
+}
+@media (max-width: 640px) {
+  .gp-lightbox { padding: 12px; }
+  .gp-lb-nav { width: 44px; height: 44px; font-size: 1.6rem; }
+  .gp-lb-prev { left: 8px; }
+  .gp-lb-next { right: 8px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .gp-ambient img { transition: opacity 0.4s ease; }
+  .gp-cell { transition: opacity 0.3s ease; transform: none; }
+  .gp-cell.is-loaded { transform: none; }
+  .gp-cell:hover img { transform: none; }
+  .gp-lightbox { animation: none; }
 }
 
 /* Lightbox */
