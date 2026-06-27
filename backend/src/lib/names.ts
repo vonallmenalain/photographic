@@ -84,6 +84,24 @@ export function stripExtension(filename: string): string {
 }
 
 /**
+ * Keywords that mark a photo as a group/class photo via its file name. A photo
+ * whose file name contains any of these is treated as a "Gruppen-/Klassenfoto"
+ * that is visible to the whole class. Matched tolerantly (case-insensitive,
+ * umlaut/accent-insensitive) against the normalised file name.
+ */
+const GROUP_PHOTO_KEYWORDS = ['gruppenfoto', 'klassenfoto', 'klassenspiegel'];
+
+/**
+ * Returns true when a photo's file name marks it as a group/class photo, i.e.
+ * it contains one of the well-known keywords ("Gruppenfoto", "Klassenfoto",
+ * "Klassenspiegel"). The extension is ignored so "Gruppenfoto.jpg" matches.
+ */
+export function isGroupPhotoFilename(filename: string): boolean {
+  const normalized = normalizeName(stripExtension(filename));
+  return GROUP_PHOTO_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
+
+/**
  * Splits a "child" cell into individual names. Tolerates several separators
  * that admins typically use to list siblings in a single cell:
  *   "Max, Moritz" · "Max; Moritz" · "Max / Moritz" · "Max & Moritz" · "Max und Moritz"

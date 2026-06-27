@@ -218,12 +218,17 @@ export default function EventDetail() {
     setUploadMsg('');
     setError('');
     try {
-      const res = await api<{ assigned: number; ambiguous: number; unmatched: number }>(
-        `/api/admin/events/${id}/photos/auto-assign`,
-        { method: 'POST', admin: true, body: {} },
-      );
+      const res = await api<{
+        assigned: number;
+        ambiguous: number;
+        unmatched: number;
+        groupPhotos?: number;
+      }>(`/api/admin/events/${id}/photos/auto-assign`, { method: 'POST', admin: true, body: {} });
       setUploadMsg(
         `${res.assigned} Foto(s) automatisch nach Dateiname zugeordnet.` +
+          (res.groupPhotos && res.groupPhotos > 0
+            ? ` ${res.groupPhotos} als Gruppen-/Klassenfoto markiert (für die ganze Klasse sichtbar).`
+            : '') +
           (res.ambiguous > 0 ? ` ${res.ambiguous} mehrdeutig – bitte manuell prüfen.` : '') +
           (res.unmatched > 0
             ? ` ${res.unmatched} ohne Treffer – als Gruppen-/Klassenfoto markieren oder manuell zuordnen.`
@@ -332,6 +337,11 @@ export default function EventDetail() {
           Enthält der Dateiname den Namen eines Kindes – auch nur den <strong>Vornamen</strong> samt
           Nummer wie „Elin 1“ –, wird das Foto automatisch zugeordnet. Passt ein Vorname auf mehrere
           Kinder, bleibt das Foto bewusst unzugeordnet.
+        </p>
+        <p className="muted" style={{ fontSize: '0.85rem' }}>
+          Enthält der Dateiname <strong>„Gruppenfoto“</strong>, <strong>„Klassenfoto“</strong> oder{' '}
+          <strong>„Klassenspiegel“</strong>, wird das Foto automatisch als Gruppen-/Klassenfoto
+          markiert und für die ganze Klasse sichtbar gesetzt.
         </p>
         <p className="muted" style={{ fontSize: '0.85rem' }}>
           Die Fotos werden einzeln nacheinander hochgeladen und verarbeitet – so funktioniert auch
