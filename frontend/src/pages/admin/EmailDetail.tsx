@@ -219,6 +219,16 @@ export default function EmailDetail() {
               ))}
           </select>
         </div>
+
+        <AddRelatedEmail
+          emailId={email.id}
+          childCount={children.length}
+          onAdded={(message) => {
+            setMsg(message);
+            setError('');
+          }}
+          onError={(message) => setError(message)}
+        />
       </div>
 
       <div className="card mb">
@@ -288,6 +298,115 @@ function EmailEditor({ current, onSave }: { current: string; onSave: (v: string)
         Speichern
       </button>
     </div>
+  );
+}
+
+/**
+ * Adds a further parent e-mail address (e.g. the second parent) that should see
+ * exactly the same children as this one. The address is created if needed and
+ * automatically linked to every child currently linked here.
+ */
+function AddRelatedEmail({
+  emailId,
+  childCount,
+  onAdded,
+  onError,
+}: {
+  emailId: string;
+  childCount: number;
+  onAdded: (msg: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState('');
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!value.trim()) return;
+    setBusy(true);
+    try {
+      const res = await api<{ id: string; created: boolean; linksCreated: number }>(
+        `/api/admin/emails/${emailId}/related-emails`,
+        { method: 'POST', admin: true, body: { email: value.trim(), name: name.trim() } },
+      );
+      const linkPart =
+        res.linksCreated > 0
+          ? ` und mit ${res.linksCreated} Kind(ern) verknüpft`
+          : childCount === 0
+            ? ' (noch keine Kinder zum Verknüpfen vorhanden)'
+            : ' (bereits mit denselben Kindern verknüpft)';
+      onAdded(
+        `E-Mail-Adresse ${res.created ? 'angelegt' : 'übernommen'}${linkPart}.`,
+      );
+      setValue('');
+      setName('');
+      setOpen(false);
+      // Jump straight to the new address so the admin can manage it further.
+      navigate(`/admin/emails/${res.id}`);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : 'Konnte nicht hinzugefügt werden.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div style={{ marginTop: 14 }}>
+        <button type="button" className="btn secondary small" onClick={() => setOpen(true)}>
+          + Weitere E-Mail-Adresse hinzufügen
+        </button>
+        <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
+          Z. B. die Adresse des zweiten Elternteils. Sie wird mit denselben Kindern verknüpft wie
+          diese Adresse und sieht damit dieselben Fotos.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} style={{ marginTop: 14 }}>
+      <div className="row" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 10 }}>
+        <div className="field" style={{ marginBottom: 0, minWidth: 240, flex: 1 }}>
+          <label style={{ fontSize: '0.8rem' }}>Weitere E-Mail-Adresse</label>
+          <input
+            type="email"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="zweiter-elternteil@beispiel.ch"
+            autoFocus
+            required
+          />
+        </div>
+        <div className="field" style={{ marginBottom: 0, minWidth: 200 }}>
+          <label style={{ fontSize: '0.8rem' }}>Name (optional)</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="z. B. Familie Muster" />
+        </div>
+        <button className="btn small" type="submit" disabled={busy}>
+          {busy ? 'Wird hinzugefügt …' : 'Hinzufügen'}
+        </button>
+        <button
+          type="button"
+          className="btn ghost small"
+          onClick={() => {
+            setOpen(false);
+            setValue('');
+            setName('');
+          }}
+          disabled={busy}
+        >
+          Abbrechen
+        </button>
+      </div>
+      <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
+        {childCount > 0
+          ? `Die Adresse wird mit ${childCount} verknüpften Kind(ern) dieser Adresse verbunden.`
+          : 'Dieser Adresse ist noch kein Kind zugewiesen – die neue Adresse wird vorerst ohne Kind-Verknüpfung angelegt.'}
+      </p>
+    </form>
   );
 }
 

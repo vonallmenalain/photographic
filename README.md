@@ -84,7 +84,7 @@ optional SMTP/Stripe), ist Schritt für Schritt in [`docs/`](docs/) beschrieben.
 | Aufbewahrung 30 Tage | `expires_at` je Event (Standard 30 Tage), nach Ablauf nicht mehr sichtbar |
 | Meldefunktion | Eltern-Formular → Admin „Meldungen“ |
 | Adminbereich | Aufträge/Fotos/Zuordnung/E-Mails (je Auftrag)/Auswertung/Bestellungen/Meldungen/Produkte |
-| Massen-Import | E-Mails + Kinder + Verknüpfungen per Copy-&-Paste oder CSV/Excel (tolerante Spaltenerkennung) |
+| Massen-Import | E-Mails + Kinder + Verknüpfungen per Copy-&-Paste oder CSV/Excel (tolerante Spaltenerkennung); **mehrere Eltern-Adressen pro Kind** (Komma-getrennt in einer Spalte oder über mehrere E-Mail-Spalten) |
 | Auto-Zuordnung | Fotos werden beim Upload automatisch dem Kind im Dateinamen zugeordnet – schon der Vorname samt Nummer (z. B. `Elin 1.jpg`) genügt; mehrdeutige Treffer bleiben unzugeordnet |
 | Statuswerte | Fotos, E-Mails, Bestellungen, Events – wie im Konzept benannt |
 

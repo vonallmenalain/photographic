@@ -52,7 +52,7 @@ Empfohlene Spalten (Reihenfolge **egal**, Schreibweise tolerant erkannt):
 
 | Spalte | Bedeutung |
 |---|---|
-| `E-Mail` | Eltern-Adresse (zentrale Identität) |
+| `E-Mail` | Eltern-Adresse (zentrale Identität) – **mehrere Adressen erlaubt** (siehe unten) |
 | `Kind` | **Vollständiger** Name des Kindes – mehrere Geschwister mit `,` `;` `/` `&` oder „und“ trennen |
 | `Name Eltern` *(optional)* | Name der Eltern/Familie |
 | `Auftrag` *(optional)* | Klasse/Gruppe; landet im passenden Auftrag |
@@ -61,10 +61,23 @@ Empfohlene Spalten (Reihenfolge **egal**, Schreibweise tolerant erkannt):
 Beispiel (Kopiervorlage):
 
 ```
-E-Mail        Kind                    Name Eltern   Auftrag
-anna@x.de     Lena Müller             Anna Müller   Klasse 3b
-paul@x.de     Tim Weber, Lisa Weber   Paul Weber    Klasse 3b
+E-Mail                      E-Mail 2        Kind                    Name Eltern    Auftrag
+anna@x.de, oma@x.de         papa@x.de       Lena Müller             Familie Müller Klasse 3b
+paul@x.de                                   Tim Weber, Lisa Weber   Paul Weber     Klasse 3b
 ```
+
+**Mehrere E-Mail-Adressen pro Kind:** Du kannst beliebig viele Eltern-Adressen
+mit demselben Kind verknüpfen – auf zwei Wegen, die sich auch kombinieren lassen:
+
+- **Mehrere Adressen in einer Spalte**, getrennt mit Komma, Semikolon, Schräg-/
+  Senkrechtstrich oder Leerzeichen (z. B. `mama@x.de, papa@x.de`).
+- **Mehrere E-Mail-Spalten**: eine zweite Spalte mit Titel `E-Mail 2` (oder einer
+  weiteren Spalte, die ebenfalls `E-Mail` heißt). Alle Spalten mit „mail“ im Titel
+  werden als E-Mail erkannt; in der Vorschau lässt sich die Zuordnung pro Spalte
+  korrigieren.
+
+Alle so erkannten (gültigen) Adressen einer Zeile werden mit jedem Kind der Zeile
+verknüpft.
 
 **Toleranz / Hinweise:**
 
@@ -127,7 +140,10 @@ Bevor du ein Event auf „published“ setzt:
 - **Falsche/alte E-Mail:** E-Mail-Detailseite → Adresse korrigieren oder Status
   auf „Support nötig“. Bei Bedarf neue Bestätigung auslösen.
 - **Mehrere Eltern (Mutter+Vater):** beide Adressen anlegen, beide mit demselben
-  Kind verknüpfen.
+  Kind verknüpfen. Am schnellsten geht das auf der E-Mail-Detailseite („Verwalten“)
+  über **„+ Weitere E-Mail-Adresse hinzufügen“** – die neue Adresse wird automatisch
+  mit denselben Kindern verknüpft. Beim Import lassen sich mehrere Adressen direkt
+  erfassen (Komma-getrennt in einer Spalte oder über eine zweite `E-Mail`-Spalte).
 - **Mehrere Kinder:** eine Adresse mit mehreren Kindern verknüpfen.
 - **Falsch zugeordnetes Foto:** Zuordnung ändern oder Foto deaktivieren/löschen.
 - **Eltern finden keine Fotos:** prüfen, ob (a) Adresse exakt stimmt, (b) Kind

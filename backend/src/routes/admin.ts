@@ -1174,6 +1174,70 @@ router.delete(
   }),
 );
 
+// Add a further parent e-mail address (e.g. the second parent) that should see
+// exactly the same children as this address. Creates the address if it does not
+// exist yet (or reuses it) and mirrors all of this address' child links onto it.
+router.post(
+  '/emails/:id/related-emails',
+  asyncHandler(async (req, res) => {
+    const { email, name } = parse(
+      z.object({ email: emailSchema, name: z.string().max(200).default('') }),
+      req.body,
+    );
+    const source = await getById<{ email: string }>(COL.parentEmails, req.params.id);
+    if (!source) throw new ApiError(404, 'E-Mail-Adresse nicht gefunden.');
+
+    const normalized = normalizeEmail(email);
+    if (normalized === source.email) {
+      throw new ApiError(409, 'Das ist bereits diese E-Mail-Adresse.');
+    }
+
+    // Find or create the target address (never clobber an existing name).
+    const existing = await firstOf<{ name?: string }>(
+      col(COL.parentEmails).where('email', '==', normalized),
+    );
+    let targetId: string;
+    let created = false;
+    if (existing) {
+      targetId = existing.id;
+      if (name && !existing.name) {
+        await updateById(COL.parentEmails, targetId, { name, updated_at: nowIso() });
+      }
+    } else {
+      targetId = newId('eml');
+      await setById(COL.parentEmails, targetId, {
+        email: normalized,
+        name: name || '',
+        status: 'not_verified',
+        verified_at: null,
+        note: '',
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      });
+      created = true;
+    }
+
+    // Mirror this address' child links onto the new address.
+    const childLinks = await runQuery<{ child_id: string }>(
+      col(COL.emailChildren).where('email_id', '==', req.params.id),
+    );
+    let linksCreated = 0;
+    for (const link of childLinks) {
+      const id = linkId(targetId, link.child_id);
+      if (await getById(COL.emailChildren, id)) continue;
+      await setById(COL.emailChildren, id, {
+        email_id: targetId,
+        child_id: link.child_id,
+        created_at: nowIso(),
+      });
+      linksCreated += 1;
+    }
+
+    await audit('email.related.create', `${req.params.id} -> ${targetId} (${normalized})`);
+    res.json({ id: targetId, created, linksCreated, childCount: childLinks.length });
+  }),
+);
+
 router.post(
   '/emails/:id/resend-verification',
   asyncHandler(async (req, res) => {
@@ -1189,18 +1253,25 @@ router.post(
 // The frontend converts any input (pasted table, CSV or XLSX) into a 2-D array
 // of strings. The backend owns the tolerant column detection, builds a review
 // plan and finally commits it (creating e-mails, children and their links).
+const MAX_IMPORT_ROWS = 5000;
+const MAX_IMPORT_COLS = 60;
+
 const mappingSchema = z
   .object({
-    email: z.number().int().nonnegative().optional(),
+    // The e-mail role may map to several columns (e.g. "E-Mail" + "E-Mail 2").
+    // A single number is still accepted for backwards compatibility.
+    email: z
+      .union([
+        z.number().int().nonnegative(),
+        z.array(z.number().int().nonnegative()).max(MAX_IMPORT_COLS),
+      ])
+      .optional(),
     name: z.number().int().nonnegative().optional(),
     child: z.number().int().nonnegative().optional(),
     event: z.number().int().nonnegative().optional(),
     note: z.number().int().nonnegative().optional(),
   })
   .partial();
-
-const MAX_IMPORT_ROWS = 5000;
-const MAX_IMPORT_COLS = 60;
 
 function sanitizeRows(raw: unknown[][]): string[][] {
   return raw
