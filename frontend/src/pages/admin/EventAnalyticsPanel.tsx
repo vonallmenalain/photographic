@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import { Alert, Modal, SendToSelfCheckbox, Spinner, StatusBadge } from '../../components/common';
+import { Alert, Modal, SendToSelfCheckbox } from '../../components/common';
 import { formatPrice, formatDateShort } from '../../lib/format';
 
-interface Buyer {
+export interface Buyer {
   email_id: string;
   email: string;
   name: string;
@@ -12,16 +12,16 @@ interface Buyer {
   order_count: number;
   revenue_cents: number;
 }
-interface ReminderRow {
+export interface ReminderRow {
   id: string;
   sent_at: string;
   note: string;
 }
-interface DailyPoint {
+export interface DailyPoint {
   date: string;
   revenue_cents: number;
 }
-interface EventAnalytics {
+export interface EventAnalytics {
   id: string;
   name: string;
   status: string;
@@ -36,172 +36,72 @@ interface EventAnalytics {
   reminders: ReminderRow[];
 }
 
-export default function Analytics() {
-  const [events, setEvents] = useState<EventAnalytics[]>([]);
-  const [currency, setCurrency] = useState('chf');
-  const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
-  const load = () =>
-    api<{ events: EventAnalytics[]; currency: string }>('/api/admin/analytics', { admin: true })
-      .then((r) => {
-        setEvents(r.events);
-        setCurrency(r.currency || 'chf');
-      })
-      .finally(() => setLoading(false));
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  const toggle = (id: string) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
-
-  const totals = useMemo(
-    () => ({
-      revenue: events.reduce((s, e) => s + e.revenue_cents, 0),
-      orders: events.reduce((s, e) => s + e.order_count, 0),
-    }),
-    [events],
-  );
-
-  if (loading) return <Spinner />;
-
-  return (
-    <div>
-      <h1>Auswertung</h1>
-      <p className="soft">
-        Übersicht je Auftrag/Klasse: Umsatz, wie viele Eltern bestellt haben und der zeitliche
-        Verlauf. So siehst du auf einen Blick, wann sich eine Erinnerung lohnt – und ob sie gewirkt hat.
-      </p>
-
-      <div className="stat-grid mb">
-        <div className="stat">
-          <div className="num">{formatPrice(totals.revenue, currency)}</div>
-          <div className="lbl">Gesamtumsatz</div>
-        </div>
-        <div className="stat">
-          <div className="num">{totals.orders}</div>
-          <div className="lbl">Bestellungen</div>
-        </div>
-        <div className="stat">
-          <div className="num">{events.length}</div>
-          <div className="lbl">Aufträge</div>
-        </div>
-      </div>
-
-      {events.length === 0 ? (
-        <p className="muted">Noch keine Aufträge vorhanden.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {events.map((ev) => (
-            <EventCard
-              key={ev.id}
-              ev={ev}
-              currency={currency}
-              open={!!expanded[ev.id]}
-              onToggle={() => toggle(ev.id)}
-              onReload={load}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function EventCard({
+/**
+ * Read-only evaluation panel for a single finished Auftrag: revenue, who bought
+ * how much, the daily revenue chart with reminder markers and the reminder
+ * tooling. Used inside the Auftrag detail view (the former "Auswertung").
+ */
+export function EventAnalyticsPanel({
   ev,
   currency,
-  open,
-  onToggle,
   onReload,
 }: {
   ev: EventAnalytics;
   currency: string;
-  open: boolean;
-  onToggle: () => void;
   onReload: () => void;
 }) {
   return (
-    <div className="card" style={{ marginTop: 0 }}>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        style={{
-          all: 'unset',
-          cursor: 'pointer',
-          display: 'block',
-          width: '100%',
-        }}
-      >
-        <div className="row between" style={{ alignItems: 'flex-start' }}>
-          <div className="row" style={{ gap: 10, alignItems: 'center', minWidth: 0 }}>
-            <span aria-hidden="true" style={{ color: 'var(--text-muted)' }}>
-              {open ? '▾' : '▸'}
-            </span>
-            <strong style={{ fontSize: '1.05rem' }}>{ev.name}</strong>
-            <StatusBadge status={ev.status} />
-          </div>
-        </div>
-        <div className="analytics-summary">
-          <SummaryStat label="Umsatz" value={formatPrice(ev.revenue_cents, currency)} />
-          <SummaryStat label="Bestellungen" value={String(ev.order_count)} />
-          <SummaryStat
-            label="Verifizierte E-Mails"
-            value={`${ev.email_verified} von ${ev.email_total}`}
-          />
-          <SummaryStat label="Erinnerungen" value={String(ev.reminders.length)} />
-          <OrderableUntilStat status={ev.status} expiresAt={ev.expires_at} />
-        </div>
-      </button>
+    <div>
+      <div className="analytics-summary">
+        <SummaryStat label="Umsatz" value={formatPrice(ev.revenue_cents, currency)} />
+        <SummaryStat label="Bestellungen" value={String(ev.order_count)} />
+        <SummaryStat
+          label="Verifizierte E-Mails"
+          value={`${ev.email_verified} von ${ev.email_total}`}
+        />
+        <SummaryStat label="Erinnerungen" value={String(ev.reminders.length)} />
+        <OrderableUntilStat status={ev.status} expiresAt={ev.expires_at} />
+      </div>
 
-      {open && (
-        <div style={{ marginTop: 16 }}>
-          <h3 style={{ marginBottom: 8 }}>Umsatzverlauf</h3>
-          <RevenueChart daily={ev.daily} reminders={ev.reminders} currency={currency} />
+      <h3 style={{ marginTop: 20, marginBottom: 8 }}>Umsatzverlauf</h3>
+      <RevenueChart daily={ev.daily} reminders={ev.reminders} currency={currency} />
 
-          <ReminderManager event={ev} onReload={onReload} />
+      <ReminderManager event={ev} onReload={onReload} />
 
-          <h3 style={{ marginTop: 20, marginBottom: 8 }}>Wer hat wie viel bestellt</h3>
-          {ev.buyers.length === 0 ? (
-            <p className="muted">Noch keine Bestellungen in diesem Auftrag.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>E-Mail</th>
-                  <th>Status</th>
-                  <th>Bestellungen</th>
-                  <th>Umsatz</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {ev.buyers.map((b) => (
-                  <tr key={b.email_id}>
-                    <td>{b.email}</td>
-                    <td>
-                      {b.verified ? (
-                        <span className="badge green">Verifiziert</span>
-                      ) : (
-                        <span className="badge amber">Nicht verifiziert</span>
-                      )}
-                    </td>
-                    <td>{b.order_count}</td>
-                    <td>{formatPrice(b.revenue_cents, currency)}</td>
-                    <td>
-                      <Link to={`/admin/emails/${b.email_id}`}>Verwalten</Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <p className="muted" style={{ fontSize: '0.82rem', marginTop: 10 }}>
-            <Link to={`/admin/events/${ev.id}`}>→ Zum Auftrag</Link>
-          </p>
-        </div>
+      <h3 style={{ marginTop: 20, marginBottom: 8 }}>Wer hat wie viel bestellt</h3>
+      {ev.buyers.length === 0 ? (
+        <p className="muted">Noch keine Bestellungen in diesem Auftrag.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>E-Mail</th>
+              <th>Status</th>
+              <th>Bestellungen</th>
+              <th>Umsatz</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {ev.buyers.map((b) => (
+              <tr key={b.email_id}>
+                <td>{b.email}</td>
+                <td>
+                  {b.verified ? (
+                    <span className="badge green">Verifiziert</span>
+                  ) : (
+                    <span className="badge amber">Nicht verifiziert</span>
+                  )}
+                </td>
+                <td>{b.order_count}</td>
+                <td>{formatPrice(b.revenue_cents, currency)}</td>
+                <td>
+                  <Link to={`/admin/emails/${b.email_id}`}>Verwalten</Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );
@@ -217,9 +117,9 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * Zeigt bereits im eingeklappten Zustand, bis wann der Auftrag aktiv ist – also
- * wie lange Eltern noch bestellen können. Archivierte oder abgelaufene Aufträge
- * werden klar als nicht mehr bestellbar gekennzeichnet.
+ * Zeigt, bis wann der Auftrag aktiv ist – also wie lange Eltern noch bestellen
+ * können. Archivierte oder abgelaufene Aufträge werden klar als nicht mehr
+ * bestellbar gekennzeichnet.
  */
 function OrderableUntilStat({
   status,
@@ -376,10 +276,10 @@ interface ReminderRecipients {
 }
 
 /**
- * Reminder-Popup im ausgeklappten Auftrag: pro Kind aufgeschlüsselt, welche
- * E-Mail-Adressen bereits bestätigt wurden und welche schon bestellt haben.
- * Standardmässig sind nur die Adressen ausgewählt, die noch keine Bestellung
- * erfasst haben. Optional kann eine Kopie an das eigene Admin-Konto gehen.
+ * Reminder-Popup: pro Kind aufgeschlüsselt, welche E-Mail-Adressen bereits
+ * bestätigt wurden und welche schon bestellt haben. Standardmässig sind nur die
+ * Adressen ausgewählt, die noch keine Bestellung erfasst haben. Optional kann
+ * eine Kopie an das eigene Admin-Konto gehen.
  */
 function ReminderEmailModal({
   eventId,
@@ -397,7 +297,6 @@ function ReminderEmailModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  // Alle (eindeutigen) Adressen über Kinder und Direktzuweisungen hinweg.
   const allEmails = useMemo(() => {
     if (!data) return [] as ReminderEmail[];
     const byId = new Map<string, ReminderEmail>();
@@ -410,7 +309,6 @@ function ReminderEmailModal({
     api<ReminderRecipients>(`/api/admin/events/${eventId}/reminder-recipients`, { admin: true })
       .then((r) => {
         setData(r);
-        // Standard: nur Adressen ohne Bestellung vorauswählen.
         const ids = new Set<string>();
         for (const c of r.children) for (const e of c.emails) if (!e.hasOrdered) ids.add(e.id);
         for (const e of r.otherEmails) if (!e.hasOrdered) ids.add(e.id);
@@ -634,7 +532,6 @@ function RevenueChart({
   const chartH = H - padT - padB;
 
   const maxRevenue = Math.max(1, ...daily.map((d) => d.revenue_cents));
-  // Round the y-axis maximum up to a "nice" number of francs.
   const niceMax = niceCeil(maxRevenue);
   const n = daily.length;
   const slot = chartW / n;
@@ -648,7 +545,6 @@ function RevenueChart({
     .map((r) => ({ ...r, idx: dayIndex.get(r.sent_at.slice(0, 10)) }))
     .filter((r): r is ReminderRow & { idx: number } => r.idx !== undefined);
 
-  // A handful of x labels only, to avoid clutter.
   const labelEvery = Math.max(1, Math.ceil(n / 6));
   const yTicks = [0, 0.5, 1];
 
@@ -661,7 +557,6 @@ function RevenueChart({
         role="img"
         aria-label="Umsatzverlauf pro Tag"
       >
-        {/* Y grid + labels */}
         {yTicks.map((t) => {
           const yy = padT + chartH - t * chartH;
           return (
@@ -674,7 +569,6 @@ function RevenueChart({
           );
         })}
 
-        {/* Reminder markers (drawn behind bars) */}
         {reminderMarks.map((r) => {
           const cx = padL + r.idx * slot + slot / 2;
           return (
@@ -697,7 +591,6 @@ function RevenueChart({
           );
         })}
 
-        {/* Bars */}
         {daily.map((d, i) => {
           const h = d.revenue_cents > 0 ? padT + chartH - y(d.revenue_cents) : 0;
           return (
@@ -711,7 +604,6 @@ function RevenueChart({
           );
         })}
 
-        {/* X labels */}
         {daily.map((d, i) =>
           i % labelEvery === 0 || i === n - 1 ? (
             <text
@@ -727,7 +619,6 @@ function RevenueChart({
           ) : null,
         )}
 
-        {/* Axis baseline */}
         <line
           x1={padL}
           y1={padT + chartH}

@@ -1565,10 +1565,13 @@ function dayKey(value: string | number | Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-router.get(
-  '/analytics',
-  asyncHandler(async (_req, res) => {
-    await archiveExpiredEvents();
+/**
+ * Builds the per-Auftrag evaluation figures (revenue, verified e-mails, order
+ * count, buyer breakdown and the daily revenue series). Shared by the global
+ * Auswertung listing and the per-Auftrag detail view in "Aufträge". When
+ * `filterEventId` is given only that single Auftrag is computed/returned.
+ */
+async function buildAnalytics(filterEventId?: string) {
     const [events, children, emailChildren, photoEmails, photos, parentEmails, orders, orderItems, reminders] =
       await Promise.all([
         runQuery<{ id: string; name: string; status: string; created_at: string; expires_at: string | null }>(
@@ -1692,6 +1695,7 @@ router.get(
     };
 
     const result = events
+      .filter((ev) => !filterEventId || ev.id === filterEventId)
       .map((ev) => {
         const linked = eventEmails.get(ev.id) ?? new Set<string>();
         let verified = 0;
@@ -1734,7 +1738,27 @@ router.get(
       })
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 
-    res.json({ events: result, currency: config.stripe.currency });
+    return { events: result, currency: config.stripe.currency };
+}
+
+router.get(
+  '/analytics',
+  asyncHandler(async (_req, res) => {
+    await archiveExpiredEvents();
+    res.json(await buildAnalytics());
+  }),
+);
+
+// Per-Auftrag evaluation, used by the read-only detail view of a finished
+// (published/archived) Auftrag in "Aufträge".
+router.get(
+  '/events/:id/analytics',
+  asyncHandler(async (req, res) => {
+    await archiveExpiredEvents();
+    const { events, currency } = await buildAnalytics(req.params.id);
+    const event = events[0];
+    if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
+    res.json({ event, currency });
   }),
 );
 

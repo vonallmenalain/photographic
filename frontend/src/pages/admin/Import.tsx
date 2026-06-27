@@ -1,19 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import { Alert, Spinner, StatusBadge } from '../../components/common';
+import { Alert, Modal, Spinner, StatusBadge } from '../../components/common';
 import { parseFile, parseDelimited } from '../../lib/tabular';
 import { PhotoManager, type ManagedChild, type ManagedPhoto } from './PhotoManager';
-import { NotifyAllModal } from './EventEmails';
+import EventEmails, { NotifyAllModal } from './EventEmails';
 
 // ---------------------------------------------------------------------------
 // "Aufträge erfassen" – guided wizard that takes a new order from raw data all
-// the way to the parent invitation:
-//   1. Daten              – import e-mails/children (paste or CSV/Excel)
-//   2. Import der Fotos    – upload photos, auto-assign, confirm assignment
-//   3. Veröffentlichen     – make the gallery visible to parents
-//   4. Versand an die Eltern – send the invitation e-mails
-// Each step turns green once completed. Steps 2–4 unlock once step 1 produced
+// the way to the parent invitation. The steps mirror the checklist shown for a
+// finished Auftrag, so the process stays consistent end to end:
+//   1. Kinder & E-Mails erfassen – import e-mails/children (paste or CSV/Excel)
+//   2. Fotos hochladen           – upload photos (auto-assign by file name)
+//   3. Zuordnung prüfen          – review the photo↔child assignment & confirm
+//   4. Veröffentlichen           – make the gallery visible to parents
+//   5. Eltern einladen           – send the invitation e-mails
+// Each step turns green once completed. Steps 2–5 unlock once step 1 produced
 // (or selected) a target order.
 // ---------------------------------------------------------------------------
 
@@ -26,7 +28,13 @@ interface WizardEvent {
   invited_at?: string | null;
 }
 
-const STEP_LABELS = ['Daten', 'Import der Fotos', 'Veröffentlichen', 'Versand an die Eltern'];
+const STEP_LABELS = [
+  'Kinder & E-Mails erfassen',
+  'Fotos hochladen',
+  'Zuordnung prüfen',
+  'Veröffentlichen',
+  'Eltern einladen',
+];
 
 export default function AuftraegeErfassen() {
   const [searchParams] = useSearchParams();
@@ -37,19 +45,24 @@ export default function AuftraegeErfassen() {
   const [event, setEvent] = useState<WizardEvent | null>(null);
   const [children, setChildren] = useState<ManagedChild[]>([]);
   const [photos, setPhotos] = useState<ManagedPhoto[]>([]);
+  // Photo count survives across steps (PhotoManager is only mounted on the
+  // photo steps); kept in sync by loadEvent and the PhotoManager callback.
+  const [photoCount, setPhotoCount] = useState(0);
   const [importDone, setImportDone] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [stepError, setStepError] = useState('');
   const [showNotify, setShowNotify] = useState(false);
+  const [showAddChild, setShowAddChild] = useState(false);
 
   const loadEvent = async (targetId: string) => {
-    const res = await api<{ event: WizardEvent; children: ManagedChild[] }>(
+    const res = await api<{ event: WizardEvent; children: ManagedChild[]; photos: ManagedPhoto[] }>(
       `/api/admin/events/${targetId}`,
       { admin: true },
     );
     setEvent(res.event);
     setChildren(res.children);
+    setPhotoCount(res.photos.length);
     return res;
   };
 
@@ -77,13 +90,32 @@ export default function AuftraegeErfassen() {
   }, [presetEventId]);
 
   const step1Done = importDone && !!eventId;
-  const step2Done = !!event?.photos_confirmed_at;
-  const step3Done = event?.status === 'published';
-  const step4Done = !!event?.invited_at;
-  const doneFlags = [step1Done, step2Done, step3Done, step4Done];
+  const step2Done = !!eventId && photoCount > 0;
+  const step3Done = !!event?.photos_confirmed_at;
+  const step4Done = event?.status === 'published';
+  const step5Done = !!event?.invited_at;
+  const doneFlags = [step1Done, step2Done, step3Done, step4Done, step5Done];
 
   // Step n (>1) is reachable once a target order exists.
   const canGoTo = (step: number) => step === 1 || !!eventId;
+
+  const onPhotosChange = (next: ManagedPhoto[]) => {
+    setPhotos(next);
+    setPhotoCount(next.length);
+  };
+
+  const addChild = async (name: string) => {
+    if (!eventId) return;
+    await api(`/api/admin/events/${eventId}/children`, { method: 'POST', admin: true, body: { name } });
+    await loadEvent(eventId);
+  };
+
+  const deleteChild = async (childId: string) => {
+    if (!eventId) return;
+    if (!confirm('Kind löschen? Zuordnungen gehen verloren.')) return;
+    await api(`/api/admin/children/${childId}`, { method: 'DELETE', admin: true });
+    await loadEvent(eventId);
+  };
 
   const onImported = async (primaryEventId: string | null) => {
     setImportDone(true);
@@ -95,7 +127,9 @@ export default function AuftraegeErfassen() {
       } catch {
         /* ignore */
       }
-      setActiveStep(2);
+      // Stay on step 1 so the photographer can review the imported children and
+      // e-mail addresses (and add/remove individual ones) before continuing to
+      // the photos with "Weiter zu den Fotos".
     }
   };
 
@@ -110,7 +144,7 @@ export default function AuftraegeErfassen() {
         body: { photos_confirmed_at: new Date().toISOString() },
       });
       await loadEvent(eventId);
-      setActiveStep(3);
+      setActiveStep(4);
     } catch (err) {
       setStepError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
     } finally {
@@ -121,7 +155,7 @@ export default function AuftraegeErfassen() {
   const publish = async () => {
     if (!eventId) return;
     setStepError('');
-    if (photos.length === 0) {
+    if (photoCount === 0) {
       setStepError('Es sind noch keine Fotos in diesem Auftrag. Bitte lade zuerst Fotos hoch.');
       return;
     }
@@ -142,7 +176,7 @@ export default function AuftraegeErfassen() {
         body: { status: 'published' },
       });
       await loadEvent(eventId);
-      setActiveStep(4);
+      setActiveStep(5);
     } catch (err) {
       setStepError(err instanceof ApiError ? err.message : 'Veröffentlichen fehlgeschlagen.');
     } finally {
@@ -174,6 +208,7 @@ export default function AuftraegeErfassen() {
     setEvent(null);
     setChildren([]);
     setPhotos([]);
+    setPhotoCount(0);
     setImportDone(false);
     setActiveStep(1);
     setStepError('');
@@ -217,21 +252,105 @@ export default function AuftraegeErfassen() {
       {stepError && <Alert kind="error">{stepError}</Alert>}
 
       {activeStep === 1 && (
-        <Step1Data presetEventId={presetEventId} onImported={onImported} done={step1Done} />
+        <>
+          <Step1Data presetEventId={presetEventId} onImported={onImported} done={step1Done} />
+
+          {eventId && (
+            <>
+              {/* Children of the target order – review what was imported, add or
+                  remove individual children without re-importing. */}
+              <div className="card mb">
+                <div className="row between">
+                  <h2 style={{ marginBottom: 0 }}>Kinder</h2>
+                  <button className="btn secondary small" onClick={() => setShowAddChild(true)}>
+                    + Kind anlegen
+                  </button>
+                </div>
+                <p className="muted" style={{ fontSize: '0.82rem' }}>
+                  Namen sind nur intern – sie werden Eltern niemals angezeigt.
+                </p>
+                {children.length === 0 ? (
+                  <p className="muted">Noch keine Kinder angelegt.</p>
+                ) : (
+                  <div>
+                    {children.map((c) => (
+                      <span className="chip" key={c.id}>
+                        {c.name}
+                        <button onClick={() => deleteChild(c.id)} title="Löschen">
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* E-Mail-Adressen (Eltern) dieses Auftrags */}
+              <div id="ev-emails">
+                <EventEmails eventId={eventId} eventChildren={children} />
+              </div>
+
+              <div className="card mb">
+                <div className="row" style={{ marginTop: 0 }}>
+                  <button className="btn" type="button" onClick={() => setActiveStep(2)}>
+                    Weiter zu den Fotos
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </>
       )}
 
       {activeStep === 2 &&
         (eventId ? (
           <div>
             <p className="soft" style={{ marginTop: 0 }}>
-              Lade die Fotos hoch (eines nach dem anderen, mit Fortschrittsbalken). Anschliessend
-              werden sie – wo möglich – automatisch den Kindern zugeordnet. Prüfe die Zuordnung und
-              bestätige sie am Schluss.
+              Lade die Fotos hoch (eines nach dem anderen, mit Fortschrittsbalken). Enthält der
+              Dateiname den Namen eines Kindes, wird das Foto automatisch zugeordnet. Die Zuordnung
+              prüfst du im nächsten Schritt.
             </p>
             <PhotoManager
               eventId={eventId}
               children={children}
-              onPhotosChange={setPhotos}
+              mode="upload"
+              onPhotosChange={onPhotosChange}
+            />
+            <div className="card mb" style={{ marginTop: 16 }}>
+              <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
+                {photoCount === 0
+                  ? 'Noch keine Fotos hochgeladen.'
+                  : `${photoCount} Foto(s) hochgeladen.`}
+              </p>
+              <div className="row" style={{ marginTop: 8 }}>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => setActiveStep(3)}
+                  disabled={photoCount === 0}
+                >
+                  Weiter zur Zuordnung
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <NeedsOrderHint onBack={() => setActiveStep(1)} />
+        ))}
+
+      {activeStep === 3 &&
+        (eventId ? (
+          <div>
+            <p className="soft" style={{ marginTop: 0 }}>
+              Prüfe die automatische Zuordnung der Fotos zu den Kindern, korrigiere sie wo nötig und
+              bestätige sie am Schluss. Unzugeordnete Fotos, die keine Gruppen-/Klassenfotos sind,
+              sind für niemanden sichtbar.
+            </p>
+            <PhotoManager
+              eventId={eventId}
+              children={children}
+              mode="assign"
+              onPhotosChange={onPhotosChange}
             />
             <div className="card mb" style={{ marginTop: 16 }}>
               <h2 style={{ marginTop: 0 }}>Zuordnung bestätigen</h2>
@@ -242,15 +361,15 @@ export default function AuftraegeErfassen() {
                     ? `Alle ${photos.length} Foto(s) sind zugeordnet oder als Gruppen-/Klassenfoto markiert.`
                     : `${unassignedCount} von ${photos.length} Foto(s) sind noch keinem Kind zugeordnet und kein Gruppen-/Klassenfoto.`}
               </p>
-              {step2Done && (
-                <Alert kind="success">Die Zuordnung wurde bestätigt – Schritt 2 ist abgeschlossen.</Alert>
+              {step3Done && (
+                <Alert kind="success">Die Zuordnung wurde bestätigt – Schritt 3 ist abgeschlossen.</Alert>
               )}
               <div className="row" style={{ marginTop: 8 }}>
                 <button className="btn" onClick={confirmAssignment} disabled={busy || photos.length === 0}>
-                  {step2Done ? 'Zuordnung erneut bestätigen' : 'Zuordnung bestätigen & weiter'}
+                  {step3Done ? 'Zuordnung erneut bestätigen' : 'Zuordnung bestätigen & weiter'}
                 </button>
-                {step2Done && (
-                  <button className="btn secondary" type="button" onClick={() => setActiveStep(3)}>
+                {step3Done && (
+                  <button className="btn secondary" type="button" onClick={() => setActiveStep(4)}>
                     Weiter zu Veröffentlichen
                   </button>
                 )}
@@ -261,7 +380,7 @@ export default function AuftraegeErfassen() {
           <NeedsOrderHint onBack={() => setActiveStep(1)} />
         ))}
 
-      {activeStep === 3 &&
+      {activeStep === 4 &&
         (event ? (
           <div className="card mb">
             <h2 style={{ marginTop: 0 }}>Veröffentlichen</h2>
@@ -269,17 +388,17 @@ export default function AuftraegeErfassen() {
               Erst nach dem Veröffentlichen sind die zugeordneten Fotos für berechtigte Eltern
               sichtbar.
             </p>
-            {step3Done ? (
+            {step4Done ? (
               <>
                 <Alert kind="success">
-                  Der Auftrag ist veröffentlicht – Schritt 3 ist abgeschlossen.
+                  Der Auftrag ist veröffentlicht – Schritt 4 ist abgeschlossen.
                 </Alert>
                 <div className="row" style={{ marginTop: 8 }}>
-                  <button className="btn secondary" type="button" onClick={() => setActiveStep(4)}>
-                    Weiter zum Versand
+                  <button className="btn secondary" type="button" onClick={() => setActiveStep(5)}>
+                    Weiter zum Einladen
                   </button>
                   <button className="btn ghost" type="button" onClick={unpublish} disabled={busy}>
-                    Auf Entwurf zurücksetzen
+                    Auf „In Bearbeitung“ zurücksetzen
                   </button>
                 </div>
               </>
@@ -295,31 +414,31 @@ export default function AuftraegeErfassen() {
           <NeedsOrderHint onBack={() => setActiveStep(1)} />
         ))}
 
-      {activeStep === 4 &&
+      {activeStep === 5 &&
         (event ? (
           <div className="card mb">
-            <h2 style={{ marginTop: 0 }}>Versand an die Eltern</h2>
+            <h2 style={{ marginTop: 0 }}>Eltern einladen</h2>
             <p className="muted" style={{ fontSize: '0.85rem' }}>
               Sende den erfassten Eltern-Adressen die Einladung mit dem Link zur Galerie und der
               Kurzanleitung zur Verifizierung.
             </p>
-            {!step3Done && (
+            {!step4Done && (
               <Alert kind="info">
                 Der Auftrag ist noch nicht veröffentlicht. Am besten zuerst veröffentlichen, damit
                 die Eltern die Fotos sehen können.
               </Alert>
             )}
-            {step4Done && (
+            {step5Done && (
               <Alert kind="success">
-                Die Einladung wurde versendet – Schritt 4 ist abgeschlossen.
+                Die Einladung wurde versendet – Schritt 5 ist abgeschlossen.
               </Alert>
             )}
             <div className="row" style={{ marginTop: 8 }}>
               <button className="btn" onClick={() => setShowNotify(true)}>
-                {step4Done ? 'Erneut einladen' : 'Einladung per E-Mail senden'}
+                {step5Done ? 'Erneut einladen' : 'Einladung per E-Mail senden'}
               </button>
             </div>
-            {step4Done && (
+            {step5Done && (
               <p className="soft" style={{ marginTop: 14 }}>
                 Alle Schritte abgeschlossen. Der Auftrag erscheint nun unter{' '}
                 <Link to="/admin/events">Aufträge</Link>.
@@ -340,7 +459,77 @@ export default function AuftraegeErfassen() {
           }}
         />
       )}
+
+      {showAddChild && (
+        <AddChildModal
+          onClose={() => setShowAddChild(false)}
+          onCreate={async (name) => {
+            await addChild(name);
+            setShowAddChild(false);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function AddChildModal({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (name: string) => Promise<void>;
+}) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setError('');
+    setBusy(true);
+    try {
+      await onCreate(trimmed);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Konnte nicht angelegt werden.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Kind anlegen"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
+            Abbrechen
+          </button>
+          <button type="submit" form="add-child-form" className="btn" disabled={busy}>
+            {busy ? 'Wird angelegt …' : 'Kind anlegen'}
+          </button>
+        </>
+      }
+    >
+      <form id="add-child-form" onSubmit={submit}>
+        {error && <Alert kind="error">{error}</Alert>}
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label>Name des Kindes</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="z. B. Alain"
+            autoFocus
+            required
+          />
+          <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
+            Der Name ist nur intern sichtbar – Eltern sehen ihn nie.
+          </p>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

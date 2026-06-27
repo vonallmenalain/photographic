@@ -35,11 +35,20 @@ export function PhotoManager({
   children,
   refreshSignal = 0,
   onPhotosChange,
+  mode = 'full',
 }: {
   eventId: string;
   children: ManagedChild[];
   refreshSignal?: number;
   onPhotosChange?: (photos: ManagedPhoto[]) => void;
+  /**
+   * Which surfaces to render. The capture wizard splits the two halves across
+   * two separate steps ("Fotos hochladen" and "Zuordnung prüfen"):
+   *   - 'full'   : upload card + assignment grid (default)
+   *   - 'upload' : only the upload card
+   *   - 'assign' : only the photos + assignment grid
+   */
+  mode?: 'full' | 'upload' | 'assign';
 }) {
   const [photos, setPhotos] = useState<ManagedPhoto[]>([]);
   const [error, setError] = useState('');
@@ -284,6 +293,7 @@ export function PhotoManager({
       {error && <Alert kind="error">{error}</Alert>}
 
       {/* Upload */}
+      {mode !== 'assign' && (
       <div className="card mb" id="ev-upload">
         <h2>Fotos hochladen</h2>
         <p className="muted" style={{ fontSize: '0.85rem' }}>
@@ -373,8 +383,10 @@ export function PhotoManager({
           </button>
         )}
       </div>
+      )}
 
       {/* Photos */}
+      {mode !== 'upload' && (
       <div className="card" id="ev-photos">
         <h2>Fotos &amp; Zuordnung</h2>
         {duplicateCount > 0 && (
@@ -579,6 +591,7 @@ export function PhotoManager({
           </div>
         )}
       </div>
+      )}
 
       {emailModalPhoto && (
         <PhotoEmailModal
