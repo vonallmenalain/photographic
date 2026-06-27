@@ -464,7 +464,7 @@ function ReminderEmailModal({
   return (
     <Modal
       title="Reminder per E-Mail versenden"
-      width={620}
+      width={760}
       onClose={onClose}
       footer={
         <>
@@ -577,6 +577,7 @@ function ReminderChildGroup({
             key={e.id}
             className="row"
             style={{
+              flexWrap: 'nowrap',
               alignItems: 'center',
               gap: 8,
               padding: '7px 10px',
@@ -589,18 +590,18 @@ function ReminderChildGroup({
               type="checkbox"
               checked={selected.has(e.id)}
               onChange={() => onToggle(e.id)}
-              style={{ marginRight: 4 }}
+              style={{ marginRight: 4, flex: 'none' }}
             />
             <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-all' }}>{e.email}</span>
             {e.verified ? (
-              <span className="badge green">Bestätigt</span>
+              <span className="badge green" style={{ flexShrink: 0 }}>Bestätigt</span>
             ) : (
-              <span className="badge amber">Nicht bestätigt</span>
+              <span className="badge amber" style={{ flexShrink: 0 }}>Nicht bestätigt</span>
             )}
             {e.hasOrdered ? (
-              <span className="badge green">Bestellt</span>
+              <span className="badge green" style={{ flexShrink: 0 }}>Bestellt</span>
             ) : (
-              <span className="badge gray">Keine Bestellung</span>
+              <span className="badge gray" style={{ flexShrink: 0 }}>Keine Bestellung</span>
             )}
           </label>
         ))
