@@ -1622,7 +1622,7 @@ function dayKey(value: string | number | Date): string {
 async function buildAnalytics(filterEventId?: string) {
     const [events, children, emailChildren, photoEmails, photos, parentEmails, orders, orderItems, reminders] =
       await Promise.all([
-        runQuery<{ id: string; name: string; status: string; created_at: string; expires_at: string | null }>(
+        runQuery<{ id: string; name: string; status: string; created_at: string; expires_at: string | null; invited_at?: string | null }>(
           col(COL.events),
         ),
         runQuery<{ id: string; event_id: string }>(col(COL.children)),
@@ -1773,6 +1773,7 @@ async function buildAnalytics(filterEventId?: string) {
           status: ev.status,
           created_at: ev.created_at,
           expires_at: ev.expires_at ?? null,
+          invited_at: ev.invited_at ?? null,
           revenue_cents: eventRevenue.get(ev.id) ?? 0,
           order_count: eventOrders.get(ev.id)?.size ?? 0,
           email_total: linked.size,
