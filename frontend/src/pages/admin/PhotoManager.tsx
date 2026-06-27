@@ -469,7 +469,15 @@ export function PhotoManager({
                 <AdminThumb photoId={p.id} onClick={() => setZoomPhoto(p)} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <StatusBadge status={p.status} />
+                    {/* Gruppen-/Klassenfotos werden keinem Kind zugeordnet und
+                        bleiben daher im Status „Verarbeitet“. Damit sie nicht
+                        wie offene Aufgaben (gelb) wirken, zeigen wir die Plakette
+                        grün – sie sind vollständig erfasst. */}
+                    {p.is_class_photo && p.status === 'processed' ? (
+                      <span className="badge green">Verarbeitet</span>
+                    ) : (
+                      <StatusBadge status={p.status} />
+                    )}
                     {p.is_class_photo ? <span className="badge class">Klassenfoto</span> : null}
                     {isDuplicateFilename(p) ? (
                       <span

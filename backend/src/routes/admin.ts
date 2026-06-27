@@ -355,16 +355,62 @@ router.get(
   }),
 );
 
+// Per-event revenue + order counts for the Aufträge overview. Only confirmed,
+// revenue-bearing orders (pending/completed) count. We deliberately avoid
+// streaming the entire photos collection (which is what makes the admin area
+// slow): instead we fetch only the event ids of the photos that actually appear
+// in an order, via a single batched getAll().
+async function eventRevenueTotals(): Promise<{
+  revenue: Map<string, number>;
+  orderCount: Map<string, number>;
+}> {
+  const [orders, orderItems] = await Promise.all([
+    runQuery<{ id: string; status: string }>(col(COL.orders)),
+    runQuery<{ order_id: string; photo_id: string; qty: number; unit_price_cents: number }>(
+      col(COL.orderItems),
+    ),
+  ]);
+  const orderById = new Map(orders.map((o) => [o.id, o]));
+  const countsForRevenue = (status: string) => status === 'pending' || status === 'completed';
+
+  const relevantItems = orderItems.filter((item) => {
+    const order = orderById.get(item.order_id);
+    return !!order && countsForRevenue(order.status);
+  });
+  const photoEvent = await getManyById<{ event_id: string }>(
+    COL.photos,
+    relevantItems.map((i) => i.photo_id),
+  );
+
+  const revenue = new Map<string, number>();
+  const orderSets = new Map<string, Set<string>>();
+  for (const item of relevantItems) {
+    const eventId = photoEvent.get(item.photo_id)?.event_id;
+    if (!eventId) continue;
+    revenue.set(eventId, (revenue.get(eventId) ?? 0) + (item.unit_price_cents ?? 0) * (item.qty ?? 0));
+    let set = orderSets.get(eventId);
+    if (!set) {
+      set = new Set<string>();
+      orderSets.set(eventId, set);
+    }
+    set.add(item.order_id);
+  }
+  const orderCount = new Map<string, number>();
+  for (const [eventId, set] of orderSets) orderCount.set(eventId, set.size);
+  return { revenue, orderCount };
+}
+
 // --- Events --------------------------------------------------------------
 router.get(
   '/events',
   asyncHandler(async (_req, res) => {
     // Keep statuses current (auto-archive expired galleries) before listing.
     await archiveExpiredEvents();
-    const [events, children, emailLinks] = await Promise.all([
+    const [events, children, emailLinks, totals] = await Promise.all([
       runQuery<Record<string, unknown>>(col(COL.events)),
       runQuery<{ id: string; event_id: string }>(col(COL.children)),
       runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
+      eventRevenueTotals(),
     ]);
     // Photo counts via server-side aggregation per event instead of streaming
     // the ENTIRE photos collection into memory. The photos collection grows
@@ -402,13 +448,15 @@ router.get(
         photo_count: photoCounts.get(e.id) ?? 0,
         child_count: childCounts.get(e.id) ?? 0,
         email_count: emailsByEvent.get(e.id)?.size ?? 0,
+        order_count: totals.orderCount.get(e.id) ?? 0,
+        revenue_cents: totals.revenue.get(e.id) ?? 0,
       }))
       .sort((a, b) =>
         String((b as Record<string, unknown>).created_at ?? '').localeCompare(
           String((a as Record<string, unknown>).created_at ?? ''),
         ),
       );
-    res.json({ events: result });
+    res.json({ events: result, currency: config.stripe.currency });
   }),
 );
 
