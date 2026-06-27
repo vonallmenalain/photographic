@@ -51,11 +51,13 @@ function watermarkSvg(width: number, height: number, text: string): Buffer {
   // Build the line and drop the trailing separator so it ends on the word.
   const line = unit.repeat(repeats).slice(0, -separator.length);
   const safeLine = escapeXml(line);
-  // Use font families that are actually installed in the runtime image
-  // (see backend/Dockerfile). librsvg only renders text when it can resolve a
-  // font; "Liberation Sans"/"DejaVu Sans" are the metric-compatible packages we
-  // ship, with the generic fallbacks kept for local development.
-  const fontFamily = "'Liberation Sans', 'DejaVu Sans', Arial, Helvetica, sans-serif";
+  // Font family for the watermark text. Configurable (IMG_WATERMARK_FONT_FAMILY)
+  // so it stays in sync with the typeface used across the website (Kalam by
+  // default). librsvg only renders text when it can resolve a font, so the
+  // configured value keeps the metric-compatible families we always ship
+  // ("Liberation Sans"/"DejaVu Sans") as fallbacks; the matching font files
+  // are installed into the runtime image (see backend/Dockerfile).
+  const fontFamily = config.images.watermarkFontFamily;
   const texts: string[] = [];
   for (let y = -height; y < height * 2; y += stepY) {
     texts.push(

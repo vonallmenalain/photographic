@@ -166,6 +166,18 @@ export const config = {
     previewQuality: int('IMG_PREVIEW_QUALITY', 62),
     thumbQuality: int('IMG_THUMB_QUALITY', 58),
     watermarkText: optional('IMG_WATERMARK_TEXT', 'Vorschau'),
+    // Font family used for the watermark text. Kept configurable so the
+    // watermark always matches the typeface used across the website (currently
+    // "Kalam", the hand-lettered display font of the parent view). Change this
+    // in ONE place when the site font changes – just make sure the chosen font
+    // is actually installed in the runtime image (see backend/Dockerfile, which
+    // ships the bundled fonts from backend/assets/fonts). The fallbacks are the
+    // metric-compatible families we always ship so the watermark never silently
+    // disappears if the primary font is missing.
+    watermarkFontFamily: optional(
+      'IMG_WATERMARK_FONT_FAMILY',
+      "'Kalam', 'Liberation Sans', 'DejaVu Sans', Arial, Helvetica, sans-serif",
+    ),
   },
 
   // Stripe (optional). If not configured, checkout uses a manual/test flow.
