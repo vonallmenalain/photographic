@@ -4,19 +4,19 @@ import { api, ApiError } from '../../api/client';
 import { Alert, Modal, Spinner, StatusBadge } from '../../components/common';
 import { parseFile, parseDelimited } from '../../lib/tabular';
 import { PhotoManager, type ManagedChild, type ManagedPhoto } from './PhotoManager';
-import EventEmails, { NotifyAllModal } from './EventEmails';
+import EventEmails from './EventEmails';
 
 // ---------------------------------------------------------------------------
-// "Aufträge erfassen" – guided wizard that takes a new order from raw data all
-// the way to the parent invitation. The steps mirror the checklist shown for a
-// finished Auftrag, so the process stays consistent end to end:
+// "Aufträge erfassen" – guided wizard that takes a new order from raw data to a
+// published gallery:
 //   1. Kinder & E-Mails erfassen – import e-mails/children (paste or CSV/Excel)
 //   2. Fotos hochladen           – upload photos (auto-assign by file name)
 //   3. Zuordnung prüfen          – review the photo↔child assignment & confirm
 //   4. Veröffentlichen           – make the gallery visible to parents
-//   5. Eltern einladen           – send the invitation e-mails
-// Each step turns green once completed. Steps 2–5 unlock once step 1 produced
-// (or selected) a target order.
+// Each step turns green once completed. Steps 2–4 unlock once step 1 produced
+// (or selected) a target order. Inviting the parents is intentionally NOT part
+// of the capture wizard – it happens later from the Auftrag (E-Mail-Adressen
+// → „Einladung per E-Mail senden“).
 // ---------------------------------------------------------------------------
 
 interface WizardEvent {
@@ -25,7 +25,6 @@ interface WizardEvent {
   status: string;
   expires_at: string | null;
   photos_confirmed_at?: string | null;
-  invited_at?: string | null;
 }
 
 const STEP_LABELS = [
@@ -33,7 +32,6 @@ const STEP_LABELS = [
   'Fotos hochladen',
   'Zuordnung prüfen',
   'Veröffentlichen',
-  'Eltern einladen',
 ];
 
 export default function AuftraegeErfassen() {
@@ -52,7 +50,6 @@ export default function AuftraegeErfassen() {
   const [activeStep, setActiveStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [stepError, setStepError] = useState('');
-  const [showNotify, setShowNotify] = useState(false);
   const [showAddChild, setShowAddChild] = useState(false);
 
   const loadEvent = async (targetId: string) => {
@@ -93,8 +90,7 @@ export default function AuftraegeErfassen() {
   const step2Done = !!eventId && photoCount > 0;
   const step3Done = !!event?.photos_confirmed_at;
   const step4Done = event?.status === 'published';
-  const step5Done = !!event?.invited_at;
-  const doneFlags = [step1Done, step2Done, step3Done, step4Done, step5Done];
+  const doneFlags = [step1Done, step2Done, step3Done, step4Done];
 
   // Step n (>1) is reachable once a target order exists.
   const canGoTo = (step: number) => step === 1 || !!eventId;
@@ -127,9 +123,10 @@ export default function AuftraegeErfassen() {
       } catch {
         /* ignore */
       }
-      // Stay on step 1 so the photographer can review the imported children and
-      // e-mail addresses (and add/remove individual ones) before continuing to
-      // the photos with "Weiter zu den Fotos".
+      // Skip the intermediate confirmation: after "Jetzt importieren" we move
+      // straight to step 2 (Fotos hochladen). The imported children and e-mail
+      // addresses can still be reviewed/edited by switching back to step 1.
+      setActiveStep(2);
     }
   };
 
@@ -176,7 +173,6 @@ export default function AuftraegeErfassen() {
         body: { status: 'published' },
       });
       await loadEvent(eventId);
-      setActiveStep(5);
     } catch (err) {
       setStepError(err instanceof ApiError ? err.message : 'Veröffentlichen fehlgeschlagen.');
     } finally {
@@ -282,14 +278,6 @@ export default function AuftraegeErfassen() {
               <div id="ev-emails">
                 <EventEmails eventId={eventId} eventChildren={children} />
               </div>
-
-              <div className="card mb">
-                <div className="row" style={{ marginTop: 0 }}>
-                  <button className="btn" type="button" onClick={() => setActiveStep(2)}>
-                    Weiter zu den Fotos
-                  </button>
-                </div>
-              </div>
             </>
           )}
         </>
@@ -382,10 +370,12 @@ export default function AuftraegeErfassen() {
                 <Alert kind="success">
                   Der Auftrag ist veröffentlicht – Schritt 4 ist abgeschlossen.
                 </Alert>
+                <p className="soft" style={{ marginTop: 14 }}>
+                  Alle Schritte abgeschlossen. Der Auftrag erscheint nun unter{' '}
+                  <Link to="/admin/events">Aufträge</Link>. Die Eltern lädst du dort über die
+                  E-Mail-Adressen des Auftrags ein.
+                </p>
                 <div className="row" style={{ marginTop: 8 }}>
-                  <button className="btn secondary" type="button" onClick={() => setActiveStep(5)}>
-                    Weiter zum Einladen
-                  </button>
                   <button className="btn ghost" type="button" onClick={unpublish} disabled={busy}>
                     Auf „In Bearbeitung“ zurücksetzen
                   </button>
@@ -402,52 +392,6 @@ export default function AuftraegeErfassen() {
         ) : (
           <NeedsOrderHint onBack={() => setActiveStep(1)} />
         ))}
-
-      {activeStep === 5 &&
-        (event ? (
-          <div className="card mb">
-            <h2 style={{ marginTop: 0 }}>Eltern einladen</h2>
-            <p className="muted" style={{ fontSize: '0.85rem' }}>
-              Sende den erfassten Eltern-Adressen die Einladung mit dem Link zur Galerie und der
-              Kurzanleitung zur Verifizierung.
-            </p>
-            {!step4Done && (
-              <Alert kind="info">
-                Der Auftrag ist noch nicht veröffentlicht. Am besten zuerst veröffentlichen, damit
-                die Eltern die Fotos sehen können.
-              </Alert>
-            )}
-            {step5Done && (
-              <Alert kind="success">
-                Die Einladung wurde versendet – Schritt 5 ist abgeschlossen.
-              </Alert>
-            )}
-            <div className="row" style={{ marginTop: 8 }}>
-              <button className="btn" onClick={() => setShowNotify(true)}>
-                {step5Done ? 'Erneut einladen' : 'Einladung per E-Mail senden'}
-              </button>
-            </div>
-            {step5Done && (
-              <p className="soft" style={{ marginTop: 14 }}>
-                Alle Schritte abgeschlossen. Der Auftrag erscheint nun unter{' '}
-                <Link to="/admin/events">Aufträge</Link>.
-              </p>
-            )}
-          </div>
-        ) : (
-          <NeedsOrderHint onBack={() => setActiveStep(1)} />
-        ))}
-
-      {showNotify && eventId && (
-        <NotifyAllModal
-          eventId={eventId}
-          onClose={() => setShowNotify(false)}
-          onSent={async () => {
-            setShowNotify(false);
-            await loadEvent(eventId);
-          }}
-        />
-      )}
 
       {showAddChild && (
         <AddChildModal
