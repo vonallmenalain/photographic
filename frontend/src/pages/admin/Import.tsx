@@ -20,10 +20,13 @@ interface Column {
   role: Role;
   sample: string;
 }
+interface PlanEmail {
+  email: string;
+  valid: boolean;
+}
 interface PlanRow {
   rowIndex: number;
-  email: string;
-  emailValid: boolean;
+  emails: PlanEmail[];
   parentName: string;
   childNames: string[];
   eventName: string;
@@ -34,9 +37,20 @@ interface Plan {
   rows: PlanRow[];
   totals: { rows: number; withEmail: number; distinctEmails: number; children: number; skipped: number };
 }
+/**
+ * Column mapping. Every role except `email` maps to a single column; `email`
+ * may map to several columns (e.g. "E-Mail" + "E-Mail 2").
+ */
+interface Mapping {
+  email?: number[];
+  name?: number;
+  child?: number;
+  event?: number;
+  note?: number;
+}
 interface PreviewResp {
   hasHeader: boolean;
-  mapping: Partial<Record<Exclude<Role, 'ignore'>, number>>;
+  mapping: Mapping;
   columns: Column[];
   rowCount: number;
   plan: Plan;
@@ -57,9 +71,9 @@ interface EventRow {
   name: string;
 }
 
-const EXAMPLE = `E-Mail\tKind\tName Eltern\tAuftrag
-anna@beispiel.de\tLena Müller\tAnna Müller\tKlasse 3b
-paul@beispiel.de\tTim Weber, Lisa Weber\tPaul Weber\tKlasse 3b`;
+const EXAMPLE = `E-Mail\tE-Mail 2\tKind\tName Eltern\tAuftrag
+anna@beispiel.de, oma@beispiel.de\tpapa@beispiel.de\tLena Müller\tFamilie Müller\tKlasse 3b
+paul@beispiel.de\t\tTim Weber, Lisa Weber\tPaul Weber\tKlasse 3b`;
 
 /** Mirrors the backend `normalizeName`: lowercases, strips accents/ß, collapses whitespace. */
 function normalizeName(input: string): string {
@@ -163,11 +177,25 @@ export default function Import() {
 
   const setColumnRole = (index: number, role: Role) => {
     if (!preview) return;
-    const next: PreviewResp['mapping'] = { ...preview.mapping };
-    for (const k of Object.keys(next) as (keyof typeof next)[]) {
-      if (next[k] === index) delete next[k];
+    const next: Mapping = {
+      email: [...(preview.mapping.email ?? [])],
+      name: preview.mapping.name,
+      child: preview.mapping.child,
+      event: preview.mapping.event,
+      note: preview.mapping.note,
+    };
+    // Detach this column from any role it currently holds.
+    next.email = (next.email ?? []).filter((i) => i !== index);
+    (['name', 'child', 'event', 'note'] as const).forEach((k) => {
+      if (next[k] === index) next[k] = undefined;
+    });
+    if (role === 'email') {
+      // Several columns may carry the e-mail role at the same time.
+      next.email = [...(next.email ?? []), index].sort((a, b) => a - b);
+    } else if (role !== 'ignore') {
+      next[role] = index;
     }
-    if (role !== 'ignore') next[role] = index;
+    if ((next.email ?? []).length === 0) delete next.email;
     runPreview(rows, next, preview.hasHeader);
   };
 
@@ -284,6 +312,12 @@ export default function Import() {
           {' '}optional <strong>Name Eltern</strong>, <strong>Auftrag</strong> und <strong>Notiz</strong>.
           {' '}Die Reihenfolge und Schreibweise der Spalten ist egal – sie werden automatisch erkannt
           {' '}und lassen sich unten anpassen.
+        </p>
+        <p className="muted" style={{ fontSize: '0.85rem' }}>
+          <strong>Mehrere E-Mail-Adressen pro Kind</strong> sind möglich: Trage entweder mehrere
+          {' '}Adressen durch Komma getrennt in <strong>eine</strong> E-Mail-Spalte ein
+          {' '}(z. B. <em>mama@…, papa@…</em>) oder lege weitere E-Mail-Spalten an
+          {' '}(z. B. <strong>E-Mail 2</strong>). Alle erkannten Adressen werden mit dem Kind verknüpft.
         </p>
         <textarea
           value={text}
@@ -474,8 +508,17 @@ export default function Import() {
                 <tbody>
                   {preview.plan.rows.slice(0, 200).map((r) => (
                     <tr key={r.rowIndex}>
-                      <td className={r.email && !r.emailValid ? 'soft' : ''} style={r.email && !r.emailValid ? { color: 'var(--danger)' } : undefined}>
-                        {r.email || '—'}
+                      <td>
+                        {r.emails.length === 0
+                          ? '—'
+                          : r.emails.map((e, idx) => (
+                              <span key={`${e.email}-${idx}`}>
+                                {idx > 0 && ', '}
+                                <span style={!e.valid ? { color: 'var(--danger)' } : undefined}>
+                                  {e.email}
+                                </span>
+                              </span>
+                            ))}
                       </td>
                       <td>{r.parentName || '—'}</td>
                       <td>{r.childNames.join(', ') || '—'}</td>
