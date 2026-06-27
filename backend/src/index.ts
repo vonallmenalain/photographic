@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import fs from 'fs';
 import { config } from './config';
@@ -20,6 +21,20 @@ function buildApp() {
   // Per-request timing + Firestore accounting (see middleware/requestTiming).
   // Mounted first so it wraps the whole request, including body parsing.
   app.use(requestTiming);
+
+  // Security headers (HSTS, X-Content-Type-Options: nosniff, X-Frame-Options,
+  // referrer policy, …). This is a pure JSON/image API and serves no HTML, so we
+  // disable the (HTML-only) Content-Security-Policy here and leave it to the
+  // frontend host (Netlify). The default `Cross-Origin-Resource-Policy:
+  // same-origin` would block the frontend (fotos.alae.app) from loading the
+  // token-protected preview images served by this API (api.alae.app), so we
+  // relax it to `cross-origin` – the images are still gated by signed tokens.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
 
   // CORS: allow the configured public app (Netlify) + extra origins, with credentials.
   const allowed = new Set<string>([config.publicAppUrl, ...config.extraCorsOrigins]);

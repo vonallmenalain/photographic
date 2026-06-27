@@ -6,6 +6,7 @@ import { asyncHandler, ApiError } from '../middleware/errorHandler';
 import { verifyFileToken } from '../lib/auth';
 import { requireParent } from '../middleware/parentAuth';
 import { variantPath, Variant } from '../lib/images';
+import { eventIsAvailable } from '../services/events';
 
 const router = Router();
 
@@ -65,11 +66,25 @@ router.get(
     if (grant.expires_at && new Date(grant.expires_at).getTime() < Date.now()) {
       throw new ApiError(410, 'Dieser Download-Link ist abgelaufen.');
     }
-    const photo = await getById<{ storage_key: string; ext: string; original_filename: string }>(
-      COL.photos,
-      grant.photo_id,
-    );
+    const photo = await getById<{
+      storage_key: string;
+      ext: string;
+      original_filename: string;
+      event_id: string;
+    }>(COL.photos, grant.photo_id);
     if (!photo) throw new ApiError(404, 'Datei nicht gefunden.');
+
+    // Downloads stay valid only while the underlying Auftrag/event is available
+    // (published and within its retention window). Once the event is archived or
+    // the retention period (default 30 days) has passed, the download is disabled
+    // even though the grant document still exists.
+    const event = await getById<{ status: string; expires_at: string | null }>(
+      COL.events,
+      photo.event_id,
+    );
+    if (!eventIsAvailable(event)) {
+      throw new ApiError(410, 'Die Fotos dieses Auftrags sind nicht mehr verfügbar.');
+    }
 
     await updateById(COL.downloadGrants, grant.id, { downloads: (grant.downloads ?? 0) + 1 });
     const filePath = variantPath('original', photo.storage_key, photo.ext);

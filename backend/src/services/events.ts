@@ -29,6 +29,23 @@ export function retentionExpiry(): string {
 }
 
 /**
+ * Whether an event/Auftrag is currently available to parents: it must be
+ * published and its retention window (expires_at) must not have passed. This is
+ * the single source of truth for "is this gallery live", used both for the photo
+ * visibility check and for post-purchase download grants – downloads stay valid
+ * exactly as long as the Auftrag is available and are disabled the moment it is
+ * archived or the retention period (default 30 days) has elapsed.
+ */
+export function eventIsAvailable(
+  ev: { status: string; expires_at: string | null } | null | undefined,
+): boolean {
+  if (!ev) return false;
+  if (ev.status !== 'published') return false;
+  if (ev.expires_at && new Date(ev.expires_at).getTime() <= Date.now()) return false;
+  return true;
+}
+
+/**
  * Normalises any legacy statuses and automatically archives events whose
  * retention window (expires_at) has passed. Idempotent and cheap to call on
  * every events listing as well as on a periodic timer.

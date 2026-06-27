@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, ApiError, setAdminToken } from '../../api/client';
+import { api, ApiError } from '../../api/client';
 import { Alert } from '../../components/common';
 
 export default function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
@@ -14,11 +14,11 @@ export default function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
     setError('');
     setBusy(true);
     try {
-      const res = await api<{ token: string }>('/api/admin/login', {
+      // The backend sets the httpOnly admin cookie; nothing to store client-side.
+      await api('/api/admin/login', {
         method: 'POST',
         body: { username, password },
       });
-      setAdminToken(res.token);
       onSuccess();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Anmeldung fehlgeschlagen.');

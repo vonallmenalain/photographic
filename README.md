@@ -217,8 +217,11 @@ In dieser Reihenfolge durcharbeiten:
   über das Backend (Admin SDK).
 - Lege regelmäßige **Backups** an: QNAP-Volume (`data/` = Fotos) **und**
   Firestore (Export, siehe [`docs/08-firebase.md`](docs/08-firebase.md)).
-- Originale verlassen den Server nur über zeitlich begrenzte Download-Grants
-  nach erfolgtem Kauf.
+- Originale verlassen den Server nur über Download-Grants nach erfolgtem Kauf.
+  Diese sind genau so lange gültig, wie der zugehörige Auftrag verfügbar
+  (veröffentlicht und innerhalb der Aufbewahrungsfrist) ist – sobald er
+  archiviert wird oder die Frist (Standard 30 Tage) abläuft, werden die
+  Downloads automatisch deaktiviert.
 
 Die vollständige Konzept-Abdeckung inkl. „Nicht-Ziele“ steht in
 [`docs/07-konzept-abgleich.md`](docs/07-konzept-abgleich.md).
