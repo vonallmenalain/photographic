@@ -26,6 +26,13 @@
    – nach E-Mail-Verifizierung – für Eltern sichtbar. (Foto sichtbar = Event
    published **und** Foto nicht gesperrt **und** Zuordnung vorhanden **und**
    E-Mail verifiziert.) Ein eigenes Veröffentlichen je Foto gibt es nicht mehr.
+6. **Eltern benachrichtigen**, sobald alles bereit ist: in der Kachel
+   „E-Mail-Adressen“ auf **„E-Mail an alle senden“** klicken. Das verschickt an
+   **alle erfassten Adressen des Auftrags** eine E-Mail mit Link zur App
+   (`fotos.alae.app`), einer Kurzanleitung zur Verifizierung sowie den Hinweisen
+   zum Schutz der Fotos und zur Aufbewahrungsfrist (30 Tage). Voraussetzung ist
+   ein konfigurierter SMTP-Versand (siehe [docs/04-email-smtp.md](04-email-smtp.md));
+   ohne SMTP landen die E-Mails nur im Server-Log.
 
 ## 6.1a Schnell-Import & automatische Zuordnung
 

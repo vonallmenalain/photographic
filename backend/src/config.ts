@@ -139,6 +139,15 @@ export const config = {
     webhookSecret: optional('STRIPE_WEBHOOK_SECRET'),
     currency: optional('CURRENCY', 'chf'),
     enabled: !!optional('STRIPE_SECRET_KEY'),
+    // Which payment methods the Stripe Checkout page offers. We pin this in code
+    // (instead of relying on the Stripe Dashboard's "automatic payment methods")
+    // so the available methods are explicit and reproducible. Default: only card
+    // and TWINT (TWINT requires the currency to be CHF). Comma-separated list of
+    // Stripe payment_method_types; leave empty to let Stripe/Dashboard decide.
+    paymentMethods: optional('STRIPE_PAYMENT_METHODS', 'card,twint')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
   },
 
   // Cookie settings.

@@ -32,9 +32,17 @@ export async function createCheckoutSession(args: {
   const s = getStripe();
   if (!s) return null;
 
+  // Restrict the offered payment methods (default: card + TWINT). When the list
+  // is empty we omit the field so Stripe falls back to the methods enabled in
+  // the Dashboard ("automatic payment methods").
+  const paymentMethodTypes = config.stripe.paymentMethods.filter(Boolean);
+
   const session = await s.checkout.sessions.create({
     mode: 'payment',
     customer_email: args.email,
+    ...(paymentMethodTypes.length
+      ? { payment_method_types: paymentMethodTypes as Stripe.Checkout.SessionCreateParams.PaymentMethodType[] }
+      : {}),
     line_items: args.lines.map((l) => ({
       quantity: l.qty,
       price_data: {

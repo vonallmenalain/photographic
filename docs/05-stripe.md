@@ -50,6 +50,33 @@ Backend neu starten:
 docker compose up -d backend
 ```
 
+## 5.2a Zahlungsarten (nur Karte & TWINT)
+
+Welche Zahlungsarten auf der Stripe-Checkout-Seite erscheinen, steuert die App
+**im Code** über `STRIPE_PAYMENT_METHODS` (Standard: `card,twint`). Diese feste
+Liste hat Vorrang vor den „automatischen Zahlungsmethoden“ im Stripe-Dashboard –
+so ist garantiert reproduzierbar, dass Eltern **nur mit Karte und TWINT** zahlen.
+
+```ini
+# Standard: nur Karte und TWINT
+STRIPE_PAYMENT_METHODS=card,twint
+```
+
+Wichtig dazu:
+
+1. **TWINT muss im Stripe-Dashboard aktiviert sein** (Settings → Payment methods →
+   TWINT aktivieren). Stripe zeigt eine Methode nur an, wenn sie für dein Konto
+   freigeschaltet ist. Die Liste im Code *begrenzt* die Auswahl, sie kann eine
+   im Dashboard deaktivierte Methode aber nicht erzwingen.
+2. **TWINT funktioniert nur in CHF** – `CURRENCY=chf` muss gesetzt sein (Standard).
+3. Möchtest du die Auswahl doch über das Dashboard steuern, lass
+   `STRIPE_PAYMENT_METHODS` **leer**; dann nutzt Stripe die dort aktivierten
+   automatischen Zahlungsmethoden.
+
+> Antwort auf „Code oder Dashboard?“: Die **Begrenzung auf Karte + TWINT ist im
+> Code** gesetzt (`STRIPE_PAYMENT_METHODS`). Du musst im **Dashboard nur einmal
+> sicherstellen, dass TWINT (und Karte) aktiviert** ist.
+
 ## 5.3 Testmodus
 
 - Verwende zuerst die **Test-Schlüssel** (`sk_test_...`, `whsec_...` aus dem

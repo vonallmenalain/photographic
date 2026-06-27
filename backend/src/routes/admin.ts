@@ -34,7 +34,7 @@ import {
   deleteEventStorage,
   variantPath,
 } from '../lib/images';
-import { sendPasswordResetEmail } from '../lib/email';
+import { sendPasswordResetEmail, sendGalleryReadyEmail } from '../lib/email';
 import { requestVerification } from '../services/verification';
 import { EVENT_STATUSES, archiveExpiredEvents, retentionExpiry } from '../services/events';
 import { matchChildByFilename } from '../lib/names';
@@ -499,6 +499,89 @@ router.delete(
     await deleteById(COL.events, req.params.id);
     await audit('event.delete', req.params.id);
     res.json({ ok: true });
+  }),
+);
+
+// Collects the distinct parent e-mail ids connected to an Auftrag (event):
+// either through a child of that event or through a direct photo assignment.
+// Mirrors the filter logic of GET /emails?eventId=…
+async function eventEmailIds(eventId: string): Promise<Set<string>> {
+  const [children, photos, childLinks, photoLinks] = await Promise.all([
+    runQuery<{ id: string }>(col(COL.children).where('event_id', '==', eventId)),
+    runQuery<{ id: string }>(col(COL.photos).where('event_id', '==', eventId)),
+    runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
+    runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
+  ]);
+  const childIds = new Set(children.map((c) => c.id));
+  const photoIds = new Set(photos.map((p) => p.id));
+  const ids = new Set<string>();
+  for (const l of childLinks) if (childIds.has(l.child_id)) ids.add(l.email_id);
+  for (const l of photoLinks) if (photoIds.has(l.photo_id)) ids.add(l.email_id);
+  return ids;
+}
+
+// --- "Galerie ist bereit" Sammel-E-Mail an alle Adressen eines Auftrags ----
+// Schickt allen (nicht deaktivierten) Eltern-Adressen des Auftrags eine E-Mail
+// mit Link zur App, Kurzanleitung zur Verifizierung sowie den Schutz-/Auf-
+// bewahrungshinweisen. Mit `?count=1` (bzw. GET) wird nur die Empfängerzahl
+// zurückgegeben, damit das Frontend vorab eine Bestätigung anzeigen kann.
+router.get(
+  '/events/:id/notify',
+  asyncHandler(async (req, res) => {
+    const event = await getById(COL.events, req.params.id);
+    if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
+    const ids = await eventEmailIds(req.params.id);
+    const emails = await getManyById<{ status: string }>(COL.parentEmails, Array.from(ids));
+    const recipients = Array.from(emails.values()).filter((e) => e.status !== 'disabled');
+    res.json({ recipientCount: recipients.length, devLogOnly: config.mail.devLogOnly });
+  }),
+);
+
+router.post(
+  '/events/:id/notify',
+  asyncHandler(async (req, res) => {
+    const event = await getById<{ name: string; expires_at: string | null }>(
+      COL.events,
+      req.params.id,
+    );
+    if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
+
+    const ids = await eventEmailIds(req.params.id);
+    const emails = await getManyById<{ email: string; status: string }>(
+      COL.parentEmails,
+      Array.from(ids),
+    );
+    const recipients = Array.from(emails.values()).filter(
+      (e) => e.status !== 'disabled' && e.email,
+    );
+    if (recipients.length === 0) {
+      throw new ApiError(400, 'Diesem Auftrag sind keine (aktiven) E-Mail-Adressen zugeordnet.');
+    }
+
+    const link = config.publicAppUrl;
+    const results = await Promise.allSettled(
+      recipients.map((r) =>
+        sendGalleryReadyEmail(r.email, link, { retentionDays: config.retentionDaysDefault }),
+      ),
+    );
+    const sent = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.length - sent;
+
+    // Record a reminder marker so the moment shows up in the Auswertung chart.
+    if (sent > 0) {
+      await setById(COL.reminders, newId('rem'), {
+        event_id: req.params.id,
+        sent_at: nowIso(),
+        note: `Galerie-Benachrichtigung an ${sent} Adresse(n)`,
+        created_at: nowIso(),
+      });
+    }
+
+    await audit(
+      'event.notify',
+      `${req.params.id}: ${sent} sent, ${failed} failed`,
+    );
+    res.json({ sent, failed, total: recipients.length, devLogOnly: config.mail.devLogOnly });
   }),
 );
 
