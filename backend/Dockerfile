@@ -19,11 +19,17 @@ ENV NODE_ENV=production
 # Fonts are REQUIRED for the photo watermark: sharp renders the watermark text
 # through an SVG overlay (librsvg). The slim base image ships without any fonts,
 # in which case the text silently renders as nothing and previews end up WITHOUT
-# a watermark. fontconfig + a sans-serif family fix that.
+# a watermark. fontconfig + a sans-serif family fix that. The DejaVu/Liberation
+# families stay as metric-compatible fallbacks.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         fontconfig fonts-dejavu-core fonts-liberation \
-    && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
+# Ship the website display font(s) so the watermark uses the SAME typeface as
+# the rest of the site (Kalam by default; see IMG_WATERMARK_FONT_FAMILY).
+# Anything dropped into backend/assets/fonts is installed and registered here,
+# so adding/swapping a font is just a file + an env var – no code change.
+COPY assets/fonts/ /usr/share/fonts/truetype/website/
+RUN fc-cache -f
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist

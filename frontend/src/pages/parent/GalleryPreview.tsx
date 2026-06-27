@@ -7,8 +7,10 @@ interface Photo {
   thumbUrl: string;
   previewUrl: string;
 }
-interface EventGroup {
+interface PhotoGroup {
   id: string;
+  title: string;
+  kind: 'order' | 'group';
   photos: Photo[];
 }
 
@@ -88,9 +90,20 @@ export default function GalleryPreview() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await api<{ events: EventGroup[] }>('/api/parent/photos');
+        const res = await api<{ groups: PhotoGroup[] }>('/api/parent/photos');
+        // The backend already de-duplicates group photos (so siblings sharing an
+        // e-mail don't see the same group photo twice). Guard once more on the id
+        // here so the preview never repeats a photo even if a future grouping
+        // change reintroduces overlaps.
         const all: Photo[] = [];
-        for (const ev of res.events) for (const p of ev.photos) all.push(p);
+        const seen = new Set<string>();
+        for (const g of res.groups) {
+          for (const p of g.photos) {
+            if (seen.has(p.id)) continue;
+            seen.add(p.id);
+            all.push(p);
+          }
+        }
         setPhotos(all);
       } catch {
         setFailed(true);
@@ -171,7 +184,7 @@ export default function GalleryPreview() {
 
       <div className="gp-foot">
         <Link to="/galerie/fotos" className="preview-enter">
-          Zur Galerie
+          Zur Auswahl
           <span aria-hidden="true">→</span>
         </Link>
       </div>

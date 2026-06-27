@@ -16,9 +16,10 @@ interface Photo {
   purchased: boolean;
   inCart: boolean;
 }
-interface EventGroup {
+interface PhotoGroup {
   id: string;
-  name: string;
+  title: string;
+  kind: 'order' | 'group';
   photos: Photo[];
 }
 interface Product {
@@ -31,7 +32,7 @@ interface Product {
 }
 
 export default function Gallery() {
-  const [events, setEvents] = useState<EventGroup[]>([]);
+  const [groups, setGroups] = useState<PhotoGroup[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -46,15 +47,15 @@ export default function Gallery() {
     (async () => {
       try {
         const [photoRes, prodRes] = await Promise.all([
-          api<{ events: EventGroup[] }>('/api/parent/photos'),
+          api<{ groups: PhotoGroup[] }>('/api/parent/photos'),
           api<{ products: Product[] }>('/api/parent/products'),
         ]);
-        setEvents(photoRes.events);
+        setGroups(photoRes.groups);
         setProducts(prodRes.products);
         const purchased = new Set<string>();
         const inCart = new Set<string>();
-        for (const ev of photoRes.events) {
-          for (const p of ev.photos) {
+        for (const g of photoRes.groups) {
+          for (const p of g.photos) {
             if (p.purchased) purchased.add(p.id);
             if (p.inCart) inCart.add(p.id);
           }
@@ -73,7 +74,7 @@ export default function Gallery() {
 
   if (loading) return <Spinner label="Fotos werden geladen …" />;
 
-  const totalPhotos = events.reduce((n, e) => n + e.photos.length, 0);
+  const totalPhotos = groups.reduce((n, g) => n + g.photos.length, 0);
 
   return (
     <div>
@@ -101,16 +102,16 @@ export default function Gallery() {
         </div>
       )}
 
-      {events.map((ev) => (
-        <section key={ev.id} className="gallery-section">
+      {groups.map((g) => (
+        <section key={g.id} className="gallery-section">
           <div className="gallery-section-head">
-            <h2>{ev.name}</h2>
+            <h2>{g.title}</h2>
             <span className="soft photo-count">
-              {ev.photos.length} {ev.photos.length === 1 ? 'Foto' : 'Fotos'}
+              {g.photos.length} {g.photos.length === 1 ? 'Foto' : 'Fotos'}
             </span>
           </div>
           <div className="photo-grid">
-            {ev.photos.map((p) => {
+            {g.photos.map((p) => {
               const purchased = purchasedIds.has(p.id);
               const inCart = cartIds.has(p.id);
               return (

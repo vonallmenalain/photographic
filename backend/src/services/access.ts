@@ -4,7 +4,9 @@ export interface VisiblePhoto {
   id: string;
   event_id: string;
   event_name: string;
+  child_id: string | null;
   is_class_photo: number;
+  original_filename: string;
   storage_key: string;
   ext: string;
   width: number | null;
@@ -17,6 +19,7 @@ interface PhotoDoc {
   event_id: string;
   child_id: string | null;
   is_class_photo: number;
+  original_filename?: string;
   /**
    * When 1, the photo is visible to EVERY family of its event/class (i.e. every
    * e-mail linked to any child in that event) without needing an explicit
@@ -158,7 +161,9 @@ export async function getVisiblePhotos(emailId: string): Promise<VisiblePhoto[]>
       id: p.id,
       event_id: p.event_id,
       event_name: (ev as EventDoc).name,
+      child_id: p.child_id ?? null,
       is_class_photo: p.is_class_photo,
+      original_filename: p.original_filename ?? '',
       storage_key: p.storage_key,
       ext: p.ext,
       width: p.width ?? null,
