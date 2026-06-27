@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, ApiError } from '../../api/client';
 import { Alert, TrustNote } from '../../components/common';
+import { firebaseEnabled } from '../../lib/firebase';
 
 const TYPES = [
   { value: 'wrong_email', label: 'Meine E-Mail-Adresse ist falsch oder veraltet' },
@@ -99,7 +100,8 @@ export default function Help() {
       <div style={{ marginTop: 18 }}>
         <TrustNote>
           Aus Sicherheitsgründen verraten wir nicht, ob eine bestimmte E-Mail-Adresse hinterlegt ist.
-          Wenn Ihre Adresse freigeschaltet ist, erhalten Sie immer einen Zugangscode.
+          Wenn Ihre Adresse freigeschaltet ist, erhalten Sie immer{' '}
+          {firebaseEnabled ? 'einen sicheren Anmeldelink' : 'einen Zugangscode'}.
         </TrustNote>
       </div>
     </div>
