@@ -24,6 +24,9 @@ export default function Verify() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [resent, setResent] = useState('');
+  // Confirmation text carried over from the request step. It should stay
+  // visible the whole time the parent is entering their code.
+  const [requestInfo] = useState(() => sessionStorage.getItem('pending_message') ?? '');
   const linkTried = useRef(false);
   const firebaseTried = useRef(false);
 
@@ -115,6 +118,7 @@ export default function Verify() {
       setVerified(res.email);
       await refresh();
       sessionStorage.removeItem('pending_email');
+      sessionStorage.removeItem('pending_message');
       navigate('/galerie', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
@@ -213,6 +217,7 @@ export default function Verify() {
       </div>
 
       <div className="card">
+        {requestInfo && <Alert kind="info">{requestInfo}</Alert>}
         {error && <Alert kind="error">{error}</Alert>}
         {resent && <Alert kind="success">{resent}</Alert>}
         <form onSubmit={submitCode}>
@@ -235,7 +240,6 @@ export default function Verify() {
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}
-              placeholder="000000"
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
               required

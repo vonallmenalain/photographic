@@ -36,8 +36,11 @@ export default function Landing() {
           body: { email },
         });
         setMessage(res.message);
-        // Pass the e-mail to the verify page so the code can be checked.
+        // Pass the e-mail to the verify page so the code can be checked, and
+        // carry the confirmation text along so it stays visible there instead of
+        // vanishing the moment the code field appears.
         sessionStorage.setItem('pending_email', email.trim().toLowerCase());
+        sessionStorage.setItem('pending_message', res.message);
         setTimeout(() => navigate('/verifizieren'), 900);
       }
     } catch (err) {
