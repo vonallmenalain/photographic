@@ -1166,7 +1166,15 @@ tr:hover td { background: var(--surface-2); }
     0 0 0 1px rgba(247, 220, 176, 0.18),
     0 0 120px rgba(214, 158, 84, 0.22);
 }
-.parent-theme .preview-enter { color: #fffdf8; }
+.parent-theme .preview-enter {
+  color: #fffdf8;
+  background: var(--primary);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.parent-theme .preview-enter:hover {
+  background: var(--primary-dark);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
 
 /* ==========================================================================
    Cart / order line items — a reusable row (thumbnail · details · price ·
