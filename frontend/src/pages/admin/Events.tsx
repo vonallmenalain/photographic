@@ -178,16 +178,31 @@ function EventCard({
     }
   };
 
+  // Die gesamte Kopfzeile (weisser Bereich + graue Kacheln) toggelt den Auftrag.
+  // Interaktive Bedienelemente (Status-Auswahl, Buttons) stoppen die Weitergabe,
+  // damit ein Klick auf sie den Auftrag nicht versehentlich auf-/zuklappt.
+  const handleHeadKeyDown = (e: React.KeyboardEvent) => {
+    // Nur auslösen, wenn der Kopf selbst fokussiert ist – nicht, wenn ein
+    // Bedienelement (z. B. das Status-Auswahlfeld) den Tastendruck erhält.
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onToggle();
+    }
+  };
+
   return (
     <div className={`order-row${expanded ? ' expanded' : ''}`}>
-      <div className="order-row-head">
+      <div
+        className="order-row-head"
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={onToggle}
+        onKeyDown={handleHeadKeyDown}
+      >
         <div className="order-row-bar">
-          <button
-            type="button"
-            className="order-row-toggle"
-            onClick={onToggle}
-            aria-expanded={expanded}
-          >
+          <span className="order-row-toggle">
             <span className="order-row-chevron" aria-hidden>
               {expanded ? '▾' : '▸'}
             </span>
@@ -195,7 +210,7 @@ function EventCard({
               {ev.name}
             </span>
             <StatusBadge status={ev.status} />
-          </button>
+          </span>
 
           <div className="order-row-actions" onClick={(e) => e.stopPropagation()}>
             <select
@@ -228,14 +243,14 @@ function EventCard({
           </div>
         </div>
 
-        <div className="order-row-stats" onClick={(e) => e.stopPropagation()}>
+        <div className="order-row-stats">
           <SummaryStat label="Kinder" value={String(ev.child_count)} />
           <SummaryStat label="Bestellungen" value={String(ev.order_count)} />
-          <SummaryStat label="Umsatz" value={formatPrice(ev.revenue_cents, currency)} />
           <SummaryStat
             label="Verifizierte E-Mails"
             value={`${ev.email_verified} von ${ev.email_count}`}
           />
+          <SummaryStat label="Umsatz" value={formatPrice(ev.revenue_cents, currency)} />
           <SummaryStat label="Einladungen + Erinnerungen" value={String(ev.reminder_count)} />
           <OrderableUntilStat
             eventId={ev.id}
