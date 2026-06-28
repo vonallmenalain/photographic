@@ -789,7 +789,11 @@ tr:hover td { background: var(--surface-2); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.page-pad { padding: 36px 0 60px; }
+/* Vertical-only padding via longhand so the horizontal gutters from
+   `.container` (padding: 0 20px) are preserved. Using the `padding` shorthand
+   here previously reset left/right padding to 0, which made the parent content
+   run edge-to-edge on any viewport narrower than the container (i.e. on phones). */
+.page-pad { padding-top: 36px; padding-bottom: 60px; }
 .hero { text-align: center; padding: 18px 0 26px; }
 .hero .lock-big {
   width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 16px;
@@ -1197,17 +1201,37 @@ tr:hover td { background: var(--surface-2); }
    ========================================================================== */
 @media (max-width: 640px) {
   /* Header: keep the 64px height (the gallery stage aligns to it) but scale the
-     wordmark down and tighten the action group so nothing crowds. */
-  .parent-theme .brand-mark { font-size: 1.5rem; }
-  .parent-theme .nav-actions { gap: 8px; }
-  .parent-theme .nav-link { font-size: 0.9rem; }
+     wordmark down and tighten the action group so the brand and the
+     "Galerie"/"Bestellen" links never crowd or overlap on a phone.
+     • The header gets its own slightly tighter side gutters (independent of the
+       content gutters) to free up room for the nav.
+     • The brand may shrink and, as an absolute last resort on tiny screens,
+       truncates with an ellipsis instead of colliding with the nav links.
+     • The action group keeps its intrinsic size and never wraps. */
+  .parent-theme .appbar .container { padding-left: 14px; padding-right: 14px; }
+  .parent-theme .appbar-inner { gap: 10px; }
+  .parent-theme .brand { min-width: 0; flex: 0 1 auto; }
+  .parent-theme .brand-mark {
+    font-size: 1.35rem;
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .parent-theme .nav-actions { flex: 0 0 auto; gap: 8px; }
+  .parent-theme .nav-link { font-size: 0.88rem; white-space: nowrap; }
   .parent-theme .icon-btn { width: 38px; height: 38px; }
 
-  /* Roomier reading: trim the big page + card padding. */
-  .parent-theme .page-pad { padding: 22px 0 48px; }
+  /* Roomier reading: trim the big page + card padding. Longhand keeps the
+     horizontal gutters from `.container` intact (see `.page-pad` above). */
+  .parent-theme .page-pad { padding-top: 22px; padding-bottom: 48px; }
   .parent-theme .card { padding: 18px; border-radius: 14px; }
   .parent-theme .hero { padding: 10px 0 18px; }
   .parent-theme .hero h1 { font-size: 1.45rem; }
+  /* Slightly calmer headings on the content pages (e.g. "Fotos" on Bestellen). */
+  .parent-theme h1 { font-size: 1.4rem; }
+  .parent-theme h2 { font-size: 1.15rem; }
 
   /* Gallery: comfortable side gutters (the dark wood now clearly frames each
      cream tile) and a tighter, even grid. */
@@ -1222,9 +1246,17 @@ tr:hover td { background: var(--surface-2); }
   .parent-theme td { padding: 9px 8px; font-size: 0.88rem; }
 }
 
-/* Very small phones: drop the photo grid to a single, clearly-framed column. */
+/* Very small phones: drop the photo grid to a single, clearly-framed column and
+   shrink the header a touch more so the brand + nav links comfortably coexist. */
 @media (max-width: 420px) {
   .parent-theme .photo-grid { grid-template-columns: 1fr; }
+
+  .parent-theme .appbar .container { padding-left: 10px; padding-right: 10px; }
+  .parent-theme .appbar-inner { gap: 8px; }
+  .parent-theme .brand-mark { font-size: 1.15rem; }
+  .parent-theme .nav-actions { gap: 6px; }
+  .parent-theme .nav-link { font-size: 0.82rem; }
+  .parent-theme .icon-btn { width: 34px; height: 34px; }
 }
 
 /* ---------------------------------------------------------------------------
