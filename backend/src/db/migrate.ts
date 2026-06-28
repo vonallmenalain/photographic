@@ -170,45 +170,72 @@ async function ensureProductsCurrency(): Promise<void> {
   }
 }
 
+/**
+ * Seedet den Admin-Zugang aus der Umgebung – aber NUR beim Erststart (solange
+ * noch kein Admin existiert). Ein bereits in Firestore hinterlegtes Passwort ist
+ * danach die alleinige Quelle der Wahrheit und wird hier bewusst NICHT mehr
+ * überschrieben. So überlebt ein im Adminbereich oder per „Passwort vergessen"
+ * gesetztes Passwort jeden Neustart/Deploy (Watchtower & Co.).
+ *
+ * Für den Notfall (Aussperrung) gibt es den ausdrücklichen, einmaligen Schalter
+ * ADMIN_PASSWORD_RESET_ON_BOOT=true: nur dann wird das Passwort des
+ * konfigurierten Admins aus der Umgebung erzwungen. Danach sollte der Schalter
+ * wieder auf false stehen (und ADMIN_PASSWORD/ADMIN_PASSWORD_HASH idealerweise
+ * geleert werden), damit das nächste selbst gesetzte Passwort wieder bestehen
+ * bleibt.
+ */
 async function ensureAdminFromEnv(): Promise<void> {
-  const { username, passwordHash, plainPassword, email } = config.admin;
-  if (!passwordHash && !plainPassword) return; // nothing configured yet
-
-  const hash = passwordHash || bcrypt.hashSync(plainPassword, 10);
+  const { username, passwordHash, plainPassword, email, passwordResetOnBoot } = config.admin;
   // E-Mail immer normalisieren (trim + lowercase), damit Login & "Passwort
   // vergessen" sie zuverlässig wiederfinden (Suche läuft ebenfalls normalisiert).
   const normalizedEmail = email ? normalizeEmail(email) : '';
   const emailUpdate = normalizedEmail ? { email: normalizedEmail } : {};
 
-  // Admin-Dokumente sind über ihre ID (= Benutzername) verschlüsselt.
+  // Admin-Dokumente sind über ihre ID (= Benutzername) adressiert.
   const existing = await getById<{ username: string }>(COL.adminUsers, username);
   if (existing) {
-    // Passwort/E-Mail des passenden Kontos aktualisieren (Env-Recovery-Pfad).
-    await updateById(COL.adminUsers, username, {
-      password_hash: hash,
-      ...emailUpdate,
-      updated_at: nowIso(),
-    });
-    // eslint-disable-next-line no-console
-    console.log(`[migrate] admin user '${username}' ensured`);
+    // Wiederherstellungs-Pfad: NUR wenn ausdrücklich gewünscht überschreiben wir
+    // das Passwort eines bestehenden Kontos aus der Umgebung. Das ist der einzige
+    // Fall, in dem die .env ein im Adminbereich/per Reset gesetztes Passwort
+    // ersetzt – gedacht für eine Aussperrung.
+    if (passwordResetOnBoot && (passwordHash || plainPassword)) {
+      const hash = passwordHash || bcrypt.hashSync(plainPassword, 10);
+      await updateById(COL.adminUsers, username, {
+        password_hash: hash,
+        ...emailUpdate,
+        updated_at: nowIso(),
+      });
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[migrate] ADMIN_PASSWORD_RESET_ON_BOOT=true: Passwort von Admin '${username}' wurde aus der ` +
+          `Umgebung zurückgesetzt. Setze ADMIN_PASSWORD_RESET_ON_BOOT wieder auf false (und leere ` +
+          `idealerweise ADMIN_PASSWORD/ADMIN_PASSWORD_HASH), damit ein selbst gesetztes Passwort ` +
+          `künftige Neustarts übersteht.`,
+      );
+      return;
+    }
+    // Standardfall: das in Firestore gespeicherte Passwort bleibt unangetastet.
     return;
   }
 
-  // Kein Dokument unter dem konfigurierten Benutzernamen. Wenn bereits ein
-  // anderer Admin existiert (z.B. weil der Benutzername im Adminbereich
-  // umbenannt wurde), NICHT erneut "admin" anlegen – sonst würde eine
-  // In-App-Umbenennung beim nächsten Start überschrieben.
+  // Kein Dokument unter dem konfigurierten Benutzernamen.
+  if (!passwordHash && !plainPassword) return; // nichts zum Seeden vorhanden
+
+  // Wenn bereits ein anderer Admin existiert (z.B. weil der Benutzername im
+  // Adminbereich umbenannt wurde), NICHT erneut "admin" anlegen – sonst würde
+  // eine In-App-Umbenennung beim nächsten Start dupliziert.
   const anyAdmin = await firstOf<{ username?: string }>(col(COL.adminUsers).limit(1));
   if (anyAdmin) {
     // eslint-disable-next-line no-console
     console.log(
       `[migrate] admin already exists ('${anyAdmin.username ?? anyAdmin.id}'); ` +
-        `skip creating '${username}'. Set ADMIN_USERNAME to that name to reset its password via env.`,
+        `skip creating '${username}'.`,
     );
     return;
   }
 
   // Erststart: Admin-Konto aus der Umgebung anlegen.
+  const hash = passwordHash || bcrypt.hashSync(plainPassword, 10);
   await setById(COL.adminUsers, username, {
     username,
     password_hash: hash,

@@ -187,18 +187,52 @@ docker compose ps                        # Status
 | Eltern bleiben nicht eingeloggt | Cookies blockiert. Mit API auf `api.alae.app`: `COOKIE_SECURE=true`, `COOKIE_SAMESITE=lax`, `COOKIE_DOMAIN=.alae.app`. Liegt die API auf anderer Domain: `COOKIE_SAMESITE=none`, `COOKIE_DOMAIN` leer. |
 | Firebase-Login `auth/unauthorized-continue-uri` | App-Domain fehlt in Firebase → **Authentication → Settings → Authorized domains**: `fotos.alae.app` und `creartphotographic.netlify.app` eintragen. |
 | Keine E-Mail kommt an | SMTP-Daten prüfen; im Log steht `mail: DEV LOG ONLY`, wenn `SMTP_HOST` fehlt. Spam-Ordner/SPF/DKIM prüfen. Unbekannte Adressen erhalten bewusst keine Mail. |
-| Admin „Passwort vergessen“ funktioniert nicht | (1) `ADMIN_EMAIL` in `.env` setzen und Backend neu starten – die Adresse wird normalisiert am Admin-Konto hinterlegt (Login per E-Mail wird möglich). (2) Ohne SMTP wird die Reset-Mail nur ins Log geschrieben (`mail: DEV LOG ONLY`) → SMTP einrichten ([docs/04-email-smtp.md](04-email-smtp.md)). (3) **Sofort & ohne E-Mail-Versand:** `docker compose exec backend npm run create-admin -- admin "NeuesPasswort" deine@mail.tld` setzt Passwort **und** Admin-E-Mail direkt. |
+| Admin-Passwort gilt nach einem Neustart/Tag wieder nicht | War ein **früherer** Fehler: Beim Start wurde das Passwort des Admins aus `ADMIN_PASSWORD`/`ADMIN_PASSWORD_HASH` der `.env` **bei jedem** Container-Start überschrieben. Da Watchtower automatisch neu deployt, fiel ein per Reset gesetztes Passwort beim nächsten Neustart auf den `.env`-Wert zurück. **Behoben:** Die `.env`-Werte seeden den Admin jetzt nur noch beim **Erststart**; ein im Adminbereich (Konto → „Passwort ändern“) oder per „Passwort vergessen“ gesetztes Passwort bleibt dauerhaft erhalten. Du musst dafür nichts tun – nur das Backend einmal auf die neue Version aktualisieren. |
+| Admin „Passwort vergessen“ funktioniert nicht | (1) `ADMIN_EMAIL` in `.env` setzen und Backend neu starten – die Adresse wird normalisiert am Admin-Konto hinterlegt (Login per E-Mail wird möglich). (2) Ohne SMTP wird die Reset-Mail nur ins Log geschrieben (`mail: DEV LOG ONLY`) → SMTP einrichten ([docs/04-email-smtp.md](04-email-smtp.md)). (3) **Bequem & ohne E-Mail:** Im Adminbereich anmelden → **Konto** → **„Passwort ändern“**. (4) **Sofort & ohne Login (CLI):** `docker compose exec backend npm run create-admin -- admin "NeuesPasswort" deine@mail.tld` setzt Passwort **und** Admin-E-Mail direkt. |
+| Komplett ausgesperrt (Passwort vergessen, kein SMTP, kein Shell-Zugriff) | In der `.env` `ADMIN_PASSWORD=NeuesPasswort` (oder `ADMIN_PASSWORD_HASH=…`) und `ADMIN_PASSWORD_RESET_ON_BOOT=true` setzen, Backend einmal neu starten. Das erzwingt einmalig das `.env`-Passwort für `ADMIN_USERNAME`. **Danach `ADMIN_PASSWORD_RESET_ON_BOOT=false` zurücksetzen**, sonst wird dein Passwort bei jedem Neustart wieder überschrieben. |
 | Admin-Benutzername ändern (weg von „admin“) | Im Adminbereich anmelden → **Konto** in der Seitenleiste öffnen → Benutzername (und optional E-Mail) ändern und speichern. Anschließend funktioniert die Anmeldung mit dem neuen Benutzernamen **oder** der E-Mail-Adresse. Die Umbenennung bleibt auch nach einem Neustart erhalten; `ADMIN_USERNAME` greift nur beim Erststart (solange noch kein Admin existiert). |
+| Weiteren Admin anlegen | Im Adminbereich anmelden → **Konto** → **„Weitere Administratoren“** → **„Neuen Admin anlegen“** (Benutzername, optional E-Mail, Passwort). Der neue Admin meldet sich mit eigenem Login an und kann sein Passwort selbst ändern. Alternativ per CLI: `docker compose exec backend npm run create-admin -- BENUTZERNAME "Passwort" mail@example.com`. |
 | Upload schlägt fehl (große Datei) | `MAX_UPLOAD_MB` erhöhen; Cloudflare-Free begrenzt ~100 MB/Anfrage. |
 | Previews ohne Wasserzeichen | Im Backend-Image fehlten Schriftarten – das Wasserzeichen wird als Text gerendert und bleibt ohne Font unsichtbar. Im aktuellen Image sind `fontconfig`, `fonts-dejavu-core`/`fonts-liberation` **und die Website-Schrift Kalam** (aus `backend/assets/fonts`) enthalten. Beim Start zeigt das Log `watermark : OK (fonts available)`; steht dort `BROKEN`, Image neu bauen/ziehen. Bereits ohne Wasserzeichen erzeugte Fotos neu hochladen (oder im Admin neu verarbeiten). |
 | Wasserzeichen-Schrift ändern | Das Wasserzeichen nutzt standardmäßig die Website-Schrift „Kalam“. Über `IMG_WATERMARK_FONT_FAMILY` lässt sich die Schrift anpassen; die Schriftdatei muss dazu in `backend/assets/fonts` liegen (wird beim Image-Bau installiert). Die Fallbacks am Ende des Werts (`Liberation Sans`, `DejaVu Sans`, …) sollten stehen bleiben, damit das Wasserzeichen nie unsichtbar wird. |
 | Foto erscheint bei Eltern nicht | Checkliste 6.3 „Eltern finden keine Fotos“. |
 | Stripe-Bestellung bleibt „Kauf gestartet“ | Webhook fehlt/falsch. Endpoint `…/webhook/stripe` und `STRIPE_WEBHOOK_SECRET` prüfen. |
 
-## 6.8 Sicherheits-Checkliste (vor Go-Live)
+## 6.8 Admin-Konten & Passwörter verwalten
+
+**Wie wird das Admin-Passwort gespeichert?** Als bcrypt-Hash in Firestore in der
+Sammlung `admin_users` (Dokument-ID = Benutzername, Feld `password_hash`). Das
+ist die **alleinige Quelle der Wahrheit**. Die Variablen `ADMIN_PASSWORD` /
+`ADMIN_PASSWORD_HASH` aus der `.env` werden **nur beim allerersten Start**
+verwendet, um das Konto anzulegen (Seed). Ein später gesetztes Passwort wird
+**nicht** mehr von der `.env` überschrieben und übersteht jeden Neustart/Deploy.
+
+**Passwort ändern (empfohlen):** Im Adminbereich anmelden → **Konto** →
+**„Passwort ändern“**. Sofort gültig, kein E-Mail-Versand nötig.
+
+**Login per E-Mail:** Du kannst dich wahlweise mit dem Benutzernamen **oder** mit
+der im Konto hinterlegten E-Mail-Adresse anmelden. Trage dazu unter **Konto**
+deine E-Mail ein (z. B. `vonallmenalain@gmail.com`).
+
+**Weiteren Admin anlegen:** Adminbereich → **Konto** → **„Weitere
+Administratoren“** → **„Neuen Admin anlegen“** (Benutzername, optional E-Mail,
+Passwort). Jeder Admin ist gleichberechtigt, meldet sich mit eigenem Login an und
+kann sein Passwort selbst ändern. Das eigene und das letzte verbleibende Konto
+lassen sich nicht löschen. Alternativ per CLI auf dem Server:
+
+```bash
+docker compose exec backend npm run create-admin -- BENUTZERNAME "Passwort" mail@example.com
+```
+
+**Notfall (ausgesperrt):** Siehe Troubleshooting – `ADMIN_PASSWORD` +
+`ADMIN_PASSWORD_RESET_ON_BOOT=true` setzen, einmal neu starten, danach den
+Schalter wieder auf `false`.
+
+## 6.9 Sicherheits-Checkliste (vor Go-Live)
 
 - [ ] Eigene, lange `JWT_SECRET` und `FILE_TOKEN_SECRET` gesetzt.
-- [ ] Admin-Passwort als bcrypt-Hash (`ADMIN_PASSWORD_HASH`), kein Klartext mehr.
+- [ ] Admin-Passwort gesetzt (Erst-Seed per `ADMIN_PASSWORD_HASH`, danach im
+      Adminbereich änderbar). `ADMIN_PASSWORD_RESET_ON_BOOT=false`.
 - [ ] HTTPS überall (Netlify + Cloudflare) – erfüllt.
 - [ ] `PUBLIC_APP_URL` korrekt → CORS dicht.
 - [ ] SMTP mit SPF/DKIM für zuverlässige, seriöse E-Mails.

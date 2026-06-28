@@ -163,6 +163,11 @@ const adminUsernameSchema = z
     'Erlaubt sind Buchstaben, Zahlen, Leerzeichen sowie die Zeichen . _ -',
   );
 
+const adminPasswordSchema = z
+  .string()
+  .min(8, 'Das Passwort muss mindestens 8 Zeichen lang sein.')
+  .max(200, 'Das Passwort darf höchstens 200 Zeichen lang sein.');
+
 router.get(
   '/account',
   requireAdmin,
@@ -250,6 +255,124 @@ router.put(
       `${oldUsername} -> ${newUsername}${newEmail ? ` (${newEmail})` : ''}`,
     );
     res.json({ token, username: newUsername, email: newEmail });
+  }),
+);
+
+// --- Eigenes Passwort ändern (angemeldet) ---------------------------------
+// Bequemer, SMTP-unabhängiger Weg, das eigene Passwort zu ändern, ohne den
+// "Passwort vergessen"-Mailflow zu durchlaufen. Das neue Passwort wird in
+// Firestore gespeichert und überlebt dank des korrigierten Seedings (siehe
+// db/migrate.ts) jeden Neustart/Deploy.
+router.post(
+  '/change-password',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = parse(
+      z.object({
+        currentPassword: z.string().min(1, 'Bitte gib dein aktuelles Passwort ein.'),
+        newPassword: adminPasswordSchema,
+      }),
+      req.body,
+    );
+    const username = req.admin!.username;
+    const current = await getById<AdminUser>(COL.adminUsers, username);
+    if (!current || !bcrypt.compareSync(currentPassword, current.password_hash)) {
+      throw new ApiError(400, 'Das aktuelle Passwort ist nicht korrekt.');
+    }
+    await updateById(COL.adminUsers, username, {
+      password_hash: bcrypt.hashSync(newPassword, 10),
+      updated_at: nowIso(),
+    });
+    await audit('admin.password.change', username);
+    res.json({ ok: true });
+  }),
+);
+
+// --- Weitere Administratoren verwalten (angemeldet) -----------------------
+// Jeder angemeldete Admin kann weitere Admin-Konten anlegen, auflisten und
+// (außer dem eigenen / dem letzten) wieder entfernen. So lassen sich künftige
+// Admins komfortabel im Adminbereich pflegen, statt das CLI/Env zu bemühen.
+router.get(
+  '/admins',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const admins = (await runQuery<AdminUser & { created_at?: string }>(col(COL.adminUsers)))
+      .map((a) => ({
+        username: a.username ?? a.id,
+        email: a.email ?? '',
+        created_at: a.created_at ?? '',
+        is_self: (a.username ?? a.id) === req.admin!.username,
+      }))
+      .sort((a, b) => a.username.localeCompare(b.username));
+    res.json({ admins });
+  }),
+);
+
+router.post(
+  '/admins',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { username, email, password } = parse(
+      z.object({
+        username: adminUsernameSchema,
+        email: z.union([emailSchema, z.literal('')]).optional(),
+        password: adminPasswordSchema,
+      }),
+      req.body,
+    );
+    const cleanUsername = username.trim();
+
+    const existing = await getById<AdminUser>(COL.adminUsers, cleanUsername);
+    if (existing) throw new ApiError(409, 'Dieser Benutzername ist bereits vergeben.');
+
+    const normalizedEmail = email ? normalizeEmail(email) : '';
+    if (normalizedEmail) {
+      const clash = await firstOf<AdminUser>(
+        col(COL.adminUsers).where('email', '==', normalizedEmail),
+      );
+      if (clash) {
+        throw new ApiError(
+          409,
+          'Diese E-Mail-Adresse wird bereits von einem anderen Konto verwendet.',
+        );
+      }
+    }
+
+    await setById(COL.adminUsers, cleanUsername, {
+      username: cleanUsername,
+      password_hash: bcrypt.hashSync(password, 10),
+      ...(normalizedEmail ? { email: normalizedEmail } : {}),
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    });
+    await audit('admin.create', `${cleanUsername}${normalizedEmail ? ` (${normalizedEmail})` : ''}`);
+    res.json({ username: cleanUsername, email: normalizedEmail });
+  }),
+);
+
+router.delete(
+  '/admins/:username',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const target = req.params.username;
+    if (target === req.admin!.username) {
+      throw new ApiError(400, 'Du kannst dein eigenes Konto nicht löschen.');
+    }
+    const existing = await getById<AdminUser>(COL.adminUsers, target);
+    if (!existing) throw new ApiError(404, 'Admin-Konto nicht gefunden.');
+
+    // Das letzte verbleibende Admin-Konto darf nie gelöscht werden – sonst gäbe
+    // es keinen Weg mehr in den Adminbereich.
+    const count = await countQuery(col(COL.adminUsers));
+    if (count <= 1) {
+      throw new ApiError(400, 'Das letzte Admin-Konto kann nicht gelöscht werden.');
+    }
+
+    // Offene Passwort-Reset-Token des gelöschten Kontos aufräumen.
+    await deleteWhere(col(COL.adminPasswordResets).where('username', '==', target));
+    await deleteById(COL.adminUsers, target);
+    await audit('admin.delete', target);
+    res.json({ ok: true });
   }),
 );
 

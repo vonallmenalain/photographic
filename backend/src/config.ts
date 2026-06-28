@@ -130,6 +130,12 @@ export const config = {
     email: optional('ADMIN_EMAIL', 'vonallmenalain@gmail.com'),
     // TTL für Passwort-Reset-Token in Minuten (Standard: 60).
     passwordResetTtlMinutes: int('ADMIN_PASSWORD_RESET_TTL_MINUTES', 60),
+    // Notfall-/Wiederherstellungs-Schalter. NUR wenn true wird beim Start das
+    // Passwort des konfigurierten Admins aus der Umgebung (ADMIN_PASSWORD /
+    // ADMIN_PASSWORD_HASH) erzwungen. Standard false, damit ein im Adminbereich
+    // bzw. per "Passwort vergessen" gesetztes Passwort einen Neustart/Deploy
+    // überlebt und nicht still vom .env-Wert überschrieben wird.
+    passwordResetOnBoot: bool('ADMIN_PASSWORD_RESET_ON_BOOT', false),
   },
 
   // Parent verification behaviour.
