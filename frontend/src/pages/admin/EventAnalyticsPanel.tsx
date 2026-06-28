@@ -171,7 +171,11 @@ export function OrderableUntilStat({
         <button
           type="button"
           className="stat-edit-btn"
-          onClick={() => setEditing(true)}
+          onClick={(e) => {
+            // Verhindert, dass der Klick die eingeklappte Auftragszeile toggelt.
+            e.stopPropagation();
+            setEditing(true);
+          }}
           title="Bestellzeitraum manuell anpassen"
           aria-label="Bestellzeitraum manuell anpassen"
         >
