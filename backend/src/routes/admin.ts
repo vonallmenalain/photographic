@@ -529,13 +529,17 @@ router.get(
   asyncHandler(async (_req, res) => {
     // Keep statuses current (auto-archive expired galleries) before listing.
     await archiveExpiredEvents();
-    const [events, children, emailLinks, totals, reminders] = await Promise.all([
+    const [events, children, emailLinks, totals, reminders, parentEmails] = await Promise.all([
       runQuery<Record<string, unknown>>(col(COL.events)),
       runQuery<{ id: string; event_id: string }>(col(COL.children)),
       runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
       eventRevenueTotals(),
       runQuery<{ event_id: string }>(col(COL.reminders)),
+      runQuery<{ id: string; status: string }>(col(COL.parentEmails)),
     ]);
+    const verifiedEmailIds = new Set(
+      parentEmails.filter((e) => e.status === 'verified').map((e) => e.id),
+    );
     // Photo counts via server-side aggregation per event instead of streaming
     // the ENTIRE photos collection into memory. The photos collection grows
     // without bound (one doc per uploaded photo); reading all of it on every
@@ -574,15 +578,21 @@ router.get(
     }
 
     const result = events
-      .map((e) => ({
-        ...e,
-        photo_count: photoCounts.get(e.id) ?? 0,
-        child_count: childCounts.get(e.id) ?? 0,
-        email_count: emailsByEvent.get(e.id)?.size ?? 0,
-        order_count: totals.orderCount.get(e.id) ?? 0,
-        revenue_cents: totals.revenue.get(e.id) ?? 0,
-        reminder_count: reminderCounts.get(e.id) ?? 0,
-      }))
+      .map((e) => {
+        const emailSet = emailsByEvent.get(e.id);
+        let verifiedCount = 0;
+        if (emailSet) for (const id of emailSet) if (verifiedEmailIds.has(id)) verifiedCount += 1;
+        return {
+          ...e,
+          photo_count: photoCounts.get(e.id) ?? 0,
+          child_count: childCounts.get(e.id) ?? 0,
+          email_count: emailSet?.size ?? 0,
+          email_verified: verifiedCount,
+          order_count: totals.orderCount.get(e.id) ?? 0,
+          revenue_cents: totals.revenue.get(e.id) ?? 0,
+          reminder_count: reminderCounts.get(e.id) ?? 0,
+        };
+      })
       .sort((a, b) =>
         String((b as Record<string, unknown>).created_at ?? '').localeCompare(
           String((a as Record<string, unknown>).created_at ?? ''),

@@ -46,30 +46,37 @@ export function EventAnalyticsPanel({
   ev,
   currency,
   onReload,
+  showSummary = true,
 }: {
   ev: EventAnalytics;
   currency: string;
   onReload: () => void;
+  // Die grauen Kennzahl-Kacheln werden in der Aufträge-Übersicht bereits in der
+  // eingeklappten Zeile gezeigt; im ausgeklappten Bereich blenden wir sie aus,
+  // um Redundanz zu vermeiden. Die eigenständige Detailseite zeigt sie weiterhin.
+  showSummary?: boolean;
 }) {
   return (
     <div>
-      <div className="analytics-summary">
-        <SummaryStat label="Umsatz" value={formatPrice(ev.revenue_cents, currency)} />
-        <SummaryStat label="Bestellungen" value={String(ev.order_count)} />
-        <SummaryStat
-          label="Verifizierte E-Mails"
-          value={`${ev.email_verified} von ${ev.email_total}`}
-        />
-        <SummaryStat label="Erinnerungen" value={String(ev.reminders.length)} />
-        <OrderableUntilStat
-          eventId={ev.id}
-          status={ev.status}
-          expiresAt={ev.expires_at}
-          onReload={onReload}
-        />
-      </div>
+      {showSummary && (
+        <div className="analytics-summary">
+          <SummaryStat label="Umsatz" value={formatPrice(ev.revenue_cents, currency)} />
+          <SummaryStat label="Bestellungen" value={String(ev.order_count)} />
+          <SummaryStat
+            label="Verifizierte E-Mails"
+            value={`${ev.email_verified} von ${ev.email_total}`}
+          />
+          <SummaryStat label="Erinnerungen" value={String(ev.reminders.length)} />
+          <OrderableUntilStat
+            eventId={ev.id}
+            status={ev.status}
+            expiresAt={ev.expires_at}
+            onReload={onReload}
+          />
+        </div>
+      )}
 
-      <h3 style={{ marginTop: 20, marginBottom: 8 }}>Umsatzverlauf</h3>
+      <h3 style={{ marginTop: showSummary ? 20 : 0, marginBottom: 8 }}>Umsatzverlauf</h3>
       <RevenueChart daily={ev.daily} reminders={ev.reminders} currency={currency} />
 
       <ReminderManager event={ev} onReload={onReload} />
@@ -113,7 +120,7 @@ export function EventAnalyticsPanel({
   );
 }
 
-function SummaryStat({ label, value }: { label: string; value: string }) {
+export function SummaryStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="analytics-stat">
       <span className="analytics-stat-num">{value}</span>
@@ -127,7 +134,7 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
  * können. Archivierte oder abgelaufene Aufträge werden klar als nicht mehr
  * bestellbar gekennzeichnet.
  */
-function OrderableUntilStat({
+export function OrderableUntilStat({
   eventId,
   status,
   expiresAt,

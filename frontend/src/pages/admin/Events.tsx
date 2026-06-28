@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
-import { EventAnalyticsPanel, type EventAnalytics } from './EventAnalyticsPanel';
+import { formatPrice } from '../../lib/format';
+import {
+  EventAnalyticsPanel,
+  OrderableUntilStat,
+  SummaryStat,
+  type EventAnalytics,
+} from './EventAnalyticsPanel';
 
 // Note: new orders are no longer created here. Capturing a new Auftrag (data
 // import → photos → publish) happens in the guided "Aufträge erfassen" wizard.
@@ -18,6 +24,7 @@ interface EventRow {
   photo_count: number;
   child_count: number;
   email_count: number;
+  email_verified: number;
   order_count: number;
   revenue_cents: number;
   // Summe aller versendeten Einladungen + Erinnerungen (reminders-Sammlung).
@@ -221,10 +228,24 @@ function EventCard({
           </div>
         </div>
 
-        <div className="order-row-stats">
-          <Stat num={ev.child_count} lbl="Kinder" />
-          <Stat num={ev.order_count} lbl="Bestellungen" />
-          <Stat num={ev.reminder_count} lbl="Einladungen + Erinnerungen" />
+        <div className="order-row-stats" onClick={(e) => e.stopPropagation()}>
+          <SummaryStat label="Kinder" value={String(ev.child_count)} />
+          <SummaryStat label="Bestellungen" value={String(ev.order_count)} />
+          <SummaryStat label="Umsatz" value={formatPrice(ev.revenue_cents, currency)} />
+          <SummaryStat
+            label="Verifizierte E-Mails"
+            value={`${ev.email_verified} von ${ev.email_count}`}
+          />
+          <SummaryStat label="Einladungen + Erinnerungen" value={String(ev.reminder_count)} />
+          <OrderableUntilStat
+            eventId={ev.id}
+            status={ev.status}
+            expiresAt={ev.expires_at}
+            onReload={() => {
+              void onChanged();
+              if (expanded) void loadDetail();
+            }}
+          />
         </div>
       </div>
 
@@ -233,21 +254,17 @@ function EventCard({
           {loadingDetail && !analytics ? (
             <Spinner />
           ) : analytics ? (
-            <EventAnalyticsPanel ev={analytics} currency={detailCurrency} onReload={loadDetail} />
+            <EventAnalyticsPanel
+              ev={analytics}
+              currency={detailCurrency}
+              onReload={loadDetail}
+              showSummary={false}
+            />
           ) : (
             <p className="muted">Auswertung konnte nicht geladen werden.</p>
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function Stat({ num, lbl }: { num: React.ReactNode; lbl: string }) {
-  return (
-    <div className="job-stat">
-      <span className="job-stat-num">{num}</span>
-      <span className="job-stat-lbl">{lbl}</span>
     </div>
   );
 }
