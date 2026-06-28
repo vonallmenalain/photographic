@@ -50,7 +50,7 @@ export default function Verify() {
         setVerified(res.email);
         await refresh();
         sessionStorage.removeItem('pending_email');
-        navigate('/galerie/fotos', { replace: true });
+        navigate('/galerie', { replace: true });
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
       } finally {
@@ -73,7 +73,7 @@ export default function Verify() {
       setVerified(res.email);
       await refresh();
       sessionStorage.removeItem('pending_email');
-      navigate('/galerie/fotos', { replace: true });
+      navigate('/galerie', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
     } finally {
@@ -94,7 +94,7 @@ export default function Verify() {
         });
         setVerified(res.email);
         await refresh();
-        navigate('/galerie/fotos', { replace: true });
+        navigate('/galerie', { replace: true });
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
       } finally {
@@ -115,7 +115,7 @@ export default function Verify() {
       setVerified(res.email);
       await refresh();
       sessionStorage.removeItem('pending_email');
-      navigate('/galerie/fotos', { replace: true });
+      navigate('/galerie', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
     } finally {
