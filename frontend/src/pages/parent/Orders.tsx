@@ -30,7 +30,7 @@ export default function Orders() {
       {orders.length === 0 ? (
         <div className="card center">
           <p className="soft">Es sind noch keine Bestellungen vorhanden.</p>
-          <Link to="/galerie/fotos" className="btn">
+          <Link to="/galerie" className="btn">
             Zur Galerie
           </Link>
         </div>

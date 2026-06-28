@@ -14,7 +14,7 @@ export default function Landing() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!loading && verified) navigate('/galerie/fotos', { replace: true });
+    if (!loading && verified) navigate('/galerie', { replace: true });
   }, [verified, loading, navigate]);
 
   const submit = async (e: React.FormEvent) => {

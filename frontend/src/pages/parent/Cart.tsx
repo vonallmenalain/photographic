@@ -148,7 +148,7 @@ export default function Cart() {
       {!cart || cart.items.length === 0 ? (
         <div className="card center">
           <p className="soft">Der Warenkorb ist leer.</p>
-          <Link to="/galerie/fotos" className="btn">
+          <Link to="/galerie" className="btn">
             Zur Galerie
           </Link>
         </div>
