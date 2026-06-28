@@ -650,18 +650,16 @@ tr:hover td { background: var(--surface-2); }
   border-bottom: 1px solid var(--border);
   padding: 12px 0;
 }
-.job-stat { display: flex; flex-direction: column; align-items: center; text-align: center; }
-.job-stat-num { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
-.job-stat-lbl { color: var(--text-muted); font-size: 0.75rem; margin-top: 2px; }
 .job-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
-/* Auswertung (analytics) summary row inside a collapsible Auftrag tile */
+/* Auswertung (analytics) summary row on the standalone Auftrag detail page. */
 .analytics-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 10px;
   margin-top: 14px;
 }
+/* Gray stat tiles (analytics summary + collapsed Auftrag row). */
 .analytics-stat {
   display: flex;
   flex-direction: column;
@@ -749,15 +747,16 @@ tr:hover td { background: var(--surface-2); }
   min-width: 0;
 }
 .order-row-stats {
-  display: flex;
-  gap: 40px;
-  flex-wrap: wrap;
-  padding: 12px 4px 2px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 8px;
+  padding: 12px 0 0;
   border-top: 1px solid var(--border);
 }
-.order-row-stats .job-stat { align-items: flex-start; text-align: left; }
-.order-row-stats .job-stat-num { font-size: 1.35rem; }
-.order-row-stats .job-stat-lbl { font-size: 0.8rem; }
+/* Compact variant of the gray analytics tiles, so an Auftrag row stays short. */
+.order-row-stats .analytics-stat { padding: 6px 10px; }
+.order-row-stats .analytics-stat-num { font-size: 1.05rem; }
+.order-row-stats .analytics-stat-lbl { font-size: 0.72rem; }
 .order-row-actions {
   display: flex;
   align-items: center;
@@ -773,7 +772,7 @@ tr:hover td { background: var(--surface-2); }
   padding: 16px 18px 20px;
 }
 @media (max-width: 720px) {
-  .order-row-stats { gap: 24px; }
+  .order-row-stats { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
   .order-row-actions { width: 100%; }
 }
 
