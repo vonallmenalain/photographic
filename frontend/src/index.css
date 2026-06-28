@@ -902,20 +902,16 @@ tr:hover td { background: var(--surface-2); }
 }
 
 /* ==========================================================================
-   Dark wood "bar" theme — parent ("Eltern") view only.
+   Warm beige theme — parent ("Eltern") view only.
    The whole parent experience is wrapped in `.parent-theme`, so we can re-skin
-   it into a warm, cozy espresso-wood lounge (inspired by a dimly-lit bar with
-   amber bokeh lights) without touching the admin area, which keeps its own cool
-   blue/slate look.
+   it into a bright, airy beige look with soft amber bokeh accents without
+   touching the admin area, which keeps its own cool blue/slate look.
 
-   How the colours work on a DARK backdrop:
-   • The page background is deep walnut wood with glowing amber "bokeh" lights.
-   • Text that sits directly on that backdrop (page titles, gallery headings,
-     hero copy, footer) is light/cream — so --text/--text-soft/--text-muted
-     default to warm cream here.
-   • Content surfaces (cards, inputs, dropdowns, photo tiles …) stay on warm
-     cream "paper", so those surfaces RE-DECLARE the text variables back to dark
-     espresso further below, keeping everything inside them perfectly legible.
+   How the colours work on a LIGHT backdrop:
+   • The page background is warm sand/beige with soft golden "bokeh" glows.
+   • Text that sits directly on that backdrop is dark espresso — legible and rich.
+   • Content surfaces (cards, inputs, dropdowns …) stay on near-white cream so
+     they lift off the background with subtle depth.
    ========================================================================== */
 .parent-theme {
   /* Hand-lettered display font everywhere in the parent view — the same
@@ -929,33 +925,32 @@ tr:hover td { background: var(--surface-2); }
   --font: 'Kalam', 'Segoe UI', cursive;
   font-family: var(--font);
 
-  /* Warm palette tuned for the dark backdrop. Cream text by default (for
-     content sitting directly on the wood); cream "paper" surfaces. */
-  --bg: #1c130a;
-  --surface: #fbf5ea;
-  --surface-2: #f1e6d2;
-  --border: #dcc6a3;
-  --text: #f4e7cf;
-  --text-soft: #dcc4a0;
-  --text-muted: #b69f7c;
-  --primary: #a8631f;
-  --primary-dark: #8a4f17;
-  --success: #6f9038;
+  /* Warm beige palette. Dark espresso text on the light backdrop; near-white
+     cream surfaces with warm hairlines. */
+  --bg: #f2e8d4;
+  --surface: #fffdf8;
+  --surface-2: #f7f0e4;
+  --border: #dccfb8;
+  --text: #3a2a1b;
+  --text-soft: #6d543e;
+  --text-muted: #9a8163;
+  --primary: #a0621d;
+  --primary-dark: #834f15;
+  --success: #4e7226;
   --danger: #bb4a22;
-  --warning: #b9812a;
-  --shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 16px 40px rgba(0, 0, 0, 0.32);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);
+  --warning: #9e6b10;
+  --shadow: 0 2px 6px rgba(60, 40, 15, 0.10), 0 16px 40px rgba(60, 40, 15, 0.09);
+  --shadow-sm: 0 1px 3px rgba(60, 40, 15, 0.10);
 
   position: relative;
   isolation: isolate;
   min-height: 100vh;
   color: var(--text);
-  /* Smooth deep-espresso/walnut backdrop — the exact same radial glow used by the
-     Galerie-Vorschau stage (see `.parent-theme .gp-stage`), so the page background
-     looks identical everywhere (gallery, cart, …) as in the preview, with no
-     vertical wood-grain stripes. Animated glowing "bokeh" orbs are layered on top
-     via `.parent-bg` (see Layout). */
-  background: radial-gradient(120% 120% at 50% 0%, #2c1d10 0%, #1a1009 60%, #120b06 100%);
+  /* Warm sand-beige radial gradient — slightly deeper at the top centre and
+     brightening toward the edges, giving the same soft depth as before but in
+     a light, airy beige. Animated bokeh orbs are layered on top via `.parent-bg`
+     (see Layout). */
+  background: radial-gradient(120% 120% at 50% 0%, #e8dbc8 0%, #f0e7d5 55%, #f6edd8 100%);
   background-attachment: fixed;
 }
 
@@ -973,29 +968,29 @@ tr:hover td { background: var(--surface-2); }
   position: absolute;
   border-radius: 50%;
   filter: blur(52px);
-  mix-blend-mode: screen;
-  opacity: 0.5;
+  mix-blend-mode: multiply;
+  opacity: 0.65;
   will-change: transform;
   transform: translateZ(0);
 }
 .parent-bg .b1 {
   width: 360px; height: 360px; left: -70px; top: 10%;
-  background: radial-gradient(circle, rgba(236, 164, 78, 0.6), transparent 66%);
+  background: radial-gradient(circle, rgba(195, 145, 70, 0.55), transparent 66%);
   animation: bokehDrift 17s ease-in-out infinite alternate;
 }
 .parent-bg .b2 {
   width: 420px; height: 420px; right: -120px; top: 42%;
-  background: radial-gradient(circle, rgba(214, 124, 48, 0.42), transparent 66%);
+  background: radial-gradient(circle, rgba(175, 118, 48, 0.42), transparent 66%);
   animation: bokehDrift 22s 1.5s ease-in-out infinite alternate-reverse;
 }
 .parent-bg .b3 {
   width: 300px; height: 300px; left: 24%; bottom: -90px;
-  background: radial-gradient(circle, rgba(244, 196, 120, 0.34), transparent 66%);
+  background: radial-gradient(circle, rgba(215, 168, 88, 0.38), transparent 66%);
   animation: bokehDrift 26s 3s ease-in-out infinite alternate;
 }
 .parent-bg .b4 {
   width: 200px; height: 200px; left: 62%; top: 6%;
-  background: radial-gradient(circle, rgba(255, 214, 150, 0.30), transparent 64%);
+  background: radial-gradient(circle, rgba(228, 185, 100, 0.34), transparent 64%);
   animation: bokehDrift 19s 0.8s ease-in-out infinite alternate-reverse;
 }
 @keyframes bokehDrift {
@@ -1008,68 +1003,67 @@ tr:hover td { background: var(--surface-2); }
   .parent-bg .bokeh { animation: none; }
 }
 
-/* Header: a translucent dark-walnut bar with warm cream lettering, a soft blur
-   so the bokeh shimmers through, and a thin emerald→amber accent line on top
-   (a nod to the reference image's green hairline above the logo). */
+/* Header: a translucent warm-beige bar with dark espresso lettering, a soft
+   blur so the bokeh glows shimmer through, and a thin golden→amber accent line
+   on top for a touch of warmth. */
 .parent-theme .appbar {
   background:
-    linear-gradient(180deg, rgba(58, 36, 18, 0.92) 0%, rgba(36, 23, 12, 0.94) 100%);
+    linear-gradient(180deg, rgba(248, 240, 224, 0.94) 0%, rgba(240, 230, 212, 0.96) 100%);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.45);
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.42);
+  border-bottom: 1px solid rgba(185, 158, 115, 0.40);
+  box-shadow: 0 2px 14px rgba(80, 52, 18, 0.12);
 }
 .parent-theme .appbar::before {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #5d9a44 0%, #d8a44f 55%, #a8662b 100%);
+  background: linear-gradient(90deg, #c9a84c 0%, #d4935a 55%, #a8662b 100%);
 }
-.parent-theme .brand { color: #f6ead4; }
+.parent-theme .brand { color: #3a2a1b; }
 .parent-theme .brand-mark {
-  color: #f6ead4;
-  background: linear-gradient(135deg, #f2d8a7, #e7b873);
+  color: #3a2a1b;
+  background: linear-gradient(135deg, #a0621d, #c97c30);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+  text-shadow: none;
 }
 .parent-theme .nav-link,
-.parent-theme .nav-actions .muted { color: #e8d6ba; }
-.parent-theme .nav-link:hover { color: #f7c982; }
+.parent-theme .nav-actions .muted { color: #6d543e; }
+.parent-theme .nav-link:hover { color: #a0621d; }
 
-/* Round header icon buttons on the dark wood bar */
+/* Round header icon buttons on the beige bar */
 .parent-theme .icon-btn {
-  background: rgba(246, 234, 212, 0.10);
-  border-color: rgba(246, 234, 212, 0.28);
-  color: #f0e2c8;
+  background: rgba(90, 62, 28, 0.07);
+  border-color: rgba(130, 90, 40, 0.25);
+  color: #5d4331;
 }
 .parent-theme .icon-btn:hover {
-  background: rgba(246, 234, 212, 0.20);
-  border-color: #f2d8a7;
-  color: #fdebcb;
+  background: rgba(90, 62, 28, 0.13);
+  border-color: rgba(160, 98, 29, 0.45);
+  color: #3a2a1b;
 }
 .parent-theme .icon-btn:focus-visible {
-  box-shadow: 0 0 0 3px rgba(242, 216, 167, 0.4);
+  box-shadow: 0 0 0 3px rgba(160, 98, 29, 0.20);
 }
 .parent-theme .cart-btn .cart-badge {
-  background: #d2741f;
+  background: #a0621d;
   color: #fff;
-  box-shadow: 0 0 0 2px #281910;
+  box-shadow: 0 0 0 2px #f0e7d5;
 }
 .parent-theme .profile-btn[aria-expanded='true'] {
-  background: rgba(246, 234, 212, 0.20);
-  border-color: #f2d8a7;
-  color: #fdebcb;
+  background: rgba(90, 62, 28, 0.13);
+  border-color: rgba(160, 98, 29, 0.45);
+  color: #3a2a1b;
 }
-.parent-theme .profile-status { border-color: #2a1a0d; }
+.parent-theme .profile-status { border-color: #dccfb8; }
 
-/* ── Text colour scoping for the dark backdrop ──────────────────────────────
-   Cream "paper" surfaces RE-DECLARE the text variables back to dark espresso so
-   every label, paragraph and helper text inside them stays crisp and legible.
-   Because `color: var(--text)` is re-applied on the surface itself, plain
-   children (<p>, <li>, <strong> …) inherit the dark colour too. */
+/* ── Text colour scoping for card/input surfaces ────────────────────────────
+   Surfaces explicitly re-declare text variables so any local overrides stay
+   consistent; on the beige backdrop the base --text is already dark espresso,
+   so this mainly ensures deeper nesting (e.g. inside portals) is also correct. */
 .parent-theme .card,
 .parent-theme .modal-card,
 .parent-theme .profile-dropdown,
@@ -1089,36 +1083,36 @@ tr:hover td { background: var(--surface-2); }
 /* Hero lock badge + section accents */
 .parent-theme .hero .lock-big {
   background: linear-gradient(135deg, #c2772f, #e1a04a);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 22px rgba(80, 52, 18, 0.22);
 }
 
-/* Headings sit directly on the dark wood → warm cream with a soft shadow so
-   they lift off the backdrop. Headings inside cream surfaces stay dark. */
+/* Headings sit directly on the beige backdrop → rich dark espresso with a very
+   soft warm lift shadow. Headings inside card surfaces share the same palette. */
 .parent-theme h1,
 .parent-theme h2,
 .parent-theme h3 {
-  color: #f6e8cf;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  color: #3a2a1b;
+  text-shadow: 0 1px 2px rgba(210, 180, 140, 0.35);
 }
 .parent-theme .card h1,
 .parent-theme .card h2,
 .parent-theme .card h3,
 .parent-theme .modal-card h2 {
-  color: #43301f;
+  color: #3a2a1b;
   text-shadow: none;
 }
 
-/* Cream "paper" cards lifting off the dark wood: a warm hairline plus a deep
-   ambient shadow so they read as physical cards on a table. */
+/* Near-white cream cards lifting off the beige backdrop: a warm hairline plus
+   a soft ambient shadow that reads as gentle depth without heaviness. */
 .parent-theme .card {
-  border-color: #e7d6b8;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.30), 0 20px 44px rgba(0, 0, 0, 0.34);
+  border-color: #dccfb8;
+  box-shadow: 0 2px 6px rgba(80, 52, 18, 0.10), 0 20px 44px rgba(80, 52, 18, 0.10);
 }
 .parent-theme .photo-tile {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28), 0 16px 36px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 2px 6px rgba(80, 52, 18, 0.10), 0 16px 36px rgba(80, 52, 18, 0.10);
 }
 .parent-theme .photo-tile:hover {
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.34), 0 24px 56px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 6px 14px rgba(80, 52, 18, 0.14), 0 24px 56px rgba(80, 52, 18, 0.15);
 }
 
 /* Inputs on cream paper */
@@ -1152,13 +1146,13 @@ tr:hover td { background: var(--surface-2); }
 .parent-theme .photo-toast.error { background: #f6e2d6; color: #8f3217; }
 .parent-theme .profile-dropdown-item-danger:hover { background: #f6e2d6; color: var(--danger); }
 
-/* Footer sits on the dark wood → warm muted cream, with glowing gold links. */
-.parent-theme .footer { color: #c2a87f; }
-.parent-theme .footer a { color: #e9c489; }
-.parent-theme .footer a:hover { color: #f7d9a3; }
+/* Footer sits on the beige backdrop → warm muted espresso, with amber links. */
+.parent-theme .footer { color: #7a6248; }
+.parent-theme .footer a { color: #a0621d; }
+.parent-theme .footer a:hover { color: #c07830; }
 
-/* Gallery-Vorschau stage: keep it dark so the photos pop, but warm the black
-   into a deep espresso/walnut and switch the centre glow to a candle-amber. */
+/* Gallery-Vorschau stage: intentionally kept dark (deep espresso/walnut) so
+   photos pop; the surrounding page is beige but the stage has its own dark shell. */
 .parent-theme .gp-stage {
   background: radial-gradient(120% 120% at 50% 0%, #2c1d10 0%, #1a1009 60%, #120b06 100%);
 }
@@ -1168,7 +1162,7 @@ tr:hover td { background: var(--surface-2); }
     0 0 0 1px rgba(247, 220, 176, 0.18),
     0 0 120px rgba(214, 158, 84, 0.22);
 }
-.parent-theme .preview-enter { color: #2c1d10; }
+.parent-theme .preview-enter { color: #fffdf8; }
 
 /* ==========================================================================
    Cart / order line items — a reusable row (thumbnail · details · price ·
