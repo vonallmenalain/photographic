@@ -9,6 +9,7 @@ import {
   SummaryStat,
   type EventAnalytics,
 } from './EventAnalyticsPanel';
+import { PhotoOverviewModal } from './PhotoOverviewModal';
 
 // Note: new orders are no longer created here. Capturing a new Auftrag (data
 // import → photos → publish) happens in the guided "Aufträge erfassen" wizard.
@@ -110,6 +111,7 @@ function EventCard({
   const [detailCurrency, setDetailCurrency] = useState(currency);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(false);
 
   const loadDetail = async () => {
     setLoadingDetail(true);
@@ -226,6 +228,17 @@ function EventCard({
                 </option>
               ))}
             </select>
+            <button
+              className="btn secondary small"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowPhotos(true);
+              }}
+              title="Alle Fotos und E-Mail-Adressen dieses Auftrags zur Kontrolle anzeigen"
+            >
+              Fotos
+            </button>
             {ev.status === 'draft' && (
               <button className="btn secondary small" type="button" onClick={edit} disabled={busy}>
                 Auftrag bearbeiten
@@ -279,6 +292,14 @@ function EventCard({
             <p className="muted">Auswertung konnte nicht geladen werden.</p>
           )}
         </div>
+      )}
+
+      {showPhotos && (
+        <PhotoOverviewModal
+          eventId={ev.id}
+          eventName={ev.name}
+          onClose={() => setShowPhotos(false)}
+        />
       )}
     </div>
   );
