@@ -160,12 +160,12 @@ export async function sendGalleryReadyEmail(
       : `Ihre Fotos stehen Ihnen während ${retentionDays} Tagen zur Verfügung und werden danach automatisch archiviert.`;
 
   const extensionHtml = extendedUntil
-    ? `<p style="font-size:15px;line-height:1.6;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:14px 16px;">
-         <strong>Gute Nachricht:</strong> Der Bestellzeitraum wurde verlängert – Sie können noch bis zum <strong>${extendedUntil}</strong> bestellen.
+    ? `<p style="font-size:15px;line-height:1.6;">
+         Der Bestellzeitraum wurde verlängert – Sie können noch bis zum <strong>${extendedUntil}</strong> bestellen.
        </p>`
     : '';
   const extensionText = extendedUntil
-    ? `\n\nGute Nachricht: Der Bestellzeitraum wurde verlängert – Sie können noch bis zum ${extendedUntil} bestellen.`
+    ? `\n\nDer Bestellzeitraum wurde verlängert – Sie können noch bis zum ${extendedUntil} bestellen.`
     : '';
 
   const html = wrap(
