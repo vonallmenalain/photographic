@@ -857,6 +857,129 @@ router.post(
   }),
 );
 
+// --- Foto-Kontrolle / Übersicht eines Auftrags ---------------------------
+// Liefert in einem einzigen Aufruf alles, was die "Fotos"-Kontrolle im
+// Adminbereich braucht: jede E-Mail-Adresse des Auftrags (mit den zugeordneten
+// Kindern) sowie sämtliche Fotos – gruppiert nach Kind plus die Gruppen-/
+// Klassenfotos und die noch nicht zugeordneten Fotos. So kann der Admin auf
+// einen Blick prüfen, ob alle Fotos korrekt zugewiesen sind.
+router.get(
+  '/events/:id/photo-overview',
+  asyncHandler(async (req, res) => {
+    const eventId = req.params.id;
+    const event = await getById<{ name: string; status: string }>(COL.events, eventId);
+    if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
+
+    const [children, photos, childLinks, photoLinks] = await Promise.all([
+      runQuery<{ id: string; name: string }>(col(COL.children).where('event_id', '==', eventId)),
+      runQuery<{
+        id: string;
+        child_id: string | null;
+        is_class_photo: number;
+        visible_to_event?: number;
+        original_filename: string;
+        status: string;
+        sort_order: number;
+        created_at: string;
+      }>(col(COL.photos).where('event_id', '==', eventId)),
+      runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
+      runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
+    ]);
+
+    const childById = new Map(children.map((c) => [c.id, c.name]));
+
+    // Eltern-Adressen dieses Auftrags ermitteln: entweder über ein Kind der
+    // Klasse (email_children) oder über eine direkte Fotozuweisung (photo_emails).
+    const childIds = new Set(children.map((c) => c.id));
+    const photoIds = new Set(photos.map((p) => p.id));
+    // email_id -> Set der Kindnamen (für die Kontroll-Spalte je Adresse)
+    const emailChildNames = new Map<string, Set<string>>();
+    const emailDirectPhotos = new Map<string, number>();
+    const neededEmailIds = new Set<string>();
+    for (const l of childLinks) {
+      if (!childIds.has(l.child_id)) continue;
+      neededEmailIds.add(l.email_id);
+      const set = emailChildNames.get(l.email_id) ?? new Set<string>();
+      const name = childById.get(l.child_id);
+      if (name) set.add(name);
+      emailChildNames.set(l.email_id, set);
+    }
+    for (const l of photoLinks) {
+      if (!photoIds.has(l.photo_id)) continue;
+      neededEmailIds.add(l.email_id);
+      emailDirectPhotos.set(l.email_id, (emailDirectPhotos.get(l.email_id) ?? 0) + 1);
+    }
+
+    const emailDocs = await getManyById<{ email: string; name?: string; status: string }>(
+      COL.parentEmails,
+      Array.from(neededEmailIds),
+    );
+    const emails = Array.from(emailDocs.values())
+      .filter((e) => e.email)
+      .map((e) => ({
+        id: e.id,
+        email: e.email,
+        name: e.name ?? '',
+        status: e.status,
+        childNames: Array.from(emailChildNames.get(e.id) ?? []).sort((a, b) =>
+          a.localeCompare(b),
+        ),
+        directPhotoCount: emailDirectPhotos.get(e.id) ?? 0,
+      }))
+      .sort((a, b) => a.email.localeCompare(b.email));
+
+    const toPhotoView = (p: (typeof photos)[number]) => ({
+      id: p.id,
+      original_filename: p.original_filename,
+      status: p.status,
+      is_class_photo: Number(p.is_class_photo) === 1 ? 1 : 0,
+      child_id: p.child_id ?? null,
+    });
+    const sortPhotos = (a: (typeof photos)[number], b: (typeof photos)[number]) =>
+      (a.sort_order ?? 0) - (b.sort_order ?? 0) ||
+      String(a.original_filename).localeCompare(String(b.original_filename));
+
+    // Fotos nach Kind gruppieren (nur einzeln zugewiesene Fotos).
+    const photosByChild = new Map<string, (typeof photos)[number][]>();
+    const classPhotos: (typeof photos)[number][] = [];
+    const unassignedPhotos: (typeof photos)[number][] = [];
+    for (const p of photos) {
+      if (Number(p.is_class_photo) === 1) {
+        classPhotos.push(p);
+      } else if (p.child_id && childById.has(p.child_id)) {
+        const list = photosByChild.get(p.child_id) ?? [];
+        list.push(p);
+        photosByChild.set(p.child_id, list);
+      } else {
+        unassignedPhotos.push(p);
+      }
+    }
+
+    const childrenOut = children
+      .slice()
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        photos: (photosByChild.get(c.id) ?? []).sort(sortPhotos).map(toPhotoView),
+      }));
+
+    res.json({
+      event: { id: eventId, name: event.name, status: event.status },
+      emails,
+      children: childrenOut,
+      classPhotos: classPhotos.sort(sortPhotos).map(toPhotoView),
+      unassignedPhotos: unassignedPhotos.sort(sortPhotos).map(toPhotoView),
+      counts: {
+        photos: photos.length,
+        children: children.length,
+        emails: emails.length,
+        unassigned: unassignedPhotos.length,
+      },
+    });
+  }),
+);
+
 // --- Children ------------------------------------------------------------
 router.post(
   '/events/:id/children',
