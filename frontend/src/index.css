@@ -568,16 +568,6 @@ input:focus, select:focus, textarea:focus {
   margin: 0 0 12px; font-size: 1rem;
   padding-bottom: 6px; border-bottom: 1px solid var(--border);
 }
-.photo-overview-emails {
-  display: grid; gap: 8px;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-}
-.photo-overview-email {
-  border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px;
-  background: var(--surface-2);
-}
-.photo-overview-email-addr { font-size: 0.9rem; font-weight: 500; word-break: break-all; }
-.photo-overview-email-meta { font-size: 0.78rem; margin-top: 3px; line-height: 1.35; }
 .photo-overview-children { display: flex; flex-direction: column; gap: 18px; }
 .photo-overview-child {
   border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
@@ -586,6 +576,17 @@ input:focus, select:focus, textarea:focus {
   display: flex; align-items: baseline; justify-content: space-between;
   gap: 10px; margin-bottom: 10px;
 }
+/* Kind-Kachelkopf: Name – E-Mail-Adresse der Eltern – Status (verifiziert o. nicht) */
+.photo-overview-child-info {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  min-width: 0;
+}
+.photo-overview-child-email {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 0.85rem; color: var(--text-soft);
+}
+.photo-overview-child-email-addr { word-break: break-all; }
+.photo-overview-child-noemail { font-size: 0.82rem; }
 .photo-overview-warn { color: var(--danger); font-size: 0.85rem; margin: 0; }
 .photo-overview-thumbs {
   display: flex; flex-wrap: wrap; gap: 12px;
@@ -802,6 +803,11 @@ tr:hover td { background: var(--surface-2); }
 .order-row-actions select {
   width: auto;
   min-width: 150px;
+}
+/* "Fotos"-Knopf links vom Status-Dropdown – gleiche Höhe/Breite wie das Dropdown. */
+.order-row-actions .order-row-photos-btn {
+  min-width: 150px;
+  padding: 11px 13px;
 }
 .order-row-detail {
   border-top: 1px solid var(--border);

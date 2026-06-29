@@ -11,9 +11,16 @@ interface OverviewPhoto {
   is_class_photo: number;
   child_id: string | null;
 }
+interface OverviewChildEmail {
+  id: string;
+  email: string;
+  name: string;
+  status: string;
+}
 interface OverviewChild {
   id: string;
   name: string;
+  emails: OverviewChildEmail[];
   photos: OverviewPhoto[];
 }
 interface OverviewEmail {
@@ -81,18 +88,10 @@ export function PhotoOverviewModal({
     return data.children.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
+        c.emails.some(
+          (e) => e.email.toLowerCase().includes(q) || e.name.toLowerCase().includes(q),
+        ) ||
         c.photos.some((p) => p.original_filename.toLowerCase().includes(q)),
-    );
-  }, [data, q]);
-
-  const filteredEmails = useMemo(() => {
-    if (!data) return [];
-    if (!q) return data.emails;
-    return data.emails.filter(
-      (e) =>
-        e.email.toLowerCase().includes(q) ||
-        e.name.toLowerCase().includes(q) ||
-        e.childNames.some((n) => n.toLowerCase().includes(q)),
     );
   }, [data, q]);
 
@@ -134,47 +133,6 @@ export function PhotoOverviewModal({
             />
           </div>
 
-          {/* E-Mail-Adressen */}
-          <section className="photo-overview-section">
-            <h3 className="photo-overview-h">E-Mail-Adressen ({filteredEmails.length})</h3>
-            {filteredEmails.length === 0 ? (
-              <p className="muted" style={{ fontSize: '0.85rem' }}>
-                {data.emails.length === 0
-                  ? 'Für diesen Auftrag sind noch keine E-Mail-Adressen hinterlegt.'
-                  : 'Keine E-Mail-Adresse passt zum Filter.'}
-              </p>
-            ) : (
-              <div className="photo-overview-emails">
-                {filteredEmails.map((e) => (
-                  <div key={e.id} className="photo-overview-email">
-                    <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-                      <span className="photo-overview-email-addr">{e.email}</span>
-                      <StatusBadge status={e.status} />
-                    </div>
-                    <div className="muted photo-overview-email-meta">
-                      {e.name ? <span>{e.name}</span> : null}
-                      {e.childNames.length > 0 ? (
-                        <span>
-                          {e.name ? ' · ' : ''}
-                          Kind(er): {e.childNames.join(', ')}
-                        </span>
-                      ) : null}
-                      {e.childNames.length === 0 && e.directPhotoCount > 0 ? (
-                        <span>
-                          {e.name ? ' · ' : ''}
-                          {e.directPhotoCount} direkt zugewiesene(s) Foto(s)
-                        </span>
-                      ) : null}
-                      {e.childNames.length === 0 && e.directPhotoCount === 0 ? (
-                        <span>{e.name ? ' · ' : ''}Noch keinem Kind zugeordnet</span>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
           {/* Fotos je Kind */}
           <section className="photo-overview-section">
             <h3 className="photo-overview-h">Fotos je Kind</h3>
@@ -189,7 +147,22 @@ export function PhotoOverviewModal({
                 {filteredChildren.map((c) => (
                   <div key={c.id} className="photo-overview-child">
                     <div className="photo-overview-child-head">
-                      <strong>{c.name}</strong>
+                      <div className="photo-overview-child-info">
+                        <strong>{c.name}</strong>
+                        {c.emails.length === 0 ? (
+                          <span className="muted photo-overview-child-noemail">
+                            – keine E-Mail-Adresse zugeordnet
+                          </span>
+                        ) : (
+                          c.emails.map((e) => (
+                            <span key={e.id} className="photo-overview-child-email">
+                              <span aria-hidden>–</span>
+                              <span className="photo-overview-child-email-addr">{e.email}</span>
+                              <StatusBadge status={e.status} />
+                            </span>
+                          ))
+                        )}
+                      </div>
                       <span className="muted" style={{ fontSize: '0.8rem' }}>
                         {c.photos.length} Foto(s)
                       </span>

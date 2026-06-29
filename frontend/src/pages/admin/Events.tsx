@@ -215,6 +215,17 @@ function EventCard({
           </span>
 
           <div className="order-row-actions" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="btn secondary order-row-photos-btn"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowPhotos(true);
+              }}
+              title="Alle Fotos und E-Mail-Adressen dieses Auftrags zur Kontrolle anzeigen"
+            >
+              Fotos
+            </button>
             <select
               value={ev.status}
               disabled={busy}
@@ -228,17 +239,6 @@ function EventCard({
                 </option>
               ))}
             </select>
-            <button
-              className="btn secondary small"
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowPhotos(true);
-              }}
-              title="Alle Fotos und E-Mail-Adressen dieses Auftrags zur Kontrolle anzeigen"
-            >
-              Fotos
-            </button>
             {ev.status === 'draft' && (
               <button className="btn secondary small" type="button" onClick={edit} disabled={busy}>
                 Auftrag bearbeiten
