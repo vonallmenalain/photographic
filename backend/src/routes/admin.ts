@@ -896,6 +896,8 @@ router.get(
     const emailChildNames = new Map<string, Set<string>>();
     const emailDirectPhotos = new Map<string, number>();
     const neededEmailIds = new Set<string>();
+    // child_id -> Set der zugeordneten E-Mail-IDs (Eltern-Adressen je Kind)
+    const childEmailIds = new Map<string, Set<string>>();
     for (const l of childLinks) {
       if (!childIds.has(l.child_id)) continue;
       neededEmailIds.add(l.email_id);
@@ -903,6 +905,9 @@ router.get(
       const name = childById.get(l.child_id);
       if (name) set.add(name);
       emailChildNames.set(l.email_id, set);
+      const childSet = childEmailIds.get(l.child_id) ?? new Set<string>();
+      childSet.add(l.email_id);
+      childEmailIds.set(l.child_id, childSet);
     }
     for (const l of photoLinks) {
       if (!photoIds.has(l.photo_id)) continue;
@@ -927,6 +932,9 @@ router.get(
         directPhotoCount: emailDirectPhotos.get(e.id) ?? 0,
       }))
       .sort((a, b) => a.email.localeCompare(b.email));
+
+    // Schnellzugriff auf die aufbereiteten E-Mail-Daten (für die Anzeige je Kind).
+    const emailById = new Map(emails.map((e) => [e.id, e]));
 
     const toPhotoView = (p: (typeof photos)[number]) => ({
       id: p.id,
@@ -961,6 +969,11 @@ router.get(
       .map((c) => ({
         id: c.id,
         name: c.name,
+        emails: Array.from(childEmailIds.get(c.id) ?? [])
+          .map((id) => emailById.get(id))
+          .filter((e): e is NonNullable<typeof e> => Boolean(e))
+          .map((e) => ({ id: e.id, email: e.email, name: e.name, status: e.status }))
+          .sort((a, b) => a.email.localeCompare(b.email)),
         photos: (photosByChild.get(c.id) ?? []).sort(sortPhotos).map(toPhotoView),
       }));
 
