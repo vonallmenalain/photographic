@@ -35,13 +35,15 @@ export default function Landing() {
           method: 'POST',
           body: { email },
         });
-        setMessage(res.message);
         // Pass the e-mail to the verify page so the code can be checked, and
-        // carry the confirmation text along so it stays visible there instead of
-        // vanishing the moment the code field appears.
+        // carry the confirmation text along so it is shown there next to the
+        // code field. We navigate straight away instead of briefly flashing the
+        // message here first – this avoids rendering the same text twice (once
+        // green here, once brown on the verify page) and shows the code field
+        // right from the start.
         sessionStorage.setItem('pending_email', email.trim().toLowerCase());
         sessionStorage.setItem('pending_message', res.message);
-        setTimeout(() => navigate('/verifizieren'), 900);
+        navigate('/verifizieren');
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Es ist ein Fehler aufgetreten.');
