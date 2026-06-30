@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../../api/client';
-import { Spinner, StatusBadge } from '../../components/common';
+import { api, ApiError } from '../../api/client';
+import { Alert, Modal, SendToSelfCheckbox, Spinner, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
 import { formatPrice, formatDate } from '../../lib/format';
 
@@ -82,6 +82,8 @@ export default function AdminOrders() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [details, setDetails] = useState<Record<string, OrderDetail>>({});
   const [loadingDetail, setLoadingDetail] = useState<Record<string, boolean>>({});
+  const [showShipping, setShowShipping] = useState(false);
+  const [shippingMsg, setShippingMsg] = useState('');
 
   const load = () =>
     api<{ orders: OrderRow[] }>('/api/admin/orders', { admin: true })
@@ -156,6 +158,8 @@ export default function AdminOrders() {
         Druckprodukt oder pendente Bestellungen anzeigen.
       </p>
 
+      {shippingMsg && <Alert kind="success">{shippingMsg}</Alert>}
+
       <div className="card mb">
         <div className="row" style={{ gap: 8 }}>
           <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
@@ -218,6 +222,18 @@ export default function AdminOrders() {
                       style={{ gap: 10, alignItems: 'center' }}
                       onClick={(e) => e.stopPropagation()}
                     >
+                      {o.has_print && (
+                        <button
+                          type="button"
+                          className="btn secondary small"
+                          onClick={() => {
+                            setShippingMsg('');
+                            setShowShipping(true);
+                          }}
+                        >
+                          Versandbestätigung schicken
+                        </button>
+                      )}
                       <select
                         value={o.status}
                         onChange={(e) => setStatus(o.id, e.target.value)}
@@ -257,6 +273,16 @@ export default function AdminOrders() {
           </div>
         )}
       </div>
+
+      {showShipping && (
+        <ShippingConfirmationModal
+          onClose={() => setShowShipping(false)}
+          onSent={(message) => {
+            setShowShipping(false);
+            setShippingMsg(message);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -381,5 +407,197 @@ function FilterButton({
     <button className={`btn small ${active ? '' : 'ghost'}`} onClick={onClick} type="button">
       {children}
     </button>
+  );
+}
+
+interface PrintRecipient {
+  id: string;
+  email: string;
+  name: string;
+  status: string;
+  verified: boolean;
+}
+interface PrintRecipients {
+  emails: PrintRecipient[];
+  adminEmail: string;
+  devLogOnly: boolean;
+}
+
+/**
+ * Versand-Popup für die Versandbestätigung der ausgedruckten Fotos. Zeigt alle
+ * (aktiven) Eltern-Adressen, die ein Druckprodukt bestellt haben – standard-
+ * mässig sind alle ausgewählt. Aufbau analog zum Erinnerungs-Popup unter
+ * „Aufträge“. Optional geht eine Kopie an das eigene Admin-Konto.
+ */
+function ShippingConfirmationModal({
+  onClose,
+  onSent,
+}: {
+  onClose: () => void;
+  onSent: (msg: string) => void;
+}) {
+  const [data, setData] = useState<PrintRecipients | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sendToSelf, setSendToSelf] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api<PrintRecipients>('/api/admin/orders/print-recipients', { admin: true })
+      .then((r) => {
+        setData(r);
+        // Standardmässig sind alle Druck-Besteller ausgewählt.
+        setSelected(new Set(r.emails.map((e) => e.id)));
+      })
+      .catch((err) =>
+        setError(err instanceof ApiError ? err.message : 'Empfänger konnten nicht ermittelt werden.'),
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  const emails = data?.emails ?? [];
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const allChecked = emails.length > 0 && selected.size === emails.length;
+  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(emails.map((e) => e.id)));
+
+  const send = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await api<{
+        sent: number;
+        failed: number;
+        total: number;
+        sentToSelf: boolean;
+        devLogOnly: boolean;
+      }>('/api/admin/orders/send-shipping-confirmation', {
+        method: 'POST',
+        admin: true,
+        body: { emailIds: Array.from(selected), sendToSelf },
+      });
+      const extra = res.failed > 0 ? ` ${res.failed} konnten nicht zugestellt werden.` : '';
+      const self = res.sentToSelf ? ' Eine Kopie wurde an dich gesendet.' : '';
+      const note = res.devLogOnly
+        ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
+        : '';
+      onSent(
+        `Versandbestätigung an ${res.sent} von ${res.total} Adresse(n) gesendet.${extra}${self}${note}`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Versand fehlgeschlagen.');
+      setBusy(false);
+    }
+  };
+
+  const canSend = !loading && !busy && (selected.size > 0 || sendToSelf);
+  const hasAny = emails.length > 0;
+
+  return (
+    <Modal
+      title="Versandbestätigung schicken"
+      width={680}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
+            Abbrechen
+          </button>
+          <button type="button" className="btn" onClick={send} disabled={!canSend}>
+            {busy ? 'Wird gesendet …' : 'Jetzt senden'}
+          </button>
+        </>
+      }
+    >
+      {error && <Alert kind="error">{error}</Alert>}
+      <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
+        Die Versandbestätigung informiert die Eltern, dass ihre ausgedruckten Fotos heute verschickt
+        wurden. Standardmässig sind alle Adressen ausgewählt, die ein Produkt zum Ausdrucken bestellt
+        haben.
+      </p>
+      {loading ? (
+        <p className="muted">Empfänger werden ermittelt …</p>
+      ) : !hasAny ? (
+        <Alert kind="error">Es gibt noch keine Bestellungen mit einem Druckprodukt.</Alert>
+      ) : data ? (
+        <>
+          <div className="row between" style={{ marginBottom: 6 }}>
+            <strong style={{ fontSize: '0.85rem' }}>
+              {selected.size} von {emails.length} ausgewählt
+            </strong>
+            <button type="button" className="btn ghost small" onClick={toggleAll}>
+              {allChecked ? 'Alle abwählen' : 'Alle auswählen'}
+            </button>
+          </div>
+          <div
+            style={{
+              maxHeight: 340,
+              overflow: 'auto',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+            }}
+          >
+            <table className="dispatch-table">
+              <thead>
+                <tr>
+                  <th>E-Mail-Adresse</th>
+                  <th style={{ textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      onChange={toggleAll}
+                      aria-label="Alle auswählen"
+                      style={{ width: 'auto', margin: 0 }}
+                    />
+                  </th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {emails.map((e) => (
+                  <tr key={e.id} onClick={() => toggle(e.id)} style={{ cursor: 'pointer' }}>
+                    <td className="dispatch-email">{e.email}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(e.id)}
+                        onChange={() => toggle(e.id)}
+                        onClick={(ev) => ev.stopPropagation()}
+                        style={{ width: 'auto', margin: 0 }}
+                      />
+                    </td>
+                    <td>
+                      {e.verified ? (
+                        <span className="badge green">Bestätigt</span>
+                      ) : (
+                        <span className="badge amber">Nicht bestätigt</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <SendToSelfCheckbox
+            checked={sendToSelf}
+            onChange={setSendToSelf}
+            adminEmail={data.adminEmail}
+          />
+          {data.devLogOnly && (
+            <p className="muted" style={{ fontSize: '0.8rem', marginTop: 8, marginBottom: 0 }}>
+              Achtung: Kein SMTP konfiguriert – die E-Mails landen nur im Server-Log.
+            </p>
+          )}
+        </>
+      ) : null}
+    </Modal>
   );
 }
