@@ -1288,6 +1288,32 @@ a.line-item-download {
   transition: background 0.15s ease;
 }
 a.line-item-download:hover { background: var(--surface-2); }
+
+/* Anklickbare Druck-Zeile: öffnet die Galerie-Vorschau des Fotos. */
+.line-item-clickable {
+  cursor: pointer;
+  border-radius: 10px;
+  padding-left: 8px;
+  padding-right: 8px;
+  margin-left: -8px;
+  margin-right: -8px;
+  transition: background 0.15s ease;
+}
+.line-item-clickable:hover { background: var(--surface-2); }
+
+/* Das anklickbare Vorschaubild innerhalb einer Bestellzeile. */
+.li-thumb-btn {
+  flex: none;
+  display: inline-flex;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.li-thumb-btn img { transition: filter 0.15s ease; }
+.li-thumb-btn:hover img { filter: brightness(0.92); }
+.li-thumb-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 a.line-item-download .li-download-icon {
   flex: none;
   display: inline-flex;
