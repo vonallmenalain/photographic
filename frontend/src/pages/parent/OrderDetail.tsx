@@ -8,6 +8,7 @@ interface Item {
   productName: string;
   productType: string;
   childName: string | null;
+  fileName: string;
   qty: number;
   unitPriceCents: number;
   thumbUrl: string;
@@ -125,7 +126,7 @@ export default function OrderDetail() {
                     <DownloadLink
                       url={i.downloadUrl!}
                       thumbUrl={i.thumbUrl}
-                      label={i.childName || i.productName}
+                      label={i.childName || i.fileName || i.productName}
                     />
                   </li>
                 ))}

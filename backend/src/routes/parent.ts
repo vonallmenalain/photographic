@@ -18,6 +18,7 @@ import {
   endSession,
 } from '../services/verification';
 import { getVisiblePhotos } from '../services/access';
+import { stripExtension } from '../lib/names';
 import {
   getCart,
   addToCart,
@@ -406,6 +407,7 @@ router.get(
           productName: i.product_name,
           productType: i.product_type,
           childName: i.child_name,
+          fileName: stripExtension(i.original_filename),
           qty: i.qty,
           unitPriceCents: i.unit_price_cents,
           thumbUrl: `/files/preview-image?token=${signFileToken(i.photo_id, 'thumb', 3600)}`,
