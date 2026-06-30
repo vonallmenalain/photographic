@@ -384,7 +384,7 @@ function PrintPicker({
         {busy
           ? 'Wird hinzugefügt …'
           : selectedPrint
-            ? `Druck in den Warenkorb · ${formatPrice(selectedPrint.price_cents, selectedPrint.currency)}`
+            ? `Druck in den Warenkorb · ${formatPrice(selectedPrint.price_cents * qtyNum, selectedPrint.currency)}`
             : 'Druck in den Warenkorb'}
       </button>
     </>
