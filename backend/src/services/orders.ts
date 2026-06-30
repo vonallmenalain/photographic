@@ -44,6 +44,9 @@ interface OrderDoc {
   payment_ref?: string;
   shipping_address?: ShippingAddress | null;
   created_at: string;
+  // Zeitpunkt der erfolgreichen Zahlung (gesetzt in markOrderPaid). Vor der
+  // Zahlung nicht vorhanden.
+  paid_at?: string | null;
   updated_at: string;
 }
 
@@ -396,6 +399,7 @@ export interface OrderDetail {
   currency: string;
   total_cents: number;
   created_at: string;
+  paid_at: string | null;
   shipping_address: ShippingAddress | null;
   items: {
     photo_id: string;
@@ -450,6 +454,7 @@ export async function getOrderForEmail(emailId: string, orderId: string): Promis
     currency: order.currency,
     total_cents: order.total_cents,
     created_at: order.created_at,
+    paid_at: order.paid_at ?? null,
     shipping_address: order.shipping_address ?? null,
     items,
   };
@@ -457,7 +462,16 @@ export async function getOrderForEmail(emailId: string, orderId: string): Promis
 
 export async function listOrdersForEmail(
   emailId: string,
-): Promise<{ id: string; status: string; total_cents: number; currency: string; created_at: string }[]> {
+): Promise<
+  {
+    id: string;
+    status: string;
+    total_cents: number;
+    currency: string;
+    created_at: string;
+    paid_at: string | null;
+  }[]
+> {
   const orders = await runQuery<OrderDoc>(col(COL.orders).where('email_id', '==', emailId));
   return orders
     .filter((o) => o.status !== 'cart')
@@ -468,5 +482,6 @@ export async function listOrdersForEmail(
       total_cents: o.total_cents,
       currency: o.currency,
       created_at: o.created_at,
+      paid_at: o.paid_at ?? null,
     }));
 }

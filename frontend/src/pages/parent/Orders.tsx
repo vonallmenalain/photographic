@@ -10,6 +10,7 @@ interface OrderRow {
   total_cents: number;
   currency: string;
   created_at: string;
+  paid_at: string | null;
 }
 
 export default function Orders() {
@@ -48,7 +49,9 @@ export default function Orders() {
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id}>
-                  <td>{formatDate(o.created_at)}</td>
+                  {/* Zahlungsdatum (paid_at). Vor der Zahlung gibt es kein
+                      sinnvolles Datum. */}
+                  <td>{o.paid_at ? formatDate(o.paid_at) : '—'}</td>
                   <td>
                     <StatusBadge status={o.status} />
                   </td>

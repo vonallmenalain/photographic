@@ -93,7 +93,10 @@ export default function Events() {
   }, []);
 
   const visibleEvents = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    // Suchbegriff in einzelne Wörter zerlegen: So findet z. B. „müller anna“
+    // auch das Kind „Anna Müller“, unabhängig von der Reihenfolge. Jedes Wort
+    // muss im (vom Backend vorberechneten) Freitext-Index vorkommen.
+    const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
     let list = events.filter((ev) => {
       // Statusfilter / Erinnerungsfilter.
       if (filter === 'published' && ev.status !== 'published') return false;
@@ -101,9 +104,9 @@ export default function Events() {
       if (filter === 'archived' && ev.status !== 'archived') return false;
       if (filter === 'reminders' && ev.reminder_count <= 0) return false;
       // Freitextsuche über Auftragsname, Kindernamen und E-Mail-Adressen.
-      if (q) {
+      if (terms.length) {
         const haystack = ev.search_text ?? ev.name.toLowerCase();
-        if (!haystack.includes(q)) return false;
+        if (!terms.every((t) => haystack.includes(t))) return false;
       }
       return true;
     });
