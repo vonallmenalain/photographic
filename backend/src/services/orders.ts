@@ -81,6 +81,7 @@ interface PhotoLite {
   storage_key: string;
   ext: string;
   child_id?: string | null;
+  original_filename?: string;
 }
 
 async function getOrCreateCart(emailId: string): Promise<string> {
@@ -401,6 +402,7 @@ export interface OrderDetail {
     product_name: string;
     product_type: string;
     child_name: string | null;
+    original_filename: string;
     qty: number;
     unit_price_cents: number;
     storage_key: string;
@@ -433,6 +435,7 @@ export async function getOrderForEmail(emailId: string, orderId: string): Promis
       product_name: oi.product_name,
       product_type: product?.type ?? 'digital',
       child_name: child?.name ?? null,
+      original_filename: photo?.original_filename ?? '',
       qty: oi.qty,
       unit_price_cents: oi.unit_price_cents,
       storage_key: photo?.storage_key ?? '',
