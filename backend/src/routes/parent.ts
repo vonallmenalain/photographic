@@ -403,6 +403,7 @@ router.get(
         total_cents: order.total_cents,
         created_at: order.created_at,
         paid_at: order.paid_at,
+        completed_at: order.completed_at,
         shippingAddress: order.shipping_address,
         items: order.items.map((i) => ({
           photoId: i.photo_id,

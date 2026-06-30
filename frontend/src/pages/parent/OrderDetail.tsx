@@ -23,6 +23,7 @@ interface Order {
   total_cents: number;
   created_at: string;
   paid_at: string | null;
+  completed_at: string | null;
   items: Item[];
 }
 
@@ -73,6 +74,9 @@ export default function OrderDetail() {
   const downloadableItems = order.items.filter((i) => i.downloadUrl);
   const hasDownloads = downloadableItems.length > 0;
   const onlyPrints = isDone && !hasDownloads;
+  // Enthält die Bestellung ausgedruckte Bilder? Nur dann ist ein Versanddatum
+  // (Zeitpunkt des Abschlusses) sinnvoll.
+  const hasPrint = order.items.some((i) => i.productType === 'print');
 
   // Lädt alle digitalen Bilder der Bestellung in einer einzigen ZIP-Datei
   // herunter, anstatt jede Datei einzeln auszulösen. Das Backend bündelt die
@@ -112,8 +116,16 @@ export default function OrderDetail() {
         <StatusBadge status={order.status} />
       </div>
       {/* Vor der Zahlung gibt es kein sinnvolles Datum – erst die Zahlung
-          (paid_at) wird angezeigt. */}
-      {order.paid_at && <p className="muted">{formatDate(order.paid_at)}</p>}
+          (paid_at) wird angezeigt. Bei Bestellungen mit ausgedruckten Bildern
+          wird zusätzlich das Versanddatum (Abschluss der Bestellung) ergänzt. */}
+      {order.paid_at && (
+        <p className="muted">
+          {formatDate(order.paid_at)}
+          {hasPrint && order.completed_at && (
+            <> – Bilder versandt am {formatDate(order.completed_at)}</>
+          )}
+        </p>
+      )}
 
       <div className="card">
         {/* Sammel-Download direkt oben in der Bestellung, sobald mehr als ein

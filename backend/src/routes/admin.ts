@@ -1926,9 +1926,22 @@ router.patch(
   '/orders/:id',
   asyncHandler(async (req, res) => {
     const { status } = parse(z.object({ status: z.enum(ADMIN_ORDER_STATUSES) }), req.body);
-    const order = await getById(COL.orders, req.params.id);
+    const order = await getById<{ status: string; completed_at?: string | null }>(
+      COL.orders,
+      req.params.id,
+    );
     if (!order) throw new ApiError(404, 'Bestellung nicht gefunden.');
-    await updateById(COL.orders, req.params.id, { status, updated_at: nowIso() });
+    const now = nowIso();
+    const update: Record<string, unknown> = { status, updated_at: now };
+    // Den Versand-/Abschlusszeitpunkt mitführen: beim Wechsel auf
+    // "Abgeschlossen" festhalten, bei einem Wechsel weg davon wieder entfernen,
+    // damit keine veraltete Versandangabe stehen bleibt.
+    if (status === 'completed') {
+      if (order.status !== 'completed') update.completed_at = now;
+    } else {
+      update.completed_at = null;
+    }
+    await updateById(COL.orders, req.params.id, update);
     await audit('order.update', `${req.params.id}: ${status}`);
     res.json({ ok: true });
   }),
@@ -2001,10 +2014,16 @@ router.post(
       }
     }
 
-    // Nach erfolgreichem Versand gilt die Bestellung als abgeschlossen.
+    // Nach erfolgreichem Versand gilt die Bestellung als abgeschlossen. Der
+    // Abschlusszeitpunkt ist zugleich das Versanddatum der ausgedruckten Bilder.
     let statusChanged = false;
     if (sent > 0 && order.status !== 'completed') {
-      await updateById(COL.orders, req.params.id, { status: 'completed', updated_at: nowIso() });
+      const now = nowIso();
+      await updateById(COL.orders, req.params.id, {
+        status: 'completed',
+        completed_at: now,
+        updated_at: now,
+      });
       statusChanged = true;
     }
 
