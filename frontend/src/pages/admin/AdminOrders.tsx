@@ -82,7 +82,7 @@ export default function AdminOrders() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [details, setDetails] = useState<Record<string, OrderDetail>>({});
   const [loadingDetail, setLoadingDetail] = useState<Record<string, boolean>>({});
-  const [showShipping, setShowShipping] = useState(false);
+  const [shippingOrder, setShippingOrder] = useState<OrderRow | null>(null);
   const [shippingMsg, setShippingMsg] = useState('');
 
   const load = () =>
@@ -228,7 +228,7 @@ export default function AdminOrders() {
                           className="btn secondary small"
                           onClick={() => {
                             setShippingMsg('');
-                            setShowShipping(true);
+                            setShippingOrder(o);
                           }}
                         >
                           Versandbestätigung schicken
@@ -274,12 +274,16 @@ export default function AdminOrders() {
         )}
       </div>
 
-      {showShipping && (
+      {shippingOrder && (
         <ShippingConfirmationModal
-          onClose={() => setShowShipping(false)}
+          order={shippingOrder}
+          onClose={() => setShippingOrder(null)}
           onSent={(message) => {
-            setShowShipping(false);
+            setShippingOrder(null);
             setShippingMsg(message);
+            // Der Versand setzt die Bestellung serverseitig auf „Abgeschlossen“ –
+            // Liste neu laden, damit der Status sofort stimmt.
+            load();
           }}
         />
       )}
@@ -410,64 +414,40 @@ function FilterButton({
   );
 }
 
-interface PrintRecipient {
-  id: string;
-  email: string;
-  name: string;
-  status: string;
-  verified: boolean;
-}
-interface PrintRecipients {
-  emails: PrintRecipient[];
+interface ShippingMeta {
   adminEmail: string;
   devLogOnly: boolean;
 }
 
 /**
- * Versand-Popup für die Versandbestätigung der ausgedruckten Fotos. Zeigt alle
- * (aktiven) Eltern-Adressen, die ein Druckprodukt bestellt haben – standard-
- * mässig sind alle ausgewählt. Aufbau analog zum Erinnerungs-Popup unter
- * „Aufträge“. Optional geht eine Kopie an das eigene Admin-Konto.
+ * Versand-Popup für die Versandbestätigung einer einzelnen Bestellung. Zeigt nur
+ * die zur angeklickten Bestellung gehörende Adresse. Nach erfolgreichem Versand
+ * wird die Bestellung serverseitig automatisch auf „Abgeschlossen“ gesetzt.
+ * Optional geht eine Kopie an das eigene Admin-Konto.
  */
 function ShippingConfirmationModal({
+  order,
   onClose,
   onSent,
 }: {
+  order: OrderRow;
   onClose: () => void;
   onSent: (msg: string) => void;
 }) {
-  const [data, setData] = useState<PrintRecipients | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [meta, setMeta] = useState<ShippingMeta | null>(null);
   const [sendToSelf, setSendToSelf] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api<PrintRecipients>('/api/admin/orders/print-recipients', { admin: true })
-      .then((r) => {
-        setData(r);
-        // Standardmässig sind alle Druck-Besteller ausgewählt.
-        setSelected(new Set(r.emails.map((e) => e.id)));
-      })
+    api<ShippingMeta>('/api/admin/orders/shipping-meta', { admin: true })
+      .then(setMeta)
       .catch((err) =>
-        setError(err instanceof ApiError ? err.message : 'Empfänger konnten nicht ermittelt werden.'),
+        setError(err instanceof ApiError ? err.message : 'Angaben konnten nicht geladen werden.'),
       )
       .finally(() => setLoading(false));
   }, []);
-
-  const emails = data?.emails ?? [];
-
-  const toggle = (id: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const allChecked = emails.length > 0 && selected.size === emails.length;
-  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(emails.map((e) => e.id)));
 
   const send = async () => {
     setBusy(true);
@@ -478,33 +458,37 @@ function ShippingConfirmationModal({
         failed: number;
         total: number;
         sentToSelf: boolean;
+        statusChanged: boolean;
         devLogOnly: boolean;
-      }>('/api/admin/orders/send-shipping-confirmation', {
+      }>(`/api/admin/orders/${order.id}/send-shipping-confirmation`, {
         method: 'POST',
         admin: true,
-        body: { emailIds: Array.from(selected), sendToSelf },
+        body: { sendToSelf },
       });
-      const extra = res.failed > 0 ? ` ${res.failed} konnten nicht zugestellt werden.` : '';
       const self = res.sentToSelf ? ' Eine Kopie wurde an dich gesendet.' : '';
+      const status = res.statusChanged ? ' Die Bestellung wurde auf „Abgeschlossen“ gesetzt.' : '';
       const note = res.devLogOnly
-        ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
+        ? ' Hinweis: Kein SMTP konfiguriert – die E-Mail wurde nur ins Server-Log geschrieben.'
         : '';
-      onSent(
-        `Versandbestätigung an ${res.sent} von ${res.total} Adresse(n) gesendet.${extra}${self}${note}`,
-      );
+      if (res.sent > 0) {
+        onSent(`Versandbestätigung an ${order.email} gesendet.${status}${self}${note}`);
+      } else if (res.sentToSelf) {
+        onSent(`Versandbestätigung wurde nur an dich gesendet.${note}`);
+      } else {
+        onSent(`Die Versandbestätigung konnte nicht zugestellt werden.${note}`);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Versand fehlgeschlagen.');
       setBusy(false);
     }
   };
 
-  const canSend = !loading && !busy && (selected.size > 0 || sendToSelf);
-  const hasAny = emails.length > 0;
+  const canSend = !loading && !busy;
 
   return (
     <Modal
       title="Versandbestätigung schicken"
-      width={680}
+      width={560}
       onClose={onClose}
       footer={
         <>
@@ -519,81 +503,35 @@ function ShippingConfirmationModal({
     >
       {error && <Alert kind="error">{error}</Alert>}
       <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
-        Die Versandbestätigung informiert die Eltern, dass ihre ausgedruckten Fotos heute verschickt
-        wurden. Standardmässig sind alle Adressen ausgewählt, die ein Produkt zum Ausdrucken bestellt
-        haben.
+        Die Versandbestätigung informiert die Eltern, dass ihre bestellten Fotos heute verschickt
+        wurden. Sie wird an die zu dieser Bestellung gehörende Adresse gesendet. Anschliessend wird
+        die Bestellung automatisch auf „Abgeschlossen“ gesetzt.
       </p>
+      <div
+        style={{
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          padding: '12px 14px',
+          marginBottom: 12,
+        }}
+      >
+        <div className="muted" style={{ fontSize: '0.78rem' }}>
+          Empfängeradresse
+        </div>
+        <strong style={{ wordBreak: 'break-all' }}>{order.email || '—'}</strong>
+      </div>
       {loading ? (
-        <p className="muted">Empfänger werden ermittelt …</p>
-      ) : !hasAny ? (
-        <Alert kind="error">Es gibt noch keine Bestellungen mit einem Druckprodukt.</Alert>
-      ) : data ? (
+        <p className="muted">Angaben werden geladen …</p>
+      ) : meta ? (
         <>
-          <div className="row between" style={{ marginBottom: 6 }}>
-            <strong style={{ fontSize: '0.85rem' }}>
-              {selected.size} von {emails.length} ausgewählt
-            </strong>
-            <button type="button" className="btn ghost small" onClick={toggleAll}>
-              {allChecked ? 'Alle abwählen' : 'Alle auswählen'}
-            </button>
-          </div>
-          <div
-            style={{
-              maxHeight: 340,
-              overflow: 'auto',
-              border: '1px solid var(--border)',
-              borderRadius: 10,
-            }}
-          >
-            <table className="dispatch-table">
-              <thead>
-                <tr>
-                  <th>E-Mail-Adresse</th>
-                  <th style={{ textAlign: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={allChecked}
-                      onChange={toggleAll}
-                      aria-label="Alle auswählen"
-                      style={{ width: 'auto', margin: 0 }}
-                    />
-                  </th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {emails.map((e) => (
-                  <tr key={e.id} onClick={() => toggle(e.id)} style={{ cursor: 'pointer' }}>
-                    <td className="dispatch-email">{e.email}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(e.id)}
-                        onChange={() => toggle(e.id)}
-                        onClick={(ev) => ev.stopPropagation()}
-                        style={{ width: 'auto', margin: 0 }}
-                      />
-                    </td>
-                    <td>
-                      {e.verified ? (
-                        <span className="badge green">Bestätigt</span>
-                      ) : (
-                        <span className="badge amber">Nicht bestätigt</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
           <SendToSelfCheckbox
             checked={sendToSelf}
             onChange={setSendToSelf}
-            adminEmail={data.adminEmail}
+            adminEmail={meta.adminEmail}
           />
-          {data.devLogOnly && (
+          {meta.devLogOnly && (
             <p className="muted" style={{ fontSize: '0.8rem', marginTop: 8, marginBottom: 0 }}>
-              Achtung: Kein SMTP konfiguriert – die E-Mails landen nur im Server-Log.
+              Achtung: Kein SMTP konfiguriert – die E-Mail landet nur im Server-Log.
             </p>
           )}
         </>
