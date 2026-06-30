@@ -11,6 +11,8 @@ interface OrderRow {
   currency: string;
   created_at: string;
   paid_at: string | null;
+  completed_at: string | null;
+  has_print: boolean;
 }
 
 export default function Orders() {
@@ -58,8 +60,18 @@ export default function Orders() {
                   onClick={() => navigate(`/bestellung/${o.id}`)}
                 >
                   {/* Zahlungsdatum (paid_at). Vor der Zahlung gibt es kein
-                      sinnvolles Datum. */}
-                  <td>{o.paid_at ? formatDate(o.paid_at) : '—'}</td>
+                      sinnvolles Datum. Enthält die Bestellung ausgedruckte
+                      Bilder und ist sie abgeschlossen, wird zusätzlich das
+                      Versanddatum (completed_at) angezeigt. */}
+                  <td>
+                    {o.paid_at ? formatDate(o.paid_at) : '—'}
+                    {o.has_print && o.completed_at && (
+                      <span className="muted" style={{ whiteSpace: 'nowrap' }}>
+                        {' '}
+                        – Bilder versandt am {formatDate(o.completed_at)}
+                      </span>
+                    )}
+                  </td>
                   <td>
                     <StatusBadge status={o.status} />
                   </td>

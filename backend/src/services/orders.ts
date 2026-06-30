@@ -47,6 +47,10 @@ interface OrderDoc {
   // Zeitpunkt der erfolgreichen Zahlung (gesetzt in markOrderPaid). Vor der
   // Zahlung nicht vorhanden.
   paid_at?: string | null;
+  // Zeitpunkt, an dem die Bestellung auf "Abgeschlossen" gestellt wurde. Bei
+  // Bestellungen mit Druckprodukt entspricht das dem Versand der ausgedruckten
+  // Bilder. Vor dem Abschluss nicht vorhanden.
+  completed_at?: string | null;
   updated_at: string;
 }
 
@@ -384,12 +388,16 @@ export async function markOrderPaid(orderId: string, provider: string, ref: stri
 
   // Orders that include a print product land in "Pendent" until the print is
   // sent; purely digital orders are immediately "Abgeschlossen".
+  const now = nowIso();
   await updateById(COL.orders, orderId, {
     status: hasPrint ? 'pending' : 'completed',
     payment_provider: provider,
     payment_ref: ref,
-    paid_at: nowIso(),
-    updated_at: nowIso(),
+    paid_at: now,
+    // Rein digitale Bestellungen sind sofort abgeschlossen – der
+    // Abschlusszeitpunkt entspricht dann der Zahlung.
+    completed_at: hasPrint ? null : now,
+    updated_at: now,
   });
 }
 
@@ -400,6 +408,7 @@ export interface OrderDetail {
   total_cents: number;
   created_at: string;
   paid_at: string | null;
+  completed_at: string | null;
   shipping_address: ShippingAddress | null;
   items: {
     photo_id: string;
@@ -455,9 +464,22 @@ export async function getOrderForEmail(emailId: string, orderId: string): Promis
     total_cents: order.total_cents,
     created_at: order.created_at,
     paid_at: order.paid_at ?? null,
+    completed_at: completedAt(order),
     shipping_address: order.shipping_address ?? null,
     items,
   };
+}
+
+/**
+ * Abschlusszeitpunkt einer Bestellung. Neuere Bestellungen speichern ihn direkt
+ * in `completed_at`. Für bereits abgeschlossene Bestellungen aus der Zeit vor
+ * diesem Feld fällt der Wert auf `updated_at` zurück – das ist der Zeitpunkt der
+ * letzten Statusänderung und damit die beste verfügbare Näherung an den
+ * Versandzeitpunkt.
+ */
+function completedAt(order: OrderDoc): string | null {
+  if (order.completed_at) return order.completed_at;
+  return order.status === 'completed' ? order.updated_at ?? null : null;
 }
 
 export async function listOrdersForEmail(
@@ -470,18 +492,35 @@ export async function listOrdersForEmail(
     currency: string;
     created_at: string;
     paid_at: string | null;
+    completed_at: string | null;
+    has_print: boolean;
   }[]
 > {
-  const orders = await runQuery<OrderDoc>(col(COL.orders).where('email_id', '==', emailId));
-  return orders
+  const orders = (await runQuery<OrderDoc>(col(COL.orders).where('email_id', '==', emailId)))
     .filter((o) => o.status !== 'cart')
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .map((o) => ({
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+  return Promise.all(
+    orders.map(async (o) => ({
       id: o.id,
       status: o.status,
       total_cents: o.total_cents,
       currency: o.currency,
       created_at: o.created_at,
       paid_at: o.paid_at ?? null,
-    }));
+      completed_at: completedAt(o),
+      has_print: await orderHasPrint(o.id),
+    })),
+  );
+}
+
+/** Whether an order contains at least one print product (Bilder zum Ausdruck). */
+export async function orderHasPrint(orderId: string): Promise<boolean> {
+  const items = await itemsForOrder(orderId);
+  if (items.length === 0) return false;
+  for (const item of items) {
+    const product = await getById<ProductDoc>(COL.products, item.product_id);
+    if (product?.type === 'print') return true;
+  }
+  return false;
 }
