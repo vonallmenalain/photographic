@@ -55,21 +55,17 @@ export default function OrderDetail() {
   const hasDownloads = downloadableItems.length > 0;
   const onlyPrints = isDone && !hasDownloads;
 
-  // Löst die Downloads aller digitalen Bilder nacheinander aus. Jeder Link
-  // benötigt das Eltern-Session-Cookie (wird vom Browser automatisch
-  // mitgeschickt, da die Datei-Route same-origin ist). Ein kleiner zeitlicher
-  // Versatz sorgt dafür, dass der Browser alle Dateien zuverlässig speichert.
+  // Lädt alle digitalen Bilder der Bestellung in einer einzigen ZIP-Datei
+  // herunter, anstatt jede Datei einzeln auszulösen. Das Backend bündelt die
+  // Originale serverseitig; der Browser schickt das Eltern-Session-Cookie
+  // automatisch mit (die Datei-Route ist über `credentials` abgesichert).
   const downloadAll = () => {
-    downloadableItems.forEach((item, idx) => {
-      window.setTimeout(() => {
-        const a = document.createElement('a');
-        a.href = `${API_BASE}${item.downloadUrl}`;
-        a.rel = 'noreferrer';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }, idx * 600);
-    });
+    const a = document.createElement('a');
+    a.href = `${API_BASE}/files/download-all/${order.id}`;
+    a.rel = 'noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   return (
