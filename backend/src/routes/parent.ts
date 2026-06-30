@@ -473,7 +473,7 @@ async function sendConfirmationEmail(email: string, order: NonNullable<Awaited<R
   const link = `${config.publicAppUrl}/bestellung/${order.id}`;
   const hasPrint = order.items.some((i) => i.product_type === 'print');
   try {
-    await sendOrderConfirmation(email, order.id, summary, link, {
+    await sendOrderConfirmation(email, summary, link, {
       hasPrint,
       shippingAddress: order.shipping_address,
     });

@@ -34,7 +34,11 @@ import {
   deleteEventStorage,
   variantPath,
 } from '../lib/images';
-import { sendPasswordResetEmail, sendGalleryReadyEmail } from '../lib/email';
+import {
+  sendPasswordResetEmail,
+  sendGalleryReadyEmail,
+  sendShippingConfirmationEmail,
+} from '../lib/email';
 import { requestVerification } from '../services/verification';
 import { EVENT_STATUSES, archiveExpiredEvents, retentionExpiry } from '../services/events';
 import { matchChildByFilename, isGroupPhotoFilename } from '../lib/names';
@@ -1876,6 +1880,36 @@ router.get(
   }),
 );
 
+// Empfängerliste für die Versandbestätigung: alle (aktiven) Eltern-Adressen mit
+// einem bestätigten Druck-Auftrag. Muss vor `/orders/:id` stehen, sonst würde
+// `:id` den Pfad `print-recipients` abfangen.
+router.get(
+  '/orders/print-recipients',
+  asyncHandler(async (req, res) => {
+    const emailIds = await printOrderEmailIds();
+    const emailDocs = await getManyById<{ email: string; name?: string; status: string }>(
+      COL.parentEmails,
+      Array.from(emailIds),
+    );
+    const emails = Array.from(emailDocs.values())
+      .filter((e) => e.email && e.status !== 'disabled')
+      .map((e) => ({
+        id: e.id,
+        email: e.email,
+        name: e.name ?? '',
+        status: e.status,
+        verified: e.status === 'verified',
+      }))
+      .sort((a, b) => a.email.localeCompare(b.email));
+
+    res.json({
+      emails,
+      adminEmail: await resolveAdminEmail(req.admin!.username),
+      devLogOnly: config.mail.devLogOnly,
+    });
+  }),
+);
+
 router.get(
   '/orders/:id',
   asyncHandler(async (req, res) => {
@@ -1913,6 +1947,91 @@ router.patch(
     await updateById(COL.orders, req.params.id, { status, updated_at: nowIso() });
     await audit('order.update', `${req.params.id}: ${status}`);
     res.json({ ok: true });
+  }),
+);
+
+// --- Versandbestätigung für ausgedruckte Fotos ---------------------------
+// Sammelt alle (aktiven) Eltern-Adressen, die in einer bestätigten Bestellung
+// (pending/completed, nicht storniert) mindestens ein Druckprodukt bestellt
+// haben. Damit kann der Admin – ähnlich der Erinnerung unter "Aufträge" – eine
+// kurze Versandbestätigung an alle Druck-Besteller schicken.
+async function printOrderEmailIds(): Promise<Set<string>> {
+  const [products, orders, orderItems] = await Promise.all([
+    runQuery<{ id: string; type: string }>(col(COL.products)),
+    runQuery<{ id: string; email_id: string; status: string }>(col(COL.orders)),
+    runQuery<{ order_id: string; product_id: string }>(col(COL.orderItems)),
+  ]);
+  const printProductIds = new Set(
+    products.filter((p) => p.type === 'print').map((p) => p.id),
+  );
+  const orderById = new Map(orders.map((o) => [o.id, o]));
+  const emailIds = new Set<string>();
+  for (const item of orderItems) {
+    if (!printProductIds.has(item.product_id)) continue;
+    const order = orderById.get(item.order_id);
+    if (!order) continue;
+    if (order.status === 'pending' || order.status === 'completed') {
+      emailIds.add(order.email_id);
+    }
+  }
+  return emailIds;
+}
+
+router.post(
+  '/orders/send-shipping-confirmation',
+  asyncHandler(async (req, res) => {
+    const { emailIds, sendToSelf } = parse(
+      z.object({
+        emailIds: z.array(z.string()).optional(),
+        sendToSelf: z.boolean().default(false),
+      }),
+      req.body ?? {},
+    );
+
+    // Nur Adressen zulassen, die tatsächlich ein Druckprodukt bestellt haben.
+    const allowed = await printOrderEmailIds();
+    const selectedIds = (emailIds ?? Array.from(allowed)).filter((id) => allowed.has(id));
+    const emails = await getManyById<{ email: string; status: string }>(
+      COL.parentEmails,
+      selectedIds,
+    );
+    const recipients = Array.from(emails.values()).filter(
+      (e) => e.status !== 'disabled' && e.email,
+    );
+
+    const selfEmail = sendToSelf ? await resolveAdminEmail(req.admin!.username) : '';
+    if (recipients.length === 0 && !selfEmail) {
+      throw new ApiError(400, 'Es wurde keine (aktive) E-Mail-Adresse ausgewählt.');
+    }
+
+    const link = config.publicAppUrl;
+    const results = await Promise.allSettled(
+      recipients.map((r) => sendShippingConfirmationEmail(r.email, link)),
+    );
+    const sent = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.length - sent;
+
+    let sentToSelf = false;
+    if (selfEmail) {
+      try {
+        await sendShippingConfirmationEmail(selfEmail, link);
+        sentToSelf = true;
+      } catch {
+        sentToSelf = false;
+      }
+    }
+
+    await audit(
+      'order.shipping.confirm',
+      `${sent} sent, ${failed} failed${sentToSelf ? ', self copy' : ''}`,
+    );
+    res.json({
+      sent,
+      failed,
+      total: recipients.length,
+      sentToSelf,
+      devLogOnly: config.mail.devLogOnly,
+    });
   }),
 );
 
