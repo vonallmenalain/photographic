@@ -531,15 +531,24 @@ router.get(
     await archiveExpiredEvents();
     const [events, children, emailLinks, totals, reminders, parentEmails] = await Promise.all([
       runQuery<Record<string, unknown>>(col(COL.events)),
-      runQuery<{ id: string; event_id: string }>(col(COL.children)),
+      runQuery<{ id: string; event_id: string; name?: string }>(col(COL.children)),
       runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
       eventRevenueTotals(),
       runQuery<{ event_id: string }>(col(COL.reminders)),
-      runQuery<{ id: string; status: string }>(col(COL.parentEmails)),
+      runQuery<{ id: string; status: string; email?: string; name?: string }>(col(COL.parentEmails)),
     ]);
     const verifiedEmailIds = new Set(
       parentEmails.filter((e) => e.status === 'verified').map((e) => e.id),
     );
+    // Lookup tables for building the per-event free-text search index further
+    // below: an e-mail address (and optional parent name) by its id, plus each
+    // child's name keyed by child id.
+    const emailText = new Map<string, string>();
+    for (const e of parentEmails) {
+      emailText.set(e.id, `${e.email ?? ''} ${e.name ?? ''}`.trim());
+    }
+    const childNameById = new Map<string, string>();
+    for (const c of children) if (c.name) childNameById.set(c.id, c.name);
     // Photo counts via server-side aggregation per event instead of streaming
     // the ENTIRE photos collection into memory. The photos collection grows
     // without bound (one doc per uploaded photo); reading all of it on every
@@ -560,6 +569,15 @@ router.get(
     const reminderCounts = new Map<string, number>();
     for (const r of reminders)
       reminderCounts.set(r.event_id, (reminderCounts.get(r.event_id) ?? 0) + 1);
+
+    // Namen aller Kinder je Auftrag – für die Freitextsuche in der Übersicht.
+    const childNamesByEvent = new Map<string, string[]>();
+    for (const c of children) {
+      if (!c.name) continue;
+      const list = childNamesByEvent.get(c.event_id) ?? [];
+      list.push(c.name);
+      childNamesByEvent.set(c.event_id, list);
+    }
 
     // Distinct e-mail addresses per event: resolve every child→event link and
     // collect the unique e-mail ids that point at any child of that event.
@@ -582,6 +600,13 @@ router.get(
         const emailSet = emailsByEvent.get(e.id);
         let verifiedCount = 0;
         if (emailSet) for (const id of emailSet) if (verifiedEmailIds.has(id)) verifiedCount += 1;
+        // Vorberechneter Freitext-Index: Auftragsname + Kindernamen + zugeordnete
+        // E-Mail-Adressen (inkl. Eltern-Namen). So kann das Frontend ohne weitere
+        // Abfragen nach Auftrag, Kind oder E-Mail-Adresse suchen.
+        const searchParts: string[] = [String((e as Record<string, unknown>).name ?? '')];
+        const childNames = childNamesByEvent.get(e.id);
+        if (childNames) searchParts.push(...childNames);
+        if (emailSet) for (const id of emailSet) searchParts.push(emailText.get(id) ?? '');
         return {
           ...e,
           photo_count: photoCounts.get(e.id) ?? 0,
@@ -591,6 +616,7 @@ router.get(
           order_count: totals.orderCount.get(e.id) ?? 0,
           revenue_cents: totals.revenue.get(e.id) ?? 0,
           reminder_count: reminderCounts.get(e.id) ?? 0,
+          search_text: searchParts.join(' ').toLowerCase(),
         };
       })
       .sort((a, b) =>
