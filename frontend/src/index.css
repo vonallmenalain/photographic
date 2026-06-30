@@ -602,6 +602,8 @@ table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border); }
 th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
 tr:hover td { background: var(--surface-2); }
+/* Komplett klickbare Tabellenzeile (z. B. Eltern-Bestellungen). */
+tr.clickable-row { cursor: pointer; }
 
 /* E-Mail-Versand-Popup: kompakte Empfängerliste, eine Zeile pro Adresse,
    ohne Zeilenumbrüche und bei Bedarf horizontal scrollbar. */
@@ -1271,6 +1273,32 @@ tr:hover td { background: var(--surface-2); }
 .line-item > img { flex: none; }
 .line-item .li-main { flex: 1 1 auto; min-width: 0; }
 .line-item .li-price { font-weight: 600; white-space: nowrap; }
+
+/* Anklickbare Download-Zeile: die ganze Zeile ist ein Link, der das digitale
+   Bild herunterlädt. Ein dezentes Hover hebt die Klickbarkeit hervor. */
+a.line-item-download {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 10px;
+  padding-left: 8px;
+  padding-right: 8px;
+  margin-left: -8px;
+  margin-right: -8px;
+  transition: background 0.15s ease;
+}
+a.line-item-download:hover { background: var(--surface-2); }
+a.line-item-download .li-download-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+}
 
 @media (max-width: 480px) {
   /* Let the price + action drop onto a second line, aligned under the details

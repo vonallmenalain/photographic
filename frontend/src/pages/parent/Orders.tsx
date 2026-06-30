@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Spinner, StatusBadge } from '../../components/common';
 import { formatPrice, formatDate } from '../../lib/format';
@@ -14,6 +14,7 @@ interface OrderRow {
 }
 
 export default function Orders() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,7 +49,14 @@ export default function Orders() {
             </thead>
             <tbody>
               {orders.map((o) => (
-                <tr key={o.id}>
+                // Die ganze Zeile ist klickbar – ein Klick auf Datum, Status,
+                // Summe oder daneben öffnet die Detailansicht. Der „Details“-Link
+                // bleibt als sichtbarer Hinweis erhalten.
+                <tr
+                  key={o.id}
+                  className="clickable-row"
+                  onClick={() => navigate(`/bestellung/${o.id}`)}
+                >
                   {/* Zahlungsdatum (paid_at). Vor der Zahlung gibt es kein
                       sinnvolles Datum. */}
                   <td>{o.paid_at ? formatDate(o.paid_at) : '—'}</td>
@@ -57,7 +65,12 @@ export default function Orders() {
                   </td>
                   <td>{formatPrice(o.total_cents, o.currency)}</td>
                   <td>
-                    <Link to={`/bestellung/${o.id}`}>Details</Link>
+                    <Link
+                      to={`/bestellung/${o.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Details
+                    </Link>
                   </td>
                 </tr>
               ))}

@@ -51,10 +51,25 @@ export default function OrderDetail() {
     );
 
   const isDone = ['completed', 'pending'].includes(order.status);
-  const hasDownloads = order.items.some((i) => i.downloadUrl);
+  const downloadableItems = order.items.filter((i) => i.downloadUrl);
+  const hasDownloads = downloadableItems.length > 0;
+  const onlyPrints = isDone && !hasDownloads;
 
-  const scrollToDownloads = () => {
-    document.getElementById('downloads')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Löst die Downloads aller digitalen Bilder nacheinander aus. Jeder Link
+  // benötigt das Eltern-Session-Cookie (wird vom Browser automatisch
+  // mitgeschickt, da die Datei-Route same-origin ist). Ein kleiner zeitlicher
+  // Versatz sorgt dafür, dass der Browser alle Dateien zuverlässig speichert.
+  const downloadAll = () => {
+    downloadableItems.forEach((item, idx) => {
+      window.setTimeout(() => {
+        const a = document.createElement('a');
+        a.href = `${API_BASE}${item.downloadUrl}`;
+        a.rel = 'noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }, idx * 600);
+    });
   };
 
   return (
@@ -70,9 +85,9 @@ export default function OrderDetail() {
               type="button"
               className="btn small"
               style={{ marginTop: 10 }}
-              onClick={scrollToDownloads}
+              onClick={downloadAll}
             >
-              ⬇︎ Downloads jetzt holen
+              ⬇︎ Alle digitalen Bilder herunterladen
             </button>
           )}
         </Alert>
@@ -86,33 +101,80 @@ export default function OrderDetail() {
       {order.paid_at && <p className="muted">{formatDate(order.paid_at)}</p>}
 
       <div className="card">
-        <ul className="list-reset">
-          {order.items.map((item, i) => (
-            <li key={i} className="line-item">
+        {/* Sammel-Download direkt oben in der Bestellung, sobald mehr als ein
+            digitales Bild gekauft wurde. */}
+        {isDone && downloadableItems.length > 1 && (
+          <button
+            type="button"
+            className="btn small"
+            style={{ marginBottom: 14, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+            onClick={downloadAll}
+          >
+            <DownloadIcon />
+            Alle digitalen Bilder herunterladen
+          </button>
+        )}
+
+        <div className="list-reset">
+          {order.items.map((item, i) => {
+            // Bezahlte, digitale Produkte werden zu einer anklickbaren
+            // Download-Zeile. Ein Klick auf die ganze Zeile lädt das Bild herunter.
+            const downloadable = isDone && item.downloadUrl;
+            const label = item.childName || item.fileName || item.productName;
+            const price = formatPrice(item.unitPriceCents * item.qty, order.currency);
+            const thumb = (
               <img
                 src={imageUrl(item.thumbUrl)}
-                alt={`Vorschau: ${item.productName}`}
+                alt={`Vorschau: ${label}`}
                 width={64}
                 height={64}
                 style={{ borderRadius: 8, objectFit: 'cover' }}
                 draggable={false}
               />
-              <div className="li-main">
-                <strong>{item.productName}</strong>
-                {/* Digitale Downloads gibt es pro Foto genau einmal – eine Menge
-                    ist hier nicht sinnvoll. Nur bei Druckprodukten anzeigen. */}
-                {item.productType !== 'digital' && (
-                  <div className="muted" style={{ fontSize: '0.85rem' }}>
-                    Menge {item.qty}
+            );
+
+            if (downloadable) {
+              return (
+                <a
+                  key={i}
+                  className="line-item line-item-download"
+                  href={`${API_BASE}${item.downloadUrl}`}
+                  rel="noreferrer"
+                  title="Bild herunterladen"
+                >
+                  {thumb}
+                  <div className="li-main">
+                    <strong>Download – {label}</strong>
+                    <div className="muted" style={{ fontSize: '0.85rem' }}>
+                      Digitales Bild (hohe Auflösung)
+                    </div>
                   </div>
-                )}
+                  <span className="li-download-icon" aria-hidden="true">
+                    <DownloadIcon />
+                  </span>
+                  <div className="li-price">{price}</div>
+                </a>
+              );
+            }
+
+            return (
+              <div key={i} className="line-item">
+                {thumb}
+                <div className="li-main">
+                  <strong>{item.productName}</strong>
+                  {/* Digitale Downloads gibt es pro Foto genau einmal – eine Menge
+                      ist hier nicht sinnvoll. Nur bei Druckprodukten anzeigen. */}
+                  {item.productType !== 'digital' && (
+                    <div className="muted" style={{ fontSize: '0.85rem' }}>
+                      Menge {item.qty}
+                    </div>
+                  )}
+                </div>
+                <div className="li-price">{price}</div>
               </div>
-              <div className="li-price">
-                {formatPrice(item.unitPriceCents * item.qty, order.currency)}
-              </div>
-            </li>
-          ))}
-        </ul>
+            );
+          })}
+        </div>
         <div className="row between" style={{ marginTop: 16 }}>
           <span className="soft">Gesamt</span>
           <strong style={{ fontSize: '1.2rem' }}>
@@ -121,55 +183,33 @@ export default function OrderDetail() {
         </div>
       </div>
 
-      {isDone && (
-        <div className="card" id="downloads">
-          <h2>Downloads</h2>
-          {order.items.some((i) => i.downloadUrl) ? (
-            <ul className="list-reset">
-              {order.items
-                .filter((i) => i.downloadUrl)
-                .map((i, idx) => (
-                  <li key={idx} style={{ marginBottom: 10 }}>
-                    <DownloadLink
-                      url={i.downloadUrl!}
-                      thumbUrl={i.thumbUrl}
-                      label={i.childName || i.fileName || i.productName}
-                    />
-                  </li>
-                ))}
-            </ul>
-          ) : (
-            <p className="soft">
-              Ihre Bestellung enthält gedruckte Produkte. Wir bereiten den Druckauftrag vor und
-              melden uns bei Ihnen.
-            </p>
-          )}
-        </div>
+      {onlyPrints && (
+        <p className="soft">
+          Ihre Bestellung enthält gedruckte Produkte. Wir bereiten den Druckauftrag vor und
+          melden uns bei Ihnen.
+        </p>
       )}
     </div>
   );
 }
 
-function DownloadLink({ url, thumbUrl, label }: { url: string; thumbUrl: string; label: string }) {
-  // Downloads require the parent session cookie; a plain link sends it because
-  // the file route is same-origin to the API and uses credentials via browser.
+/** Schlichtes Download-Symbol (Pfeil nach unten in einen Ablagekorb). */
+function DownloadIcon() {
   return (
-    <a
-      className="btn secondary"
-      href={`${API_BASE}${url}`}
-      rel="noreferrer"
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}
+    <svg
+      width={18}
+      height={18}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
     >
-      <img
-        src={imageUrl(thumbUrl)}
-        alt={`Vorschau: ${label}`}
-        width={40}
-        height={40}
-        style={{ borderRadius: 6, objectFit: 'cover' }}
-        draggable={false}
-      />
-      <span>{label}</span>
-      <span aria-hidden="true">⬇︎</span>
-    </a>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
   );
 }
