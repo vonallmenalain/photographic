@@ -605,9 +605,29 @@ interface EventRow {
   name: string;
 }
 
+interface ManualEntry {
+  uid: number;
+  auftrag: string;
+  kind: string;
+  email: string;
+  parentName: string;
+  note: string;
+}
+
 const EXAMPLE = `E-Mail\tE-Mail 2\tKind\tName Eltern\tAuftrag
 anna@beispiel.de, oma@beispiel.de\tpapa@beispiel.de\tLena Müller\tFamilie Müller\tKlasse 3b
 paul@beispiel.de\t\tTim Weber, Lisa Weber\tPaul Weber\tKlasse 3b`;
+
+/** Mirrors the backend e-mail validation (see services/import.ts). */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Splits a cell into individual e-mail addresses (comma/semicolon/whitespace separated). */
+function splitEmails(cell: string): string[] {
+  return String(cell ?? '')
+    .split(/[\s,;/|]+/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 /** Mirrors the backend `normalizeName`: lowercases, strips accents/ß, collapses whitespace. */
 function normalizeName(input: string): string {
@@ -644,6 +664,9 @@ function Step1Data({
   const [defaultEventId, setDefaultEventId] = useState('');
   const [defaultEventName, setDefaultEventName] = useState('');
   const [createMissingEvents, setCreateMissingEvents] = useState(true);
+
+  // "Manuelle Eingabe": fields are typed in directly instead of pasting/uploading.
+  const [manualOpen, setManualOpen] = useState(false);
 
   useEffect(() => {
     api<{ events: EventRow[] }>('/api/admin/events', { admin: true })
@@ -814,6 +837,41 @@ function Step1Data({
     }
   };
 
+  // Commit manually typed entries by turning them into the same rows/mapping the
+  // paste/upload flow produces, so the backend import logic is fully reused.
+  const commitManual = async (entries: ManualEntry[]) => {
+    const rows = entries.map((e) => [
+      e.email.trim(),
+      e.kind.trim(),
+      e.parentName.trim(),
+      e.auftrag.trim(),
+      e.note.trim(),
+    ]);
+    const mapping: Mapping = { email: [0], child: 1, name: 2, event: 3, note: 4 };
+    setCommitting(true);
+    setError('');
+    try {
+      const res = await api<{ result: CommitResult }>('/api/admin/import/commit', {
+        method: 'POST',
+        admin: true,
+        body: { rows, mapping, hasHeader: false, createMissingEvents: true },
+      });
+      setResult(res.result);
+      setPreview(null);
+      setRows([]);
+      setText('');
+      setManualOpen(false);
+      if (fileRef.current) fileRef.current.value = '';
+      onImported(res.result.primaryEventId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Speichern fehlgeschlagen.');
+      scrollToTop();
+      throw err;
+    } finally {
+      setCommitting(false);
+    }
+  };
+
   return (
     <div>
       <div ref={topRef} />
@@ -871,6 +929,14 @@ function Step1Data({
           <button className="btn secondary" type="button" onClick={() => fileRef.current?.click()}>
             Datei auswählen
           </button>
+          <button
+            className={`btn ${manualOpen ? '' : 'secondary'}`}
+            type="button"
+            onClick={() => setManualOpen((v) => !v)}
+            title="Felder selbst eintragen – ohne Datei oder Tabelle"
+          >
+            Manuelle Eingabe
+          </button>
           <input
             ref={fileRef}
             type="file"
@@ -880,6 +946,15 @@ function Step1Data({
           />
         </div>
       </div>
+
+      {manualOpen && (
+        <ManualEntryForm
+          events={events}
+          committing={committing}
+          onCancel={() => setManualOpen(false)}
+          onSubmit={commitManual}
+        />
+      )}
 
       {loading && <Spinner label="Vorschau wird erstellt …" />}
 
@@ -1096,6 +1171,207 @@ function Step1Data({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ===========================================================================
+// Manuelle Eingabe: type children/e-mails directly instead of pasting or
+// uploading a table. One shared Auftrag (required) holds any number of child
+// entries; each child needs a name ("Kind") and at least one e-mail. The rest
+// (Name Eltern, Notiz) is optional. On save the entries are committed through
+// the normal import endpoint and the wizard advances to "Fotos hochladen".
+// ===========================================================================
+
+let manualUid = 1;
+const makeManualEntry = (auftrag = ''): ManualEntry => ({
+  uid: manualUid++,
+  auftrag,
+  kind: '',
+  email: '',
+  parentName: '',
+  note: '',
+});
+
+function ManualEntryForm({
+  events,
+  committing,
+  onCancel,
+  onSubmit,
+}: {
+  events: EventRow[];
+  committing: boolean;
+  onCancel: () => void;
+  onSubmit: (entries: ManualEntry[]) => Promise<void>;
+}) {
+  const [auftrag, setAuftrag] = useState('');
+  const [entries, setEntries] = useState<ManualEntry[]>([makeManualEntry()]);
+  const [error, setError] = useState('');
+
+  const updateEntry = (uid: number, patch: Partial<ManualEntry>) => {
+    setEntries((prev) => prev.map((e) => (e.uid === uid ? { ...e, ...patch } : e)));
+  };
+  const addEntry = () => setEntries((prev) => [...prev, makeManualEntry()]);
+  const removeEntry = (uid: number) =>
+    setEntries((prev) => (prev.length <= 1 ? prev : prev.filter((e) => e.uid !== uid)));
+
+  const submit = async () => {
+    setError('');
+    const order = auftrag.trim();
+    if (!order) {
+      setError('Bitte einen Auftrag angeben.');
+      return;
+    }
+    // Keep only entries the user actually started filling in.
+    const filled = entries.filter((e) => e.kind.trim() || e.email.trim());
+    if (filled.length === 0) {
+      setError('Bitte mindestens ein Kind mit Name und E-Mail eintragen.');
+      return;
+    }
+    for (const e of filled) {
+      if (!e.kind.trim()) {
+        setError('Jedes Kind benötigt einen Namen (Pflichtfeld „Kind“).');
+        return;
+      }
+      const mails = splitEmails(e.email);
+      if (mails.length === 0) {
+        setError(`Bitte eine E-Mail für „${e.kind.trim()}“ eintragen (Pflichtfeld „E-Mail“).`);
+        return;
+      }
+      const invalid = mails.find((m) => !EMAIL_RE.test(m));
+      if (invalid) {
+        setError(`„${invalid}“ ist keine gültige E-Mail-Adresse.`);
+        return;
+      }
+    }
+    try {
+      await onSubmit(filled.map((e) => ({ ...e, auftrag: order })));
+    } catch {
+      /* error is surfaced by the parent */
+    }
+  };
+
+  return (
+    <div className="card mb">
+      <h2 style={{ marginTop: 0 }}>Manuelle Eingabe</h2>
+      <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
+        Trage die Daten direkt ein – ohne Datei oder Tabelle. <strong>Auftrag</strong>,{' '}
+        <strong>Kind</strong> und <strong>E-Mail</strong> sind Pflichtfelder, der Rest ist optional.
+      </p>
+
+      {error && <Alert kind="error">{error}</Alert>}
+
+      <div className="field">
+        <label>
+          Auftrag <span style={{ color: 'var(--danger)' }}>*</span>
+        </label>
+        <input
+          value={auftrag}
+          onChange={(e) => setAuftrag(e.target.value)}
+          placeholder="z. B. Klasse 3b"
+          list="manual-auftrag-list"
+          autoFocus
+        />
+        <datalist id="manual-auftrag-list">
+          {events.map((ev) => (
+            <option key={ev.id} value={ev.name} />
+          ))}
+        </datalist>
+        <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
+          Existiert der Auftrag bereits, werden die Kinder ergänzt – sonst wird er neu angelegt.
+        </p>
+      </div>
+
+      <h3 style={{ marginBottom: 8 }}>Kinder</h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {entries.map((entry, i) => (
+          <div
+            key={entry.uid}
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              padding: 12,
+              position: 'relative',
+            }}
+          >
+            <div className="row between" style={{ marginBottom: 8 }}>
+              <strong>Kind {i + 1}</strong>
+              {entries.length > 1 && (
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  onClick={() => removeEntry(entry.uid)}
+                  title="Diesen Eintrag entfernen"
+                >
+                  Entfernen
+                </button>
+              )}
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: 12,
+              }}
+            >
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>
+                  Kind <span style={{ color: 'var(--danger)' }}>*</span>
+                </label>
+                <input
+                  value={entry.kind}
+                  onChange={(e) => updateEntry(entry.uid, { kind: e.target.value })}
+                  placeholder="z. B. Lena Müller"
+                />
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>
+                  E-Mail <span style={{ color: 'var(--danger)' }}>*</span>
+                </label>
+                <input
+                  value={entry.email}
+                  onChange={(e) => updateEntry(entry.uid, { email: e.target.value })}
+                  placeholder="z. B. anna@beispiel.de"
+                />
+                <p className="muted" style={{ fontSize: '0.75rem', marginTop: 4, marginBottom: 0 }}>
+                  Mehrere durch Komma trennen.
+                </p>
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Name Eltern</label>
+                <input
+                  value={entry.parentName}
+                  onChange={(e) => updateEntry(entry.uid, { parentName: e.target.value })}
+                  placeholder="optional"
+                />
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Notiz</label>
+                <input
+                  value={entry.note}
+                  onChange={(e) => updateEntry(entry.uid, { note: e.target.value })}
+                  placeholder="optional"
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="row" style={{ marginTop: 12 }}>
+        <button type="button" className="btn secondary small" onClick={addEntry} disabled={committing}>
+          + weiteres Kind
+        </button>
+      </div>
+
+      <div className="row" style={{ marginTop: 16 }}>
+        <button type="button" className="btn" onClick={submit} disabled={committing}>
+          {committing ? 'Wird gespeichert …' : 'Speichern & weiter zu Fotos'}
+        </button>
+        <button type="button" className="btn ghost" onClick={onCancel} disabled={committing}>
+          Abbrechen
+        </button>
+      </div>
     </div>
   );
 }
