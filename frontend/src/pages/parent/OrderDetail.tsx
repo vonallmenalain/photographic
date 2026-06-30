@@ -20,6 +20,7 @@ interface Order {
   currency: string;
   total_cents: number;
   created_at: string;
+  paid_at: string | null;
   items: Item[];
 }
 
@@ -80,7 +81,9 @@ export default function OrderDetail() {
         <h1 style={{ marginBottom: 4 }}>Bestellung</h1>
         <StatusBadge status={order.status} />
       </div>
-      <p className="muted">{formatDate(order.created_at)}</p>
+      {/* Vor der Zahlung gibt es kein sinnvolles Datum – erst die Zahlung
+          (paid_at) wird angezeigt. */}
+      {order.paid_at && <p className="muted">{formatDate(order.paid_at)}</p>}
 
       <div className="card">
         <ul className="list-reset">
@@ -96,9 +99,13 @@ export default function OrderDetail() {
               />
               <div className="li-main">
                 <strong>{item.productName}</strong>
-                <div className="muted" style={{ fontSize: '0.85rem' }}>
-                  Menge {item.qty}
-                </div>
+                {/* Digitale Downloads gibt es pro Foto genau einmal – eine Menge
+                    ist hier nicht sinnvoll. Nur bei Druckprodukten anzeigen. */}
+                {item.productType !== 'digital' && (
+                  <div className="muted" style={{ fontSize: '0.85rem' }}>
+                    Menge {item.qty}
+                  </div>
+                )}
               </div>
               <div className="li-price">
                 {formatPrice(item.unitPriceCents * item.qty, order.currency)}

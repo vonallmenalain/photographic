@@ -402,6 +402,7 @@ router.get(
         currency: order.currency,
         total_cents: order.total_cents,
         created_at: order.created_at,
+        paid_at: order.paid_at,
         shippingAddress: order.shipping_address,
         items: order.items.map((i) => ({
           productName: i.product_name,
