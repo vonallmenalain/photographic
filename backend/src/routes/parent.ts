@@ -405,6 +405,7 @@ router.get(
         paid_at: order.paid_at,
         shippingAddress: order.shipping_address,
         items: order.items.map((i) => ({
+          photoId: i.photo_id,
           productName: i.product_name,
           productType: i.product_type,
           childName: i.child_name,
@@ -412,6 +413,7 @@ router.get(
           qty: i.qty,
           unitPriceCents: i.unit_price_cents,
           thumbUrl: `/files/preview-image?token=${signFileToken(i.photo_id, 'thumb', 3600)}`,
+          previewUrl: `/files/preview-image?token=${signFileToken(i.photo_id, 'preview', 3600)}`,
           downloadUrl:
             i.product_type === 'digital' && i.download_token
               ? `/files/download/${i.download_token}`

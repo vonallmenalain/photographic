@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type SyntheticEvent } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { api, API_BASE, imageUrl } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
 import { formatPrice, formatDate } from '../../lib/format';
 
 interface Item {
+  photoId: string;
   productName: string;
   productType: string;
   childName: string | null;
@@ -12,6 +13,7 @@ interface Item {
   qty: number;
   unitPriceCents: number;
   thumbUrl: string;
+  previewUrl: string;
   downloadUrl: string | null;
 }
 interface Order {
@@ -31,6 +33,8 @@ export default function OrderDetail() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Welches Foto gerade gross in der Galerie-Vorschau (Lightbox) gezeigt wird.
+  const [preview, setPreview] = useState<Item | null>(null);
 
   useEffect(() => {
     api<{ order: Order }>(`/api/parent/orders/${id}`)
@@ -38,6 +42,21 @@ export default function OrderDetail() {
       .catch(() => setError('Bestellung konnte nicht geladen werden.'))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Lightbox per Escape schliessen und das Scrollen der Seite dahinter sperren.
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreview(null);
+    };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [preview]);
 
   if (loading) return <Spinner />;
   if (error || !order)
@@ -118,18 +137,15 @@ export default function OrderDetail() {
             const downloadable = isDone && item.downloadUrl;
             const label = item.childName || item.fileName || item.productName;
             const price = formatPrice(item.unitPriceCents * item.qty, order.currency);
+            // Das Vorschaubild öffnet – wie in der Galerie – die grosse Ansicht.
             const thumb = (
-              <img
-                src={imageUrl(item.thumbUrl)}
-                alt={`Vorschau: ${label}`}
-                width={64}
-                height={64}
-                style={{ borderRadius: 8, objectFit: 'cover' }}
-                draggable={false}
-              />
+              <ThumbButton item={item} label={label} onOpen={() => setPreview(item)} />
             );
 
             if (downloadable) {
+              // Klick auf das Vorschaubild öffnet die Galerie-Vorschau
+              // (ThumbButton stoppt die Weitergabe an die Zeile); ein Klick auf
+              // den Rest der Zeile startet wie bisher den Download.
               return (
                 <a
                   key={i}
@@ -153,8 +169,22 @@ export default function OrderDetail() {
               );
             }
 
+            // Druckprodukte: die ganze Zeile öffnet die Galerie-Vorschau.
             return (
-              <div key={i} className="line-item">
+              <div
+                key={i}
+                className="line-item line-item-clickable"
+                role="button"
+                tabIndex={0}
+                title="Foto in der Galerie ansehen"
+                onClick={() => setPreview(item)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setPreview(item);
+                  }
+                }}
+              >
                 {thumb}
                 <div className="li-main">
                   <strong>{item.productName}</strong>
@@ -185,7 +215,67 @@ export default function OrderDetail() {
           melden uns bei Ihnen.
         </p>
       )}
+
+      {/* Galerie-Vorschau: zeigt das ausgewählte Foto gross – so, als hätte man
+          es in der Galerie angeklickt. */}
+      {preview && (
+        <div className="lightbox" onClick={() => setPreview(null)}>
+          <div className="inner" onClick={(e) => e.stopPropagation()}>
+            <button className="close" onClick={() => setPreview(null)} aria-label="Schliessen">
+              ×
+            </button>
+            <img
+              src={imageUrl(preview.previewUrl)}
+              alt={`Vorschau: ${preview.childName || preview.fileName || preview.productName}`}
+              draggable={false}
+              onContextMenu={(e) => e.preventDefault()}
+            />
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * Anklickbares Vorschaubild einer Bestellzeile. Öffnet die Galerie-Vorschau und
+ * verhindert dabei, dass die umgebende Zeile (z. B. der Download-Link einer
+ * digitalen Bestellung) mit ausgelöst wird.
+ */
+function ThumbButton({
+  item,
+  label,
+  onOpen,
+}: {
+  item: Item;
+  label: string;
+  onOpen: () => void;
+}) {
+  const open = (e: SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onOpen();
+  };
+  return (
+    <span
+      className="li-thumb-btn"
+      role="button"
+      tabIndex={0}
+      title="Foto in der Galerie ansehen"
+      onClick={open}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') open(e);
+      }}
+    >
+      <img
+        src={imageUrl(item.thumbUrl)}
+        alt={`Vorschau: ${label}`}
+        width={64}
+        height={64}
+        style={{ borderRadius: 8, objectFit: 'cover', display: 'block' }}
+        draggable={false}
+      />
+    </span>
   );
 }
 
