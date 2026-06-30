@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
@@ -32,6 +32,42 @@ interface EventRow {
   reminder_count: number;
   expires_at: string | null;
   created_at: string;
+  // Vom Backend vorberechneter Freitext-Index (Auftragsname + Kindernamen +
+  // zugeordnete E-Mail-Adressen), alles in Kleinbuchstaben.
+  search_text?: string;
+}
+
+type SortKey =
+  | 'created_desc'
+  | 'created_asc'
+  | 'orderable_desc'
+  | 'orderable_asc'
+  | 'revenue_desc';
+
+type FilterKey = 'all' | 'published' | 'draft' | 'archived' | 'reminders';
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: 'created_desc', label: 'Erfassungsdatum (neueste zuerst)' },
+  { value: 'created_asc', label: 'Erfassungsdatum (älteste zuerst)' },
+  { value: 'orderable_desc', label: 'Bestellbar bis (späteste zuerst)' },
+  { value: 'orderable_asc', label: 'Bestellbar bis (früheste zuerst)' },
+  { value: 'revenue_desc', label: 'Umsatz (höchster zuerst)' },
+];
+
+const FILTER_OPTIONS: { value: FilterKey; label: string }[] = [
+  { value: 'all', label: 'Alle Aufträge' },
+  { value: 'published', label: 'Nur veröffentlichte' },
+  { value: 'draft', label: 'Nur pendente' },
+  { value: 'archived', label: 'Nur archivierte' },
+  { value: 'reminders', label: 'Nur mit Erinnerungen' },
+];
+
+// Hilfswert für die Sortierung nach "Bestellbar bis": Aufträge ohne Enddatum
+// werden ans Ende gestellt (bei beiden Sortierrichtungen sinnvoll behandelt).
+function orderableTime(ev: EventRow): number {
+  if (!ev.expires_at) return NaN;
+  const t = new Date(ev.expires_at).getTime();
+  return isNaN(t) ? NaN : t;
 }
 
 export default function Events() {
@@ -40,6 +76,9 @@ export default function Events() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SortKey>('created_desc');
+  const [filter, setFilter] = useState<FilterKey>('all');
 
   const load = () =>
     api<{ events: EventRow[]; currency: string }>('/api/admin/events', { admin: true })
@@ -53,11 +92,91 @@ export default function Events() {
     load();
   }, []);
 
+  const visibleEvents = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = events.filter((ev) => {
+      // Statusfilter / Erinnerungsfilter.
+      if (filter === 'published' && ev.status !== 'published') return false;
+      if (filter === 'draft' && ev.status !== 'draft') return false;
+      if (filter === 'archived' && ev.status !== 'archived') return false;
+      if (filter === 'reminders' && ev.reminder_count <= 0) return false;
+      // Freitextsuche über Auftragsname, Kindernamen und E-Mail-Adressen.
+      if (q) {
+        const haystack = ev.search_text ?? ev.name.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+
+    list = [...list].sort((a, b) => {
+      switch (sort) {
+        case 'created_asc':
+          return String(a.created_at ?? '').localeCompare(String(b.created_at ?? ''));
+        case 'revenue_desc':
+          return b.revenue_cents - a.revenue_cents;
+        case 'orderable_asc':
+        case 'orderable_desc': {
+          const ta = orderableTime(a);
+          const tb = orderableTime(b);
+          // Aufträge ohne Enddatum immer ans Ende, unabhängig von der Richtung.
+          if (isNaN(ta) && isNaN(tb)) return 0;
+          if (isNaN(ta)) return 1;
+          if (isNaN(tb)) return -1;
+          return sort === 'orderable_asc' ? ta - tb : tb - ta;
+        }
+        case 'created_desc':
+        default:
+          return String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''));
+      }
+    });
+    return list;
+  }, [events, search, sort, filter]);
+
   if (loading) return <Spinner />;
+
+  const hasFilters = search.trim() !== '' || filter !== 'all';
 
   return (
     <div>
-      <h1 style={{ marginBottom: 16 }}>Aufträge</h1>
+      <div className="orders-toolbar">
+        <h1 className="orders-toolbar-title">Aufträge</h1>
+        {events.length > 0 && (
+          <div className="orders-toolbar-controls">
+            <input
+              type="search"
+              className="orders-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Auftrag, Kind oder E-Mail-Adresse suchen …"
+              aria-label="Aufträge durchsuchen"
+            />
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
+              aria-label="Aufträge sortieren"
+              title="Sortierung"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as FilterKey)}
+              aria-label="Aufträge filtern"
+              title="Filter"
+            >
+              {FILTER_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
 
       {error && <Alert kind="error">{error}</Alert>}
 
@@ -66,9 +185,28 @@ export default function Events() {
           Noch keine Aufträge. Erfasse deinen ersten Auftrag über{' '}
           <Link to="/admin/import">Aufträge erfassen</Link>.
         </p>
+      ) : visibleEvents.length === 0 ? (
+        <p className="muted">
+          Keine Aufträge gefunden.
+          {hasFilters && (
+            <>
+              {' '}
+              <button
+                type="button"
+                className="btn ghost small"
+                onClick={() => {
+                  setSearch('');
+                  setFilter('all');
+                }}
+              >
+                Filter zurücksetzen
+              </button>
+            </>
+          )}
+        </p>
       ) : (
         <div className="order-list">
-          {events.map((ev) => (
+          {visibleEvents.map((ev) => (
             <EventCard
               key={ev.id}
               ev={ev}
