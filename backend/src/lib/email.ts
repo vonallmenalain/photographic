@@ -271,9 +271,9 @@ export async function sendOrderConfirmation(
 
 /**
  * Versandbestätigung für ausgedruckte Fotos: kurze, freundliche Nachricht an
- * Eltern, deren bestellte Fotos zum Ausdrucken heute verschickt wurden. Bewusst
- * schlicht gehalten – keine technische Bestellnummer, nur die Bestätigung des
- * Versands und der Link zur App.
+ * Eltern, deren bestellte Fotos heute verschickt wurden. Bewusst schlicht
+ * gehalten – keine technische Bestellnummer, nur die Bestätigung des Versands
+ * und der Link zu den Bestellungen.
  */
 export async function sendShippingConfirmationEmail(to: string, link: string) {
   const subject = 'Ihre Fotos sind unterwegs';
@@ -281,7 +281,7 @@ export async function sendShippingConfirmationEmail(to: string, link: string) {
     'Ihre Fotos sind unterwegs',
     `<p style="font-size:15px;line-height:1.6;">Guten Tag</p>
      <p style="font-size:15px;line-height:1.6;">
-       Wir haben Ihre bestellten Fotos zum Ausdrucken <strong>heute verschickt</strong>.
+       Wir haben Ihre bestellten Fotos <strong>heute verschickt</strong>.
        Sie sollten in den nächsten Tagen bei Ihnen eintreffen.
      </p>
      <p style="font-size:15px;line-height:1.6;">Vielen Dank für Ihre Bestellung und herzliche Grüsse.</p>
@@ -291,7 +291,7 @@ export async function sendShippingConfirmationEmail(to: string, link: string) {
   );
   const text = `Guten Tag
 
-Wir haben Ihre bestellten Fotos zum Ausdrucken heute verschickt. Sie sollten in den nächsten Tagen bei Ihnen eintreffen.
+Wir haben Ihre bestellten Fotos heute verschickt. Sie sollten in den nächsten Tagen bei Ihnen eintreffen.
 
 Vielen Dank für Ihre Bestellung und herzliche Grüsse.
 

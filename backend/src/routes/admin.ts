@@ -1880,30 +1880,14 @@ router.get(
   }),
 );
 
-// Empfängerliste für die Versandbestätigung: alle (aktiven) Eltern-Adressen mit
-// einem bestätigten Druck-Auftrag. Muss vor `/orders/:id` stehen, sonst würde
-// `:id` den Pfad `print-recipients` abfangen.
+// Metadaten für die Versandbestätigung (eigene Admin-Adresse für die optionale
+// Kopie sowie der SMTP-Hinweis). Die eigentliche Empfängeradresse stammt aus der
+// angeklickten Bestellung. Muss vor `/orders/:id` stehen, sonst würde `:id` den
+// Pfad `shipping-meta` abfangen.
 router.get(
-  '/orders/print-recipients',
+  '/orders/shipping-meta',
   asyncHandler(async (req, res) => {
-    const emailIds = await printOrderEmailIds();
-    const emailDocs = await getManyById<{ email: string; name?: string; status: string }>(
-      COL.parentEmails,
-      Array.from(emailIds),
-    );
-    const emails = Array.from(emailDocs.values())
-      .filter((e) => e.email && e.status !== 'disabled')
-      .map((e) => ({
-        id: e.id,
-        email: e.email,
-        name: e.name ?? '',
-        status: e.status,
-        verified: e.status === 'verified',
-      }))
-      .sort((a, b) => a.email.localeCompare(b.email));
-
     res.json({
-      emails,
       adminEmail: await resolveAdminEmail(req.admin!.username),
       devLogOnly: config.mail.devLogOnly,
     });
@@ -1951,65 +1935,61 @@ router.patch(
 );
 
 // --- Versandbestätigung für ausgedruckte Fotos ---------------------------
-// Sammelt alle (aktiven) Eltern-Adressen, die in einer bestätigten Bestellung
-// (pending/completed, nicht storniert) mindestens ein Druckprodukt bestellt
-// haben. Damit kann der Admin – ähnlich der Erinnerung unter "Aufträge" – eine
-// kurze Versandbestätigung an alle Druck-Besteller schicken.
-async function printOrderEmailIds(): Promise<Set<string>> {
-  const [products, orders, orderItems] = await Promise.all([
-    runQuery<{ id: string; type: string }>(col(COL.products)),
-    runQuery<{ id: string; email_id: string; status: string }>(col(COL.orders)),
-    runQuery<{ order_id: string; product_id: string }>(col(COL.orderItems)),
-  ]);
-  const printProductIds = new Set(
-    products.filter((p) => p.type === 'print').map((p) => p.id),
+// Prüft, ob eine konkrete Bestellung mindestens ein Druckprodukt enthält. So
+// kann der Admin gezielt für eine einzelne Bestellung die Versandbestätigung an
+// die zugehörige Adresse schicken.
+async function orderHasPrint(orderId: string): Promise<boolean> {
+  const orderItems = await runQuery<{ product_id: string }>(
+    col(COL.orderItems).where('order_id', '==', orderId),
   );
-  const orderById = new Map(orders.map((o) => [o.id, o]));
-  const emailIds = new Set<string>();
-  for (const item of orderItems) {
-    if (!printProductIds.has(item.product_id)) continue;
-    const order = orderById.get(item.order_id);
-    if (!order) continue;
-    if (order.status === 'pending' || order.status === 'completed') {
-      emailIds.add(order.email_id);
-    }
-  }
-  return emailIds;
+  if (orderItems.length === 0) return false;
+  const products = await getManyById<{ type: string }>(
+    COL.products,
+    orderItems.map((it) => it.product_id),
+  );
+  return orderItems.some((it) => products.get(it.product_id)?.type === 'print');
 }
 
 router.post(
-  '/orders/send-shipping-confirmation',
+  '/orders/:id/send-shipping-confirmation',
   asyncHandler(async (req, res) => {
-    const { emailIds, sendToSelf } = parse(
-      z.object({
-        emailIds: z.array(z.string()).optional(),
-        sendToSelf: z.boolean().default(false),
-      }),
+    const { sendToSelf } = parse(
+      z.object({ sendToSelf: z.boolean().default(false) }),
       req.body ?? {},
     );
 
-    // Nur Adressen zulassen, die tatsächlich ein Druckprodukt bestellt haben.
-    const allowed = await printOrderEmailIds();
-    const selectedIds = (emailIds ?? Array.from(allowed)).filter((id) => allowed.has(id));
-    const emails = await getManyById<{ email: string; status: string }>(
-      COL.parentEmails,
-      selectedIds,
-    );
-    const recipients = Array.from(emails.values()).filter(
-      (e) => e.status !== 'disabled' && e.email,
-    );
-
-    const selfEmail = sendToSelf ? await resolveAdminEmail(req.admin!.username) : '';
-    if (recipients.length === 0 && !selfEmail) {
-      throw new ApiError(400, 'Es wurde keine (aktive) E-Mail-Adresse ausgewählt.');
+    const order = await getById<{ email_id: string; status: string }>(COL.orders, req.params.id);
+    if (!order) throw new ApiError(404, 'Bestellung nicht gefunden.');
+    if (!(await orderHasPrint(req.params.id))) {
+      throw new ApiError(400, 'Diese Bestellung enthält kein Produkt zum Ausdrucken.');
     }
 
-    const link = config.publicAppUrl;
-    const results = await Promise.allSettled(
-      recipients.map((r) => sendShippingConfirmationEmail(r.email, link)),
+    const parentEmail = await getById<{ email: string; status: string }>(
+      COL.parentEmails,
+      order.email_id,
     );
-    const sent = results.filter((r) => r.status === 'fulfilled').length;
-    const failed = results.length - sent;
+    const recipient =
+      parentEmail && parentEmail.email && parentEmail.status !== 'disabled'
+        ? parentEmail.email
+        : '';
+    const selfEmail = sendToSelf ? await resolveAdminEmail(req.admin!.username) : '';
+    if (!recipient && !selfEmail) {
+      throw new ApiError(400, 'Für diese Bestellung ist keine aktive E-Mail-Adresse hinterlegt.');
+    }
+
+    // "Zu meinen Fotos" soll direkt zu den Bestellungen führen, nicht zur Galerie.
+    const link = `${config.publicAppUrl}/bestellungen`;
+
+    let sent = 0;
+    let failed = 0;
+    if (recipient) {
+      try {
+        await sendShippingConfirmationEmail(recipient, link);
+        sent = 1;
+      } catch {
+        failed = 1;
+      }
+    }
 
     let sentToSelf = false;
     if (selfEmail) {
@@ -2021,15 +2001,25 @@ router.post(
       }
     }
 
+    // Nach erfolgreichem Versand gilt die Bestellung als abgeschlossen.
+    let statusChanged = false;
+    if (sent > 0 && order.status !== 'completed') {
+      await updateById(COL.orders, req.params.id, { status: 'completed', updated_at: nowIso() });
+      statusChanged = true;
+    }
+
     await audit(
       'order.shipping.confirm',
-      `${sent} sent, ${failed} failed${sentToSelf ? ', self copy' : ''}`,
+      `${req.params.id}: ${sent} sent, ${failed} failed${sentToSelf ? ', self copy' : ''}${
+        statusChanged ? ', status completed' : ''
+      }`,
     );
     res.json({
       sent,
       failed,
-      total: recipients.length,
+      total: recipient ? 1 : 0,
       sentToSelf,
+      statusChanged,
       devLogOnly: config.mail.devLogOnly,
     });
   }),
