@@ -37,6 +37,9 @@ p { margin: 0 0 1rem; }
 
 .container { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
 .narrow { max-width: 460px; }
+/* Doppelt so breit wie .narrow – z. B. für die Bestellungen-Tabelle, damit
+   Datum, Status, Summe und der "Details"-Link nebeneinander Platz haben. */
+.narrow-wide { max-width: 920px; }
 
 /* App header */
 .appbar {

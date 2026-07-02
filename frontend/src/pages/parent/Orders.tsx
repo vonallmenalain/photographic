@@ -29,7 +29,7 @@ export default function Orders() {
   if (loading) return <Spinner />;
 
   return (
-    <div className="narrow" style={{ margin: '0 auto' }}>
+    <div className="narrow-wide" style={{ margin: '0 auto' }}>
       <h1>Bestellungen</h1>
       {orders.length === 0 ? (
         <div className="card center">
@@ -75,8 +75,10 @@ export default function Orders() {
                   <td>
                     <StatusBadge status={o.status} />
                   </td>
-                  <td>{formatPrice(o.total_cents, o.currency)}</td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {formatPrice(o.total_cents, o.currency)}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     <Link
                       to={`/bestellung/${o.id}`}
                       onClick={(e) => e.stopPropagation()}
