@@ -37,7 +37,7 @@ p { margin: 0 0 1rem; }
 
 .container { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
 .narrow { max-width: 460px; }
-/* Doppelt so breit wie .narrow – z. B. für die Bestellungen-Tabelle, damit
+/* Doppelt so breit wie .narrow – z. B. für die Bestellungen-Liste, damit
    Datum, Status, Summe und der "Details"-Link nebeneinander Platz haben. */
 .narrow-wide { max-width: 920px; }
 
@@ -599,6 +599,35 @@ input:focus, select:focus, textarea:focus {
   font-size: 0.7rem; color: var(--text-muted); margin-top: 5px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* Bestellungen (Eltern-Ansicht) — Kachel-Liste statt Tabelle.
+   Eine Tabelle lässt sich auf schmalen Bildschirmen nicht sauber umbrechen
+   (Spalten quetschen sich nebeneinander); eine Kachel-Liste dagegen kann Datum,
+   Status, Summe und den "Details"-Link auf dem Handy einfach in eine zweite
+   Zeile umbrechen lassen, siehe Media Query weiter unten. */
+.orders-card { padding: 0; }
+.order-tile-list li { border-bottom: 1px solid var(--border); }
+.order-tile-list li:last-child { border-bottom: none; }
+.order-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 16px 22px;
+  cursor: pointer;
+}
+.order-tile:hover { background: var(--surface-2); }
+.order-tile:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.order-tile-date { flex: 1 1 220px; min-width: 0; }
+.order-tile-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+}
+.order-tile-price { font-weight: 600; white-space: nowrap; }
+.order-tile-details { white-space: nowrap; font-weight: 600; }
 
 /* Tables (admin) */
 table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
@@ -1389,6 +1418,17 @@ a.line-item-download .li-download-icon {
   /* Tables (orders) breathe a little less so all columns fit. */
   .parent-theme th,
   .parent-theme td { padding: 9px 8px; font-size: 0.88rem; }
+
+  /* Bestellungen: Datum bekommt seine eigene Zeile; Status, Summe und
+     "Details" rutschen darunter in eine zweite Zeile statt sich neben die
+     Kachel zu quetschen. */
+  .parent-theme .order-tile {
+    padding: 14px 16px;
+    gap: 8px 12px;
+  }
+  .parent-theme .order-tile-date { flex-basis: 100%; font-size: 0.92rem; }
+  .parent-theme .order-tile-meta { flex-basis: 100%; }
+  .parent-theme .order-tile-details { margin-left: auto; }
 }
 
 /* Very small phones: drop the photo grid to a single, clearly-framed column and

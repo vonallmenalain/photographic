@@ -39,57 +39,51 @@ export default function Orders() {
           </Link>
         </div>
       ) : (
-        <div className="card">
-          <table>
-            <thead>
-              <tr>
-                <th>Datum</th>
-                <th>Status</th>
-                <th>Summe</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o) => (
-                // Die ganze Zeile ist klickbar – ein Klick auf Datum, Status,
-                // Summe oder daneben öffnet die Detailansicht. Der „Details“-Link
-                // bleibt als sichtbarer Hinweis erhalten.
-                <tr
-                  key={o.id}
-                  className="clickable-row"
+        <div className="card orders-card">
+          <ul className="order-tile-list list-reset">
+            {orders.map((o) => (
+              // Die ganze Kachel ist klickbar – ein Klick auf Datum, Status,
+              // Summe oder daneben öffnet die Detailansicht. Der „Details“-Link
+              // bleibt als sichtbarer Hinweis erhalten. Auf schmalen Bildschirmen
+              // brechen Status, Summe und Details in eine eigene Zeile um, statt
+              // sich neben das Datum zu quetschen.
+              <li key={o.id}>
+                <div
+                  className="order-tile clickable-row"
+                  role="link"
+                  tabIndex={0}
                   onClick={() => navigate(`/bestellung/${o.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') navigate(`/bestellung/${o.id}`);
+                  }}
                 >
                   {/* Zahlungsdatum (paid_at). Vor der Zahlung gibt es kein
                       sinnvolles Datum. Enthält die Bestellung ausgedruckte
                       Bilder und ist sie abgeschlossen, wird zusätzlich das
                       Versanddatum (completed_at) angezeigt. */}
-                  <td>
+                  <div className="order-tile-date">
                     {o.paid_at ? formatDate(o.paid_at) : '—'}
                     {o.has_print && o.completed_at && (
-                      <span className="muted" style={{ whiteSpace: 'nowrap' }}>
-                        {' '}
-                        – Bilder versandt am {formatDate(o.completed_at)}
-                      </span>
+                      <span className="muted"> – Bilder versandt am {formatDate(o.completed_at)}</span>
                     )}
-                  </td>
-                  <td>
+                  </div>
+                  <div className="order-tile-meta">
                     <StatusBadge status={o.status} />
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    {formatPrice(o.total_cents, o.currency)}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <span className="order-tile-price">
+                      {formatPrice(o.total_cents, o.currency)}
+                    </span>
                     <Link
                       to={`/bestellung/${o.id}`}
+                      className="order-tile-details"
                       onClick={(e) => e.stopPropagation()}
                     >
                       Details
                     </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
