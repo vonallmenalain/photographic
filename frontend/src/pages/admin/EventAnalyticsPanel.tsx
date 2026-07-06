@@ -279,13 +279,13 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [showEmail, setShowEmail] = useState(false);
+  const [dispatchMode, setDispatchMode] = useState<'invitation' | 'reminder' | null>(null);
   const [msg, setMsg] = useState('');
 
-  // Wurde noch keine Einladung verschickt, generiert der Versand die ursprüngliche
-  // Einladungs-Mail; danach handelt es sich um eine Erinnerung (anderer Text).
-  const mode: 'invitation' | 'reminder' = event.invited_at ? 'reminder' : 'invitation';
-  const sendLabel = mode === 'invitation' ? 'Einladung versenden' : 'Erinnerung versenden';
+  // Eine Einladung lässt sich jederzeit (erneut) versenden. Erst wenn bereits eine
+  // Einladung raus ist (invited_at gesetzt), steht zusätzlich der Erinnerungs-Versand
+  // mit dem passenden Erinnerungstext zur Verfügung.
+  const canSendReminder = !!event.invited_at;
 
   const add = async () => {
     setError('');
@@ -356,21 +356,33 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
           type="button"
           onClick={() => {
             setMsg('');
-            setShowEmail(true);
+            setDispatchMode('invitation');
           }}
         >
-          {sendLabel}
+          Einladung versenden
         </button>
+        {canSendReminder && (
+          <button
+            className="btn secondary small"
+            type="button"
+            onClick={() => {
+              setMsg('');
+              setDispatchMode('reminder');
+            }}
+          >
+            Erinnerung versenden
+          </button>
+        )}
       </div>
 
-      {showEmail && (
+      {dispatchMode && (
         <EmailDispatchModal
           eventId={event.id}
-          mode={mode}
+          mode={dispatchMode}
           expiresAt={event.expires_at}
-          onClose={() => setShowEmail(false)}
+          onClose={() => setDispatchMode(null)}
           onSent={(message) => {
-            setShowEmail(false);
+            setDispatchMode(null);
             setMsg(message);
             setError('');
             onReload();
