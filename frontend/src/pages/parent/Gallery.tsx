@@ -36,6 +36,11 @@ export default function Gallery() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Whether the sellable products could be loaded. When this fails (or no
+  // product is configured) the photos are still shown, but we explain clearly
+  // why the "in den Warenkorb" buttons are missing instead of leaving a silent,
+  // broken-looking gallery where nothing can be ordered.
+  const [productsFailed, setProductsFailed] = useState(false);
   const [active, setActive] = useState<Photo | null>(null);
   // Digital downloads can only be bought once. Track which photos are already
   // owned or already in the cart so the same photo can't be added twice.
@@ -45,13 +50,13 @@ export default function Gallery() {
 
   useEffect(() => {
     (async () => {
+      // Load photos and the sellable products independently. Previously both ran
+      // in a single Promise.all, so a failing (or empty) product list took the
+      // whole gallery down and the parent saw nothing at all. Now the photos
+      // always render; the buy controls degrade gracefully with an explanation.
       try {
-        const [photoRes, prodRes] = await Promise.all([
-          api<{ groups: PhotoGroup[] }>('/api/parent/photos'),
-          api<{ products: Product[] }>('/api/parent/products'),
-        ]);
+        const photoRes = await api<{ groups: PhotoGroup[] }>('/api/parent/photos');
         setGroups(photoRes.groups);
-        setProducts(prodRes.products);
         const purchased = new Set<string>();
         const inCart = new Set<string>();
         for (const g of photoRes.groups) {
@@ -64,9 +69,19 @@ export default function Gallery() {
         setCartIds(inCart);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Fotos konnten nicht geladen werden.');
-      } finally {
-        setLoading(false);
       }
+
+      try {
+        const prodRes = await api<{ products: Product[] }>('/api/parent/products');
+        setProducts(prodRes.products);
+        // A successful response with an empty list means nothing is on sale –
+        // treat that the same as a failure so the notice is shown.
+        setProductsFailed(prodRes.products.length === 0);
+      } catch {
+        setProductsFailed(true);
+      }
+
+      setLoading(false);
     })();
   }, []);
 
@@ -85,6 +100,18 @@ export default function Gallery() {
       </div>
 
       {error && <Alert kind="error">{error}</Alert>}
+
+      {/* Ohne verfügbare Produkte gibt es keine „In den Warenkorb"-Knöpfe. Statt
+          einer stillen, scheinbar kaputten Galerie erklären wir das und bieten
+          den Weg zur Hilfe an, damit sich niemand fragt, warum keine Bestellung
+          möglich ist. */}
+      {productsFailed && !error && totalPhotos > 0 && (
+        <Alert kind="error">
+          Der Bestellvorgang ist momentan nicht verfügbar, deshalb fehlen die
+          Kauf-Schaltflächen. Bitte versuchen Sie es später erneut oder{' '}
+          <Link to="/hilfe">melden Sie sich bei uns</Link>.
+        </Alert>
+      )}
 
       {totalPhotos === 0 && !error && (
         <div className="card">

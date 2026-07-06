@@ -149,7 +149,7 @@ export default function Cart() {
         <div className="card center">
           <p className="soft">Der Warenkorb ist leer.</p>
           <Link to="/galerie" className="btn">
-            Zur Galerie
+            Zu den Fotos
           </Link>
         </div>
       ) : (

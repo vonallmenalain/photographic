@@ -6,7 +6,6 @@ import { Spinner } from './components/common';
 
 import Landing from './pages/parent/Landing';
 import Verify from './pages/parent/Verify';
-import GalleryPreview from './pages/parent/GalleryPreview';
 import Gallery from './pages/parent/Gallery';
 import Cart from './pages/parent/Cart';
 import Orders from './pages/parent/Orders';
@@ -31,8 +30,12 @@ function ParentRoutes() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/verifizieren" element={<Verify />} />
-            <Route path="/galerie" element={<RequireParent><GalleryPreview /></RequireParent>} />
-            <Route path="/galerie/fotos" element={<RequireParent><Gallery /></RequireParent>} />
+            {/* Nach der Code-Bestätigung landet man direkt in der Bestellansicht
+                (früher gab es davor noch eine reine Galerie-Vorschau). Die alte
+                Unterseite bleibt als Weiterleitung erhalten, damit gespeicherte
+                Links/Lesezeichen weiterhin funktionieren. */}
+            <Route path="/galerie" element={<RequireParent><Gallery /></RequireParent>} />
+            <Route path="/galerie/fotos" element={<Navigate to="/galerie" replace />} />
             <Route path="/warenkorb" element={<RequireParent><Cart /></RequireParent>} />
             <Route path="/bestellungen" element={<RequireParent><Orders /></RequireParent>} />
             <Route path="/bestellung/:id" element={<RequireParent><OrderDetail /></RequireParent>} />

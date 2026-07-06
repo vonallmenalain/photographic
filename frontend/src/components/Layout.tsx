@@ -23,9 +23,6 @@ export function Layout({ children }: { children: ReactNode }) {
             {verified ? (
               <>
                 <Link to="/galerie" className="nav-link">
-                  Galerie
-                </Link>
-                <Link to="/galerie/fotos" className="nav-link">
                   Bestellen
                 </Link>
                 <CartButton />
