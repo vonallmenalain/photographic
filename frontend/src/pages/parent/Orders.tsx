@@ -35,7 +35,7 @@ export default function Orders() {
         <div className="card center">
           <p className="soft">Es sind noch keine Bestellungen vorhanden.</p>
           <Link to="/galerie" className="btn">
-            Zur Galerie
+            Zu den Fotos
           </Link>
         </div>
       ) : (
