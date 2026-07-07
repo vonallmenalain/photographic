@@ -26,7 +26,7 @@ function buildApp() {
   // referrer policy, …). This is a pure JSON/image API and serves no HTML, so we
   // disable the (HTML-only) Content-Security-Policy here and leave it to the
   // frontend host (Netlify). The default `Cross-Origin-Resource-Policy:
-  // same-origin` would block the frontend (fotos.alae.app) from loading the
+  // same-origin` would block the frontend (photographic.alae.app) from loading the
   // token-protected preview images served by this API (api.alae.app), so we
   // relax it to `cross-origin` – the images are still gated by signed tokens.
   app.use(

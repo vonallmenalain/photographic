@@ -61,7 +61,7 @@ cp .env.example .env
 `.env` öffnen (z. B. via File Station Texteditor) und mindestens setzen:
 
 ```ini
-PUBLIC_APP_URL=https://fotos.alae.app          # deine App-Domain (Netlify)
+PUBLIC_APP_URL=https://photographic.alae.app          # deine App-Domain (Netlify)
 EXTRA_CORS_ORIGINS=https://creartphotographic.netlify.app
 FIREBASE_PROJECT_ID=photographic-7ba68
 FIREBASE_SERVICE_ACCOUNT_PATH=/run/secrets/firebase-service-account.json

@@ -29,7 +29,7 @@
 6. **Eltern benachrichtigen**, sobald alles bereit ist: in der Kachel
    „E-Mail-Adressen“ auf **„E-Mail an alle senden“** klicken. Das verschickt an
    **alle erfassten Adressen des Auftrags** eine E-Mail mit Link zur App
-   (`fotos.alae.app`), einer Kurzanleitung zur Verifizierung sowie den Hinweisen
+   (`photographic.alae.app`), einer Kurzanleitung zur Verifizierung sowie den Hinweisen
    zum Schutz der Fotos und zur Aufbewahrungsfrist (30 Tage). Voraussetzung ist
    ein konfigurierter SMTP-Versand (siehe [docs/04-email-smtp.md](04-email-smtp.md));
    ohne SMTP landen die E-Mails nur im Server-Log.
@@ -183,9 +183,9 @@ docker compose ps                        # Status
 | Symptom | Ursache / Lösung |
 |---|---|
 | Admin-Login: „Failed to fetch“ | `VITE_API_BASE_URL` falsch oder API nicht über HTTPS erreichbar. `curl https://api.alae.app/health` testen. |
-| CORS-Fehler im Browser | `PUBLIC_APP_URL` muss exakt `https://fotos.alae.app` sein (inkl. https, ohne Slash am Ende); die rohe Netlify-URL gehört in `EXTRA_CORS_ORIGINS`. |
+| CORS-Fehler im Browser | `PUBLIC_APP_URL` muss exakt `https://photographic.alae.app` sein (inkl. https, ohne Slash am Ende); die rohe Netlify-URL gehört in `EXTRA_CORS_ORIGINS`. |
 | Eltern bleiben nicht eingeloggt | Cookies blockiert. Mit API auf `api.alae.app`: `COOKIE_SECURE=true`, `COOKIE_SAMESITE=lax`, `COOKIE_DOMAIN=.alae.app`. Liegt die API auf anderer Domain: `COOKIE_SAMESITE=none`, `COOKIE_DOMAIN` leer. |
-| Firebase-Login `auth/unauthorized-continue-uri` | App-Domain fehlt in Firebase → **Authentication → Settings → Authorized domains**: `fotos.alae.app` und `creartphotographic.netlify.app` eintragen. |
+| Firebase-Login `auth/unauthorized-continue-uri` | App-Domain fehlt in Firebase → **Authentication → Settings → Authorized domains**: `photographic.alae.app` und `creartphotographic.netlify.app` eintragen. |
 | Keine E-Mail kommt an | SMTP-Daten prüfen; im Log steht `mail: DEV LOG ONLY`, wenn `SMTP_HOST` fehlt. Spam-Ordner/SPF/DKIM prüfen. Unbekannte Adressen erhalten bewusst keine Mail. |
 | Admin-Passwort gilt nach einem Neustart/Tag wieder nicht | War ein **früherer** Fehler: Beim Start wurde das Passwort des Admins aus `ADMIN_PASSWORD`/`ADMIN_PASSWORD_HASH` der `.env` **bei jedem** Container-Start überschrieben. Da Watchtower automatisch neu deployt, fiel ein per Reset gesetztes Passwort beim nächsten Neustart auf den `.env`-Wert zurück. **Behoben:** Die `.env`-Werte seeden den Admin jetzt nur noch beim **Erststart**; ein im Adminbereich (Konto → „Passwort ändern“) oder per „Passwort vergessen“ gesetztes Passwort bleibt dauerhaft erhalten. Du musst dafür nichts tun – nur das Backend einmal auf die neue Version aktualisieren. |
 | Admin „Passwort vergessen“ funktioniert nicht | (1) `ADMIN_EMAIL` in `.env` setzen und Backend neu starten – die Adresse wird normalisiert am Admin-Konto hinterlegt (Login per E-Mail wird möglich). (2) Ohne SMTP wird die Reset-Mail nur ins Log geschrieben (`mail: DEV LOG ONLY`) → SMTP einrichten ([docs/04-email-smtp.md](04-email-smtp.md)). (3) **Bequem & ohne E-Mail:** Im Adminbereich anmelden → **Konto** → **„Passwort ändern“**. (4) **Sofort & ohne Login (CLI):** `docker compose exec backend npm run create-admin -- admin "NeuesPasswort" deine@mail.tld` setzt Passwort **und** Admin-E-Mail direkt. |

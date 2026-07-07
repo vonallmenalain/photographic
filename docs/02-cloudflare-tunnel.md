@@ -8,7 +8,7 @@ Ergebnis: Deine API ist unter **`https://api.alae.app`** erreichbar und leitet
 intern an den Container `backend:4000` weiter.
 
 > Empfehlung: Nutze für die API bewusst `api.alae.app` (gleiche Hauptdomain wie
-> das Frontend `fotos.alae.app`). Dadurch sind Frontend und API „same-site“ und
+> das Frontend `photographic.alae.app`). Dadurch sind Frontend und API „same-site“ und
 > die Sitzungs-Cookies funktionieren besonders zuverlässig (siehe
 > [3. Netlify](03-netlify.md), Abschnitt Cookies).
 
@@ -74,7 +74,7 @@ NAS-Port, kein Zugriff auf andere Dienste).
 
 - In **Netlify** als `VITE_API_BASE_URL=https://api.alae.app`
   (siehe [3. Netlify](03-netlify.md)).
-- Im **Backend** muss `PUBLIC_APP_URL=https://fotos.alae.app` zeigen
+- Im **Backend** muss `PUBLIC_APP_URL=https://photographic.alae.app` zeigen
   (für CORS + E-Mail-/Bestätigungslinks).
 
 ## 2.7 Hinweise / Hardening (optional)

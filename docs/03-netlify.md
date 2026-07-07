@@ -37,22 +37,22 @@ Falls Netlify die Werte nicht automatisch übernimmt, trage sie manuell so ein.
 > Diese Variablen werden beim Build eingebacken. Wenn du sie änderst, musst du
 > **neu deployen** (Trigger deploy → Clear cache and deploy site).
 >
-> **Wichtig (Firebase Authentication):** Trage **`fotos.alae.app`** UND
+> **Wichtig (Firebase Authentication):** Trage **`photographic.alae.app`** UND
 > **`creartphotographic.netlify.app`** in der Firebase Console unter
 > **Authentication → Settings → Authorized domains** ein, und aktiviere unter
 > **Authentication → Sign-in method** den Anbieter **„E-Mail/Passwort“** inkl.
 > **„E-Mail-Link (passwortlose Anmeldung)“**. Details: [docs/08-firebase.md](08-firebase.md).
 
-## 3.4 Eigene Domain (fotos.alae.app)
+## 3.4 Eigene Domain (photographic.alae.app)
 
 Diese App nutzt die Netlify-Site **`creartphotographic.netlify.app`** mit der
-eigenen Domain **`fotos.alae.app`**.
+eigenen Domain **`photographic.alae.app`**.
 
-1. **Site configuration → Domain management → Add a domain** → `fotos.alae.app`.
-2. Im DNS deiner Domain `alae.app` einen **CNAME** `fotos` auf
+1. **Site configuration → Domain management → Add a domain** → `photographic.alae.app`.
+2. Im DNS deiner Domain `alae.app` einen **CNAME** `photographic` auf
    `creartphotographic.netlify.app` setzen (oder Netlify-DNS verwenden).
 3. Netlify stellt automatisch ein **HTTPS-Zertifikat** aus (Let’s Encrypt).
-4. Optional: `fotos.alae.app` als **Primary domain** festlegen, damit Aufrufe der
+4. Optional: `photographic.alae.app` als **Primary domain** festlegen, damit Aufrufe der
    `*.netlify.app`-Adresse dorthin umgeleitet werden.
 
 > Beide Adressen bleiben erreichbar. Deshalb ist `creartphotographic.netlify.app`
@@ -62,7 +62,7 @@ eigenen Domain **`fotos.alae.app`**.
 ## 3.5 Deployen
 
 **Deploys → Trigger deploy → Deploy site.** Nach dem Build ist die App unter
-`https://fotos.alae.app` (und `https://creartphotographic.netlify.app`) erreichbar.
+`https://photographic.alae.app` (und `https://creartphotographic.netlify.app`) erreichbar.
 
 ## 3.6 Backend auf diese Domain einstellen
 
@@ -70,7 +70,7 @@ Im **Backend** (`.env` auf dem QNAP) die App-Domain eintragen, damit CORS und
 E-Mail-/Bestätigungslinks stimmen:
 
 ```ini
-PUBLIC_APP_URL=https://fotos.alae.app
+PUBLIC_APP_URL=https://photographic.alae.app
 EXTRA_CORS_ORIGINS=https://creartphotographic.netlify.app
 ```
 
@@ -83,7 +83,7 @@ docker compose up -d backend
 ## 3.7 Cookies (mit api.alae.app besonders einfach)
 
 - **Empfohlen:** Betreibe die API auf **`api.alae.app`** (siehe Cloudflare-Doku).
-  Dann liegen Frontend (`fotos.alae.app`) und API (`api.alae.app`) unter derselben
+  Dann liegen Frontend (`photographic.alae.app`) und API (`api.alae.app`) unter derselben
   Hauptdomain `alae.app` → das ist **„same-site“**. Im Backend genügt dann:
 
   ```ini
@@ -99,12 +99,12 @@ docker compose up -d backend
 
 ## 3.8 Test
 
-1. `https://fotos.alae.app` öffnen → Startseite mit E-Mail-Eingabe.
-2. `https://fotos.alae.app/admin` → Admin-Login.
+1. `https://photographic.alae.app` öffnen → Startseite mit E-Mail-Eingabe.
+2. `https://photographic.alae.app/admin` → Admin-Login.
 3. Admin-Login testen (Benutzer/Passwort wie im Backend gesetzt).
 
 Wenn der Login „Failed to fetch“ zeigt: meist falsche `VITE_API_BASE_URL`,
-fehlendes HTTPS, oder `PUBLIC_APP_URL` im Backend passt nicht zu `fotos.alae.app`
+fehlendes HTTPS, oder `PUBLIC_APP_URL` im Backend passt nicht zu `photographic.alae.app`
 (CORS). Zeigt Firebase `auth/unauthorized-continue-uri`, fehlt die Domain in den
 **Authorized domains**. Siehe [Betrieb / Troubleshooting](06-betrieb.md).
 

@@ -36,7 +36,7 @@ Die Web-App, Firestore und Authentication sind bereits in deinem Projekt
 2. Tab **Sign-in method** → Anbieter **„E-Mail-/Passwort“** aktivieren.
 3. Dort zusätzlich **„E-Mail-Link (passwortlose Anmeldung)“** einschalten.
 4. Tab **Settings → Authorized domains** → folgende Domains hinzufügen:
-   - `fotos.alae.app` (eigene App-Domain)
+   - `photographic.alae.app` (eigene App-Domain)
    - `creartphotographic.netlify.app` (rohe Netlify-URL)
    - `localhost` (nur fürs lokale Testen)
 
