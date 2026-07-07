@@ -23,7 +23,7 @@ optional SMTP/Stripe), ist Schritt für Schritt in [`docs/`](docs/) beschrieben.
 ```
    ┌──────────────────────────┐         HTTPS          ┌───────────────────────────┐
    │      Eltern / Admin       │  ───────────────────▶  │   Netlify (Frontend)       │
-   │      (Browser)            │                        │   React-App  fotos.alae.app│
+   │      (Browser)            │                        │   React-App  photographic.alae.app│
    └──────────────────────────┘                        └─────────────┬─────────────┘
                                                                       │ API-Aufrufe (HTTPS)
                                                                       ▼
@@ -152,7 +152,7 @@ In dieser Reihenfolge durcharbeiten:
 1. **[Firebase](docs/08-firebase.md)** – Firestore-Regeln, Authentication (E-Mail-Link) und Service-Account einrichten.
 2. **[QNAP einrichten](docs/01-qnap.md)** – Docker/Container Station, Volume, Service-Account, Backend bauen & starten, Admin anlegen.
 3. **[Cloudflare Tunnel](docs/02-cloudflare-tunnel.md)** – API sicher unter `api.alae.app` erreichbar machen.
-4. **[Netlify](docs/03-netlify.md)** – Frontend deployen (`fotos.alae.app`), `VITE_API_BASE_URL` + `VITE_FIREBASE_*` setzen.
+4. **[Netlify](docs/03-netlify.md)** – Frontend deployen (`photographic.alae.app`), `VITE_API_BASE_URL` + `VITE_FIREBASE_*` setzen.
 5. **[E-Mail / SMTP](docs/04-email-smtp.md)** – nur für den optionalen Code-Fallback & Bestellbestätigungen.
 6. **[Stripe (optional)](docs/05-stripe.md)** – echte Bezahlung; ohne Stripe gibt es einen manuellen Bestellabschluss.
 7. **[Betrieb, Admin, Backups, Aufbewahrung](docs/06-betrieb.md)**.
@@ -163,11 +163,11 @@ In dieser Reihenfolge durcharbeiten:
 
 | Zweck | Domain | Wo eingetragen |
 |---|---|---|
-| Frontend (App) | `fotos.alae.app` | Netlify Custom Domain; Backend `PUBLIC_APP_URL`; Firebase Authorized domains |
+| Frontend (App) | `photographic.alae.app` | Netlify Custom Domain; Backend `PUBLIC_APP_URL`; Firebase Authorized domains |
 | Frontend (roh) | `creartphotographic.netlify.app` | Backend `EXTRA_CORS_ORIGINS`; Firebase Authorized domains |
 | Backend-API | `api.alae.app` | Cloudflare Tunnel Public Hostname; Netlify `VITE_API_BASE_URL` |
 
-> **Wichtig zur Reihenfolge:** `PUBLIC_APP_URL=https://fotos.alae.app` (Backend)
+> **Wichtig zur Reihenfolge:** `PUBLIC_APP_URL=https://photographic.alae.app` (Backend)
 > und `VITE_API_BASE_URL=https://api.alae.app` (Netlify) zeigen aufeinander. Lege
 > beide Hostnamen zuerst an, trage die URLs dann gegenseitig ein und deploye neu.
 > Da Frontend und API beide unter `alae.app` liegen, sind sie „same-site“ →
@@ -208,7 +208,7 @@ In dieser Reihenfolge durcharbeiten:
 - Setze **eigene, lange** `JWT_SECRET` und `FILE_TOKEN_SECRET` (z. B. `openssl rand -base64 48`).
 - Verwende ein **starkes Admin-Passwort** (als bcrypt-Hash, siehe Docs).
 - `COOKIE_SECURE=true` ist immer nötig (erfordert HTTPS, ist erfüllt). Liegen
-  Frontend (`fotos.alae.app`) und API (`api.alae.app`) unter derselben
+  Frontend (`photographic.alae.app`) und API (`api.alae.app`) unter derselben
   Hauptdomain `alae.app`, sind sie „same-site“ → `COOKIE_SAMESITE=lax` +
   `COOKIE_DOMAIN=.alae.app`. Nur wenn die API auf einer anderen Domain liegt,
   brauchst du `COOKIE_SAMESITE=none` (und `COOKIE_DOMAIN` leer).
