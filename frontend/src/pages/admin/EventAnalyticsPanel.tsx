@@ -400,6 +400,9 @@ interface ReminderEmail {
   status: string;
   verified: boolean;
   hasOrdered: boolean;
+  // Zeitpunkt des letzten erfolgreichen Einladungs-Versands an diese Adresse
+  // (null = es wurde noch keine Einladung verschickt).
+  invitedAt: string | null;
 }
 interface ReminderChild {
   id: string;
@@ -419,10 +422,10 @@ interface ReminderRecipients {
  * Versand-Popup für Einladung bzw. Erinnerung. Zeigt alle aktiven Eltern-
  * Adressen des Auftrags als kompakte Liste – eine Zeile pro Adresse, ohne
  * Zeilenumbrüche, bei Bedarf horizontal scrollbar. Spalten: E-Mail-Adresse,
- * Auswahl-Häkchen, Bestätigungs-Status und Bestell-Status. Bei der Einladung
- * sind standardmässig alle Adressen ausgewählt, bei der Erinnerung nur jene,
- * die noch keine Bestellung erfasst haben. Optional geht eine Kopie an das
- * eigene Admin-Konto.
+ * Auswahl-Häkchen, Bestätigungs-Status, Bestell-Status und ob (bzw. wann) die
+ * Einladung bereits versendet wurde. Bei der Einladung sind standardmässig alle
+ * Adressen ausgewählt, bei der Erinnerung nur jene, die noch keine Bestellung
+ * erfasst haben. Optional geht eine Kopie an das eigene Admin-Konto.
  */
 function EmailDispatchModal({
   eventId,
@@ -524,7 +527,7 @@ function EmailDispatchModal({
   return (
     <Modal
       title={`${noun} versenden`}
-      width={680}
+      width={780}
       onClose={onClose}
       footer={
         <>
@@ -590,6 +593,7 @@ function EmailDispatchModal({
                   </th>
                   <th>Status</th>
                   <th>Bestellung</th>
+                  <th>Einladung</th>
                 </tr>
               </thead>
               <tbody>
@@ -617,6 +621,15 @@ function EmailDispatchModal({
                         <span className="badge green">Bestellung</span>
                       ) : (
                         <span className="badge gray">Keine Bestellung</span>
+                      )}
+                    </td>
+                    <td>
+                      {e.invitedAt ? (
+                        <span className="badge green" title={`Einladung versendet am ${formatDateShort(e.invitedAt)}`}>
+                          Versendet · {formatDateShort(e.invitedAt)}
+                        </span>
+                      ) : (
+                        <span className="badge gray">Noch nicht</span>
                       )}
                     </td>
                   </tr>

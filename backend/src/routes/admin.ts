@@ -773,6 +773,52 @@ async function eventEmailIds(eventId: string): Promise<Set<string>> {
   return ids;
 }
 
+interface EventInvitation {
+  event_id: string;
+  email_id: string;
+  first_sent_at: string;
+  last_sent_at: string;
+  count: number;
+}
+
+/**
+ * Protokolliert je Adresse, dass die Einladung zu diesem Auftrag erfolgreich
+ * versendet wurde. Deterministische Doc-Id (event__email) verhindert Duplikate;
+ * beim erneuten Versand bleibt der erste Zeitpunkt erhalten und der Zähler steigt.
+ */
+async function recordInvitationsSent(eventId: string, emailIds: string[]): Promise<void> {
+  const unique = [...new Set(emailIds.filter(Boolean))];
+  if (unique.length === 0) return;
+  const now = nowIso();
+  const existing = await getManyById<EventInvitation>(
+    COL.eventInvitations,
+    unique.map((id) => linkId(eventId, id)),
+  );
+  await Promise.all(
+    unique.map((emailId) => {
+      const docId = linkId(eventId, emailId);
+      const prev = existing.get(docId);
+      return setById(COL.eventInvitations, docId, {
+        event_id: eventId,
+        email_id: emailId,
+        first_sent_at: prev?.first_sent_at ?? now,
+        last_sent_at: now,
+        count: (prev?.count ?? 0) + 1,
+      });
+    }),
+  );
+}
+
+/** Map emailId -> last invitation send timestamp for an event. */
+async function invitationsSentForEvent(eventId: string): Promise<Map<string, string>> {
+  const rows = await runQuery<EventInvitation>(
+    col(COL.eventInvitations).where('event_id', '==', eventId),
+  );
+  const out = new Map<string, string>();
+  for (const r of rows) out.set(r.email_id, r.last_sent_at);
+  return out;
+}
+
 // --- "Galerie ist bereit" Sammel-E-Mail an alle Adressen eines Auftrags ----
 // Schickt den (nicht deaktivierten) Eltern-Adressen des Auftrags eine E-Mail mit
 // Link zur App, Kurzanleitung zur Verifizierung sowie den Schutz-/Aufbewahrungs-
@@ -847,6 +893,12 @@ router.post(
     );
     const sent = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.length - sent;
+
+    // Merke pro Adresse, dass (und wann) die Einladung erfolgreich rausging, damit
+    // das Versand-Popup beim nächsten Öffnen anzeigen kann, wer sie schon erhalten
+    // hat. Reihenfolge von `results` entspricht `recipients`.
+    const sentRecipients = recipients.filter((_, i) => results[i]?.status === 'fulfilled');
+    await recordInvitationsSent(req.params.id, sentRecipients.map((r) => r.id));
 
     let sentToSelf = false;
     if (selfEmail) {
@@ -2339,12 +2391,13 @@ router.get(
     );
     if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
 
-    const [children, childLinks, photos, photoLinks, ordered] = await Promise.all([
+    const [children, childLinks, photos, photoLinks, ordered, invitedAt] = await Promise.all([
       runQuery<{ name: string }>(col(COL.children).where('event_id', '==', eventId)),
       runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
       runQuery<{ id: string }>(col(COL.photos).where('event_id', '==', eventId)),
       runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
       orderedEmailIdsForEvent(eventId),
+      invitationsSentForEvent(eventId),
     ]);
     children.sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
@@ -2377,6 +2430,7 @@ router.get(
         status: e.status,
         verified: e.status === 'verified',
         hasOrdered: ordered.has(e.id),
+        invitedAt: invitedAt.get(e.id) ?? null,
       };
     };
 
