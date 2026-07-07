@@ -639,7 +639,7 @@ tr.clickable-row { cursor: pointer; }
 
 /* E-Mail-Versand-Popup: kompakte Empfängerliste, eine Zeile pro Adresse,
    ohne Zeilenumbrüche und bei Bedarf horizontal scrollbar. */
-.dispatch-table { width: 100%; min-width: 480px; font-size: 0.86rem; }
+.dispatch-table { width: 100%; min-width: 560px; font-size: 0.86rem; }
 .dispatch-table th,
 .dispatch-table td { padding: 8px 12px; white-space: nowrap; }
 .dispatch-table thead th {

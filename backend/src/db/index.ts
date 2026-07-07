@@ -38,6 +38,9 @@ export const COL = {
   downloadGrants: 'download_grants',
   reports: 'reports',
   reminders: 'reminders',
+  // Pro (Auftrag, E-Mail-Adresse) protokollierter Einladungs-Versand, damit im
+  // Versand-Popup sichtbar ist, an welche Adressen die Einladung bereits ging.
+  eventInvitations: 'event_invitations',
   auditLog: 'audit_log',
 } as const;
 
