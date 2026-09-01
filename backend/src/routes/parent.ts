@@ -30,9 +30,10 @@ import {
   getOrderForEmail,
   listOrdersForEmail,
   purchasedDigitalPhotoIds,
-  cartDigitalPhotoIds,
+  cartPhotoStates,
 } from '../services/orders';
 import type { ShippingAddress } from '../services/orders';
+import { productView, type ProductDoc } from '../services/products';
 import { createCheckoutSession } from '../services/payments';
 import { sendOrderConfirmation } from '../lib/email';
 
@@ -64,28 +65,29 @@ function toShippingAddress(input: z.infer<typeof shippingAddressSchema>): Shippi
 const NEUTRAL_MESSAGE =
   'Falls diese E-Mail-Adresse für Fotos freigeschaltet ist, senden wir Ihnen einen Zugangslink und einen Code.';
 
-interface ProductDoc {
-  name: string;
-  description: string;
-  type: string;
-  price_cents: number;
-  currency: string;
-  active: number;
-  sort_order: number;
-}
-
+// The sellable product list (Sortiment). Besides name/price every product
+// carries what the shop UI needs to present it correctly: the `kind`
+// (photo print / sticker sheet / magnet set / download), the tiered price for
+// further units of the same photo, whether the digital file is included and
+// for which photos it is available (stickers/magnets: portraits only).
 router.get(
   '/products',
   asyncHandler(async (_req, res) => {
     const products = (await runQuery<ProductDoc>(col(COL.products)))
-      .filter((p) => p.active === 1)
-      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map(productView)
+      .filter((p) => p.active)
+      .sort((a, b) => a.sort_order - b.sort_order)
       .map((p) => ({
         id: p.id,
+        code: p.code,
         name: p.name,
         description: p.description,
         type: p.type,
+        kind: p.kind,
         price_cents: p.price_cents,
+        additional_price_cents: p.additional_price_cents,
+        includes_digital: p.includes_digital,
+        scope: p.scope,
         currency: p.currency,
       }));
     res.json({ products });
@@ -179,10 +181,10 @@ router.get(
   '/photos',
   requireParent,
   asyncHandler(async (req, res) => {
-    const [photos, purchased, inCart] = await Promise.all([
+    const [photos, purchased, cartStates] = await Promise.all([
       getVisiblePhotos(req.parent!.emailId),
       purchasedDigitalPhotoIds(req.parent!.emailId),
-      cartDigitalPhotoIds(req.parent!.emailId),
+      cartPhotoStates(req.parent!.emailId),
     ]);
 
     // Resolve the (internal) child names so each individual order can be titled
@@ -215,10 +217,13 @@ router.get(
       // Short-lived signed URLs to watermarked variants only. No IDs/paths leak.
       thumbUrl: `/files/preview-image?token=${signFileToken(p.id, 'thumb', 3600)}`,
       previewUrl: `/files/preview-image?token=${signFileToken(p.id, 'preview', 3600)}`,
-      // Whether the digital download is already owned / already in the cart, so
-      // the UI can prevent buying the same photo a second time.
+      // Whether the digital download is already owned, whether anything for
+      // this photo is in the cart and whether the digital file is already
+      // covered by the cart (download line or a print that includes it), so
+      // the UI can prevent buying the same download a second time.
       purchased: purchased.has(p.id),
-      inCart: inCart.has(p.id),
+      inCart: (cartStates.get(p.id)?.lines ?? 0) > 0,
+      digitalInCart: cartStates.get(p.id)?.digital ?? false,
     });
 
     // Build the presentation groups:
@@ -278,8 +283,12 @@ router.get(
           productId: i.product_id,
           productName: i.product_name,
           productType: i.product_type,
+          productKind: i.product_kind,
+          includesDigital: i.includes_digital,
           qty: i.qty,
           unitPriceCents: i.unit_price_cents,
+          additionalPriceCents: i.additional_price_cents,
+          lineTotalCents: i.line_total_cents,
           thumbUrl: `/files/preview-image?token=${signFileToken(i.photo_id, 'thumb', 3600)}`,
         })),
       },
@@ -295,8 +304,8 @@ router.post(
       z.object({ photoId: z.string(), productId: z.string(), qty: z.number().int().min(1).max(99).default(1) }),
       req.body,
     );
-    await addToCart(req.parent!.emailId, photoId, productId, qty);
-    res.json({ ok: true });
+    const result = await addToCart(req.parent!.emailId, photoId, productId, qty);
+    res.json({ ok: true, removedDigital: result.removedDigital });
   }),
 );
 
@@ -342,10 +351,13 @@ router.post(
       req.body ?? {},
     );
     const cart = await getCart(req.parent!.emailId);
+    // Tiered pricing (first unit vs. every further unit) has no constant unit
+    // price, so every cart line becomes ONE Stripe line item carrying the line
+    // total; the quantity is part of the label instead.
     const lines = cart.items.map((i) => ({
-      name: `${i.product_name}`,
-      amountCents: i.unit_price_cents,
-      qty: i.qty,
+      name: i.qty > 1 ? `${i.qty}× ${i.product_name}` : i.product_name,
+      amountCents: i.line_total_cents,
+      qty: 1,
     }));
     const { orderId } = await beginCheckout(
       req.parent!.emailId,
@@ -409,16 +421,19 @@ router.get(
           photoId: i.photo_id,
           productName: i.product_name,
           productType: i.product_type,
+          productKind: i.product_kind,
+          includesDigital: i.includes_digital,
           childName: i.child_name,
           fileName: stripExtension(i.original_filename),
           qty: i.qty,
           unitPriceCents: i.unit_price_cents,
+          additionalPriceCents: i.additional_price_cents,
+          lineTotalCents: i.line_total_cents,
           thumbUrl: `/files/preview-image?token=${signFileToken(i.photo_id, 'thumb', 3600)}`,
           previewUrl: `/files/preview-image?token=${signFileToken(i.photo_id, 'preview', 3600)}`,
-          downloadUrl:
-            i.product_type === 'digital' && i.download_token
-              ? `/files/download/${i.download_token}`
-              : null,
+          // Downloads exist for "Nur digital" lines AND for prints that include
+          // the digital file (getOrderForEmail only sets the token for those).
+          downloadUrl: i.download_token ? `/files/download/${i.download_token}` : null,
         })),
       },
     });
@@ -471,7 +486,10 @@ function formatMoney(cents: number, currency: string): string {
 
 async function sendConfirmationEmail(email: string, order: NonNullable<Awaited<ReturnType<typeof getOrderForEmail>>>) {
   const summary = order.items
-    .map((i) => `• ${i.qty}× ${i.product_name} – ${formatMoney(i.unit_price_cents, order.currency)}`)
+    .map((i) => {
+      const extra = i.includes_digital ? ' (inkl. digitaler Datei)' : '';
+      return `• ${i.qty}× ${i.product_name}${extra} – ${formatMoney(i.line_total_cents, order.currency)}`;
+    })
     .join('\n');
   const link = `${config.publicAppUrl}/bestellung/${order.id}`;
   const hasPrint = order.items.some((i) => i.product_type === 'print');

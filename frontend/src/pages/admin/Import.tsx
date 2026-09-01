@@ -920,7 +920,7 @@ function Step1Data({
           onChange={(e) => setText(e.target.value)}
           rows={6}
           placeholder={EXAMPLE}
-          style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.85rem' }}
+          style={{ width: '100%', fontSize: '0.85rem' }}
         />
         <div className="row" style={{ marginTop: 10 }}>
           <button className="btn" onClick={previewFromPaste} disabled={loading || !text.trim()}>

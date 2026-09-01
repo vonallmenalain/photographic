@@ -64,13 +64,18 @@ umgesetzt**, **wie**, und **was musst du selbst einrichten**.
 
 ## Admin-Workflow (Konzept 8, 16.4)
 - Upload (Mehrfach), Fotoverwaltung (zuordnen, veröffentlichen/zurückziehen,
-  neu verarbeiten, löschen), Kinderverwaltung, E-Mail-Verwaltung, Bestellungen,
+  neu verarbeiten, löschen), nachträgliches **Bearbeiten** eines erfassten
+  Auftrags (Fotos hinzufügen, umhängen, deaktivieren, löschen – auch nach der
+  Veröffentlichung), Kinderverwaltung, E-Mail-Verwaltung, Bestellungen,
   Meldungen, Produkte, Dashboard mit Kennzahlen.
 
 ## Kauf- & Bestelllogik (Konzept 9)
-- Produktarten **digital** und **Print** (Standardprodukte vorangelegt). Warenkorb,
-  Checkout (Stripe **oder** manueller Abschluss), Bestellstatus, **Download-Grants**
-  für digitale Käufe, Bestätigungs-E-Mail.
+- Produktarten **digital** und **Print** (Standardprodukte vorangelegt: Druck
+  13×18 / 20×30 cm mit inbegriffener digitaler Datei, „Nur digital“, Sticker-Bogen
+  und Magnete-Set für Einzelfotos; Staffelpreis „jedes weitere +X.-“, siehe
+  [Betrieb 6.10](06-betrieb.md)). Warenkorb, Checkout (Stripe **oder** manueller
+  Abschluss), Bestellstatus, **Download-Grants** für digitale Käufe und für Drucke
+  mit inbegriffener Datei, Bestätigungs-E-Mail.
 - Architektur erlaubt spätere Erweiterungen (Größen, Pakete, Sets, Rabatte), ohne
   die Grundlogik zu ändern.
 

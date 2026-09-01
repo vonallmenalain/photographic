@@ -79,11 +79,11 @@ optional SMTP/Stripe), ist Schritt für Schritt in [`docs/`](docs/) beschrieben.
 | Familienlogik | E-Mail ↔ Kind als n:m (Mutter+Vater, mehrere Kinder, Geschwister) |
 | Klassenfotos | Gruppen-/Klassenfoto „für die ganze Klasse sichtbar“ → alle Familien des Events sehen es automatisch; optional zusätzlich einzelnen E-Mails zuweisbar |
 | Veröffentlichungs-Workflow | Event-Status steuert die Sichtbarkeit; zugeordnete Fotos werden sichtbar, sobald das Event „published“ ist |
-| Warenkorb & Kauf | Produkte (digital/Print), Warenkorb, Checkout (Stripe-ready oder manuell), Bestellstatus |
+| Warenkorb & Kauf | Produkte (Druck 13×18 / 20×30 mit inbegriffener digitaler Datei, „Nur digital“, Sticker-Bogen, Magnete-Set) mit Staffelpreis „jedes weitere +X.-“, Warenkorb, Checkout (Stripe-ready oder manuell), Bestellstatus – Details in [`docs/06-betrieb.md`](docs/06-betrieb.md) (Abschnitt 6.10) |
 | Nach dem Kauf | Bestellübersicht, Download-Links, Bestätigungs-E-Mail |
 | Aufbewahrung 30 Tage | `expires_at` je Event (Standard 30 Tage), nach Ablauf nicht mehr sichtbar |
 | Meldefunktion | Eltern-Formular → Admin „Meldungen“ |
-| Adminbereich | Aufträge/Fotos/Zuordnung/E-Mails (je Auftrag)/Auswertung/Bestellungen/Meldungen/Produkte |
+| Adminbereich | Aufträge (inkl. „Bearbeiten“: Fotos jederzeit hinzufügen, umhängen, deaktivieren, löschen)/Zuordnung/E-Mails (je Auftrag)/Auswertung/Bestellungen/Meldungen/Produkte |
 | Massen-Import | E-Mails + Kinder + Verknüpfungen per Copy-&-Paste oder CSV/Excel (tolerante Spaltenerkennung); **mehrere Eltern-Adressen pro Kind** (Komma-getrennt in einer Spalte oder über mehrere E-Mail-Spalten) |
 | Auto-Zuordnung | Fotos werden beim Upload automatisch dem Kind im Dateinamen zugeordnet – schon der Vorname samt Nummer (z. B. `Elin 1.jpg`) genügt; mehrdeutige Treffer bleiben unzugeordnet |
 | Statuswerte | Fotos, E-Mails, Bestellungen, Events – wie im Konzept benannt |

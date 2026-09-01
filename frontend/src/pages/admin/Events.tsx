@@ -9,14 +9,16 @@ import {
   SummaryStat,
   type EventAnalytics,
 } from './EventAnalyticsPanel';
-import { PhotoOverviewModal } from './PhotoOverviewModal';
+import { EventEditModal } from './EventEditModal';
 
 // Note: new orders are no longer created here. Capturing a new Auftrag (data
 // import → photos → publish) happens in the guided "Aufträge erfassen" wizard.
 // This page lists the existing orders as full-width, expandable rows: collapsed
-// they show the key figures plus a status dropdown (and, while "In Bearbeitung",
-// an "Auftrag bearbeiten" button); expanded they reveal the full evaluation
-// (the former "Auswertung").
+// they show the key figures, a "Bearbeiten" button (photos of the Auftrag:
+// add, re-assign, deactivate, delete – at any time, also after publishing),
+// a status dropdown and, while "In Bearbeitung", an "Erfassung fortsetzen"
+// button that re-opens the capture wizard; expanded they reveal the full
+// evaluation (the former "Auswertung").
 
 interface EventRow {
   id: string;
@@ -252,7 +254,7 @@ function EventCard({
   const [detailCurrency, setDetailCurrency] = useState(currency);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [showPhotos, setShowPhotos] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
 
   const loadDetail = async () => {
     setLoadingDetail(true);
@@ -361,11 +363,11 @@ function EventCard({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setShowPhotos(true);
+                setShowEdit(true);
               }}
-              title="Alle Fotos und E-Mail-Adressen dieses Auftrags zur Kontrolle anzeigen"
+              title="Fotos dieses Auftrags bearbeiten: hinzufügen, zuordnen, deaktivieren oder löschen – jederzeit, auch nach der Veröffentlichung"
             >
-              Fotos
+              Bearbeiten
             </button>
             <select
               value={ev.status}
@@ -381,8 +383,14 @@ function EventCard({
               ))}
             </select>
             {ev.status === 'draft' && (
-              <button className="btn secondary small" type="button" onClick={edit} disabled={busy}>
-                Auftrag bearbeiten
+              <button
+                className="btn secondary small"
+                type="button"
+                onClick={edit}
+                disabled={busy}
+                title="Den Auftrag im Assistenten „Aufträge erfassen“ weiter erfassen"
+              >
+                Erfassung fortsetzen
               </button>
             )}
             <button
@@ -435,11 +443,16 @@ function EventCard({
         </div>
       )}
 
-      {showPhotos && (
-        <PhotoOverviewModal
+      {showEdit && (
+        <EventEditModal
           eventId={ev.id}
           eventName={ev.name}
-          onClose={() => setShowPhotos(false)}
+          onClose={() => setShowEdit(false)}
+          onChanged={() => {
+            // Foto-Anzahl u. ä. in der Übersicht aktualisieren.
+            void onChanged();
+            if (expanded) void loadDetail();
+          }}
         />
       )}
     </div>

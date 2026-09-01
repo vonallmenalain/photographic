@@ -2,17 +2,38 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError, imageUrl } from '../../api/client';
 import { Alert, Spinner, TrustNote } from '../../components/common';
+import { ProductMockup, hasMockup } from '../../components/ProductMockups';
 import { useCart } from '../../context/Cart';
-import { formatPrice } from '../../lib/format';
+import { formatPrice, hasTieredPrice } from '../../lib/format';
 
 interface CartItem {
   id: string;
   photoId: string;
   productName: string;
   productType: string;
+  productKind?: string;
+  includesDigital?: boolean;
   qty: number;
   unitPriceCents: number;
+  additionalPriceCents?: number | null;
+  lineTotalCents?: number;
   thumbUrl: string;
+}
+
+/** Line total with tiered prices (falls back to unit × qty for older lines). */
+function lineTotal(item: CartItem): number {
+  return typeof item.lineTotalCents === 'number'
+    ? item.lineTotalCents
+    : item.unitPriceCents * item.qty;
+}
+
+/** One-line description of what a cart line contains. */
+function lineDescription(item: CartItem): string {
+  if (item.productType === 'digital') return 'Digitaler Download in voller Auflösung';
+  if (item.includesDigital) return '✓ Digitale Datei inbegriffen · wird gedruckt und per Post versandt';
+  if (item.productKind === 'sticker') return 'Sticker-Bogen · wird gedruckt und per Post versandt';
+  if (item.productKind === 'magnet') return 'Magnete-Set · wird produziert und per Post versandt';
+  return 'Wird gedruckt und per Post versandt';
 }
 interface CartData {
   total_cents: number;
@@ -158,24 +179,29 @@ export default function Cart() {
             <ul className="list-reset">
               {cart.items.map((item) => (
                 <li key={item.id} className="line-item">
-                  <img
-                    src={imageUrl(item.thumbUrl)}
-                    alt={`Vorschau: ${item.productName}`}
-                    width={64}
-                    height={64}
-                    style={{ borderRadius: 8, objectFit: 'cover' }}
-                    draggable={false}
-                  />
+                  {/* Sticker/magnet lines show the product mockup with the
+                      parent's photo; everything else the plain thumbnail. */}
+                  {hasMockup(item.productKind) ? (
+                    <ProductMockup kind={item.productKind} src={item.thumbUrl} className="mock-mini" />
+                  ) : (
+                    <img
+                      src={imageUrl(item.thumbUrl)}
+                      alt={`Vorschau: ${item.productName}`}
+                      width={64}
+                      height={64}
+                      style={{ borderRadius: 8, objectFit: 'cover' }}
+                      draggable={false}
+                    />
+                  )}
                   <div className="li-main">
                     <strong>{item.productName}</strong>
-                    {item.productType === 'digital' ? (
-                      <div className="muted" style={{ fontSize: '0.85rem' }}>
-                        Digitaler Download
-                      </div>
-                    ) : (
+                    <div className="muted" style={{ fontSize: '0.85rem' }}>
+                      {lineDescription(item)}
+                    </div>
+                    {item.productType !== 'digital' && (
                       <div
                         className="muted"
-                        style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}
+                        style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}
                       >
                         <label htmlFor={`qty-${item.id}`}>Menge</label>
                         <input
@@ -194,12 +220,16 @@ export default function Cart() {
                           }}
                           style={{ width: 64, padding: '4px 8px' }}
                         />
+                        {hasTieredPrice(item.unitPriceCents, item.additionalPriceCents) && (
+                          <span>
+                            1× {formatPrice(item.unitPriceCents, cart.currency)}, jedes weitere{' '}
+                            {formatPrice(item.additionalPriceCents ?? 0, cart.currency)}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
-                  <div className="li-price">
-                    {formatPrice(item.unitPriceCents * item.qty, cart.currency)}
-                  </div>
+                  <div className="li-price">{formatPrice(lineTotal(item), cart.currency)}</div>
                   <button className="btn ghost small li-action" onClick={() => remove(item.id)}>
                     Entfernen
                   </button>
@@ -216,10 +246,10 @@ export default function Cart() {
 
           {hasPrint && (
             <div className="card mt">
-              <h2 style={{ marginTop: 0, fontSize: '1.1rem' }}>Lieferadresse für ausgedruckte Fotos</h2>
+              <h2 style={{ marginTop: 0, fontSize: '1.1rem' }}>Lieferadresse für gedruckte Produkte</h2>
               <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
-                Ihre Bestellung enthält Fotos zum Ausdrucken. Bitte geben Sie an, wohin wir die
-                gedruckten Fotos senden dürfen. Der Versand erfolgt in ca. 3–4 Wochen.
+                Ihre Bestellung enthält gedruckte Produkte (Fotos, Sticker oder Magnete). Bitte geben
+                Sie an, wohin wir sie senden dürfen. Der Versand erfolgt in ca. 3–4 Wochen.
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                 <AddressField
@@ -284,7 +314,8 @@ export default function Cart() {
           <div style={{ marginTop: 18 }}>
             <TrustNote>
               Der Kauf ist nur mit Ihrer bestätigten E-Mail-Adresse möglich. Nach dem Kauf erhalten
-              Sie eine Bestätigung und – bei digitalen Produkten – Ihre Download-Dateien.
+              Sie eine Bestätigung und Ihre Download-Dateien – für digitale Bestellungen ebenso wie
+              für Drucke, bei denen die digitale Datei inbegriffen ist.
             </TrustNote>
           </div>
         </>

@@ -41,6 +41,9 @@ export const COL = {
   // Pro (Auftrag, E-Mail-Adresse) protokollierter Einladungs-Versand, damit im
   // Versand-Popup sichtbar ist, an welche Adressen die Einladung bereits ging.
   eventInvitations: 'event_invitations',
+  // Kleine Schlüssel/Wert-Sammlung für app-weite Einstellungen und Migrations-
+  // Marker (z. B. die Version des eingespielten Produktkatalogs).
+  settings: 'settings',
   auditLog: 'audit_log',
 } as const;
 
