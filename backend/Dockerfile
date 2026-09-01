@@ -24,10 +24,12 @@ ENV NODE_ENV=production
 RUN apt-get update && apt-get install -y --no-install-recommends \
         fontconfig fonts-dejavu-core fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
-# Ship the website display font(s) so the watermark uses the SAME typeface as
-# the rest of the site (Kalam by default; see IMG_WATERMARK_FONT_FAMILY).
-# Anything dropped into backend/assets/fonts is installed and registered here,
-# so adding/swapping a font is just a file + an env var – no code change.
+# Ship the website font(s) so the watermark uses the SAME typeface as the rest
+# of the site. The site uses "Comic Sans MS"; since that font is proprietary,
+# the image bundles the free, OFL-licensed "Comic Neue" (see
+# IMG_WATERMARK_FONT_FAMILY). Anything dropped into backend/assets/fonts is
+# installed and registered here, so adding/swapping a font – e.g. a licensed
+# Comic Sans MS TTF – is just a file + an env var, no code change.
 COPY assets/fonts/ /usr/share/fonts/truetype/website/
 RUN fc-cache -f
 COPY package.json package-lock.json* ./

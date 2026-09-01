@@ -173,16 +173,17 @@ export const config = {
     thumbQuality: int('IMG_THUMB_QUALITY', 58),
     watermarkText: optional('IMG_WATERMARK_TEXT', 'Vorschau'),
     // Font family used for the watermark text. Kept configurable so the
-    // watermark always matches the typeface used across the website (currently
-    // "Kalam", the hand-lettered display font of the parent view). Change this
-    // in ONE place when the site font changes – just make sure the chosen font
-    // is actually installed in the runtime image (see backend/Dockerfile, which
-    // ships the bundled fonts from backend/assets/fonts). The fallbacks are the
-    // metric-compatible families we always ship so the watermark never silently
-    // disappears if the primary font is missing.
+    // watermark always matches the typeface used across the website: the site
+    // uses "Comic Sans MS". That font is proprietary (Microsoft) and cannot be
+    // bundled with the image, so the runtime image ships "Comic Neue" – the
+    // free, OFL-licensed sibling of Comic Sans – from backend/assets/fonts and
+    // the watermark renders with it. Drop a licensed Comic Sans MS TTF into
+    // backend/assets/fonts and it is picked up automatically (first in the
+    // list). The remaining fallbacks are the families we always install so the
+    // watermark never silently disappears if a font is missing.
     watermarkFontFamily: optional(
       'IMG_WATERMARK_FONT_FAMILY',
-      "'Kalam', 'Liberation Sans', 'DejaVu Sans', Arial, Helvetica, sans-serif",
+      "'Comic Sans MS', 'Comic Neue', 'Liberation Sans', 'DejaVu Sans', Arial, Helvetica, sans-serif",
     ),
   },
 

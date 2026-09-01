@@ -13,6 +13,12 @@ import {
 import { config } from '../config';
 import { newId } from '../lib/ids';
 import { normalizeEmail } from '../lib/validation';
+import {
+  PRODUCT_CATALOG,
+  PRODUCT_CATALOG_VERSION,
+  RETIRED_PRODUCT_NAMES,
+  type ProductDoc,
+} from '../services/products';
 
 /**
  * Firestore needs no schema, but we still seed sensible defaults (a starter
@@ -20,8 +26,7 @@ import { normalizeEmail } from '../lib/validation';
  * container start.
  */
 export async function migrate(): Promise<void> {
-  await ensureDefaultProducts();
-  await ensurePrintProduct16x21();
+  await ensureProductCatalog();
   await ensureProductsCurrency();
   await ensureAdminFromEnv();
   await ensureAdminEmail();
@@ -76,77 +81,91 @@ async function normalizeOrderStatuses(): Promise<void> {
   console.log(`[migrate] normalised ${updated} legacy order status(es)`);
 }
 
-async function ensureDefaultProducts(): Promise<void> {
-  const snap = await col(COL.products).limit(1).get();
-  if (!snap.empty) return;
-
-  const defaults = [
-    {
-      name: 'Digitaler Download (hohe Auflösung)',
-      description: 'Originalfoto in voller Auflösung, ohne Wasserzeichen, als Download.',
-      type: 'digital',
-      price_cents: 1500,
-      sort_order: 0,
-    },
-    {
-      name: 'Druck 13×18 cm',
-      description: 'Gedrucktes Foto auf Fotopapier, Format 13×18 cm.',
-      type: 'print',
-      price_cents: 600,
-      sort_order: 1,
-    },
-    {
-      name: 'Druck 16×21 cm',
-      description: 'Gedrucktes Foto auf Fotopapier, Format 16×21 cm.',
-      type: 'print',
-      price_cents: 1000,
-      sort_order: 2,
-    },
-  ];
-
-  for (const d of defaults) {
-    const id = newId('prod');
-    await setById(COL.products, id, {
-      name: d.name,
-      description: d.description,
-      type: d.type,
-      price_cents: d.price_cents,
-      currency: config.stripe.currency,
-      active: 1,
-      sort_order: d.sort_order,
-      created_at: nowIso(),
-    });
-  }
-  // eslint-disable-next-line no-console
-  console.log('[migrate] seeded default products');
-}
+const PRODUCT_CATALOG_SETTINGS_ID = 'product_catalog';
 
 /**
- * Selbstheilend: stellt sicher, dass das Druckprodukt „16×21 cm" (10.-) auch in
- * bereits bestehenden Datenbanken verfügbar ist. `ensureDefaultProducts` legt
- * Produkte nur beim allerersten Start an (leere Collection); ältere Bestände
- * kennen daher nur „13×18 cm". Diese Migration ergänzt das neue Format genau
- * einmal und ist über den Produktnamen idempotent.
+ * Spielt den aktuellen Produktkatalog (Sortiment + Preise, siehe
+ * services/products.ts) genau EINMAL pro Katalog-Version ein – auch in bereits
+ * bestehenden Datenbanken. Die eingespielte Version wird im Dokument
+ * `settings/product_catalog` gemerkt; solange sie aktuell ist, bleiben die
+ * Produkte unangetastet (nachträgliche Anpassungen per Admin-API überleben
+ * also jeden Neustart).
+ *
+ *  - Erststart (leere Sammlung): alle Katalog-Produkte werden angelegt.
+ *  - Bestehende Datenbank: vorhandene Produkte werden über ihren `code` bzw.
+ *    ihren bisherigen Namen wiedererkannt und aktualisiert (Name, Preis,
+ *    Zusatzpreis, Art, „digital inbegriffen“, Verfügbarkeit); fehlende werden
+ *    ergänzt. Nicht mehr angebotene Produkte (z. B. „Druck 16×21 cm“) werden
+ *    deaktiviert, bleiben aber für alte Bestellungen erhalten.
  */
-async function ensurePrintProduct16x21(): Promise<void> {
-  const name = 'Druck 16×21 cm';
-  const products = await runQuery<{ name?: string }>(col(COL.products));
-  if (products.length === 0) return; // Erststart: ensureDefaultProducts übernimmt
-  if (products.some((p) => (p.name ?? '').trim() === name)) return;
+async function ensureProductCatalog(): Promise<void> {
+  const marker = await getById<{ version?: number }>(COL.settings, PRODUCT_CATALOG_SETTINGS_ID);
+  if ((marker?.version ?? 0) >= PRODUCT_CATALOG_VERSION) return;
 
-  const id = newId('prod');
-  await setById(COL.products, id, {
-    name,
-    description: 'Gedrucktes Foto auf Fotopapier, Format 16×21 cm.',
-    type: 'print',
-    price_cents: 1000,
-    currency: config.stripe.currency,
-    active: 1,
-    sort_order: 2,
-    created_at: nowIso(),
+  const existing = await runQuery<ProductDoc>(col(COL.products));
+  const byCode = new Map<string, (typeof existing)[number]>();
+  const byName = new Map<string, (typeof existing)[number]>();
+  for (const p of existing) {
+    if (p.code) byCode.set(p.code, p);
+    const name = (p.name ?? '').trim();
+    if (name && !byName.has(name)) byName.set(name, p);
+  }
+
+  const claimed = new Set<string>();
+  let created = 0;
+  let updated = 0;
+  for (const entry of PRODUCT_CATALOG) {
+    const fields = {
+      code: entry.code,
+      name: entry.name,
+      description: entry.description,
+      type: entry.type,
+      kind: entry.kind,
+      price_cents: entry.price_cents,
+      additional_price_cents: entry.additional_price_cents,
+      includes_digital: entry.includes_digital ? 1 : 0,
+      scope: entry.scope,
+      currency: config.stripe.currency,
+      active: 1,
+      sort_order: entry.sort_order,
+      updated_at: nowIso(),
+    };
+    const match =
+      byCode.get(entry.code) ??
+      [entry.name, ...entry.legacy_names]
+        .map((n) => byName.get(n))
+        .find((p) => p && !claimed.has(p.id));
+    if (match) {
+      claimed.add(match.id);
+      await updateById(COL.products, match.id, fields);
+      updated += 1;
+    } else {
+      const id = newId('prod');
+      await setById(COL.products, id, { ...fields, created_at: nowIso() });
+      claimed.add(id);
+      created += 1;
+    }
+  }
+
+  // Produkte aus früheren Versionen, die nicht mehr angeboten werden.
+  let retired = 0;
+  for (const p of existing) {
+    if (claimed.has(p.id)) continue;
+    if (!RETIRED_PRODUCT_NAMES.includes((p.name ?? '').trim())) continue;
+    if (Number(p.active) === 1) {
+      await updateById(COL.products, p.id, { active: 0, updated_at: nowIso() });
+      retired += 1;
+    }
+  }
+
+  await setById(COL.settings, PRODUCT_CATALOG_SETTINGS_ID, {
+    version: PRODUCT_CATALOG_VERSION,
+    updated_at: nowIso(),
   });
   // eslint-disable-next-line no-console
-  console.log('[migrate] seeded print product 16×21');
+  console.log(
+    `[migrate] product catalogue v${PRODUCT_CATALOG_VERSION} applied: ${created} created, ${updated} updated, ${retired} retired`,
+  );
 }
 
 /**

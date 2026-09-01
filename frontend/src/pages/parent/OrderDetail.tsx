@@ -8,13 +8,24 @@ interface Item {
   photoId: string;
   productName: string;
   productType: string;
+  productKind?: string;
+  includesDigital?: boolean;
   childName: string | null;
   fileName: string;
   qty: number;
   unitPriceCents: number;
+  additionalPriceCents?: number | null;
+  lineTotalCents?: number;
   thumbUrl: string;
   previewUrl: string;
   downloadUrl: string | null;
+}
+
+/** Line total with tiered prices (falls back to unit × qty for older orders). */
+function lineTotal(item: Item): number {
+  return typeof item.lineTotalCents === 'number'
+    ? item.lineTotalCents
+    : item.unitPriceCents * item.qty;
 }
 interface Order {
   id: string;
@@ -148,7 +159,7 @@ export default function OrderDetail() {
             // Download-Zeile. Ein Klick auf die ganze Zeile lädt das Bild herunter.
             const downloadable = isDone && item.downloadUrl;
             const label = item.childName || item.fileName || item.productName;
-            const price = formatPrice(item.unitPriceCents * item.qty, order.currency);
+            const price = formatPrice(lineTotal(item), order.currency);
             // Das Vorschaubild öffnet – wie in der Galerie – die grosse Ansicht.
             const thumb = (
               <ThumbButton item={item} label={label} onOpen={() => setPreview(item)} />
@@ -157,7 +168,10 @@ export default function OrderDetail() {
             if (downloadable) {
               // Klick auf das Vorschaubild öffnet die Galerie-Vorschau
               // (ThumbButton stoppt die Weitergabe an die Zeile); ein Klick auf
-              // den Rest der Zeile startet wie bisher den Download.
+              // den Rest der Zeile startet wie bisher den Download. Das gilt
+              // für digitale Bestellungen ebenso wie für Drucke, bei denen die
+              // digitale Datei inbegriffen ist.
+              const isPrint = item.productType !== 'digital';
               return (
                 <a
                   key={i}
@@ -168,9 +182,15 @@ export default function OrderDetail() {
                 >
                   {thumb}
                   <div className="li-main">
-                    <strong>Download – {label}</strong>
+                    <strong>
+                      {isPrint
+                        ? `${item.qty > 1 ? `${item.qty}× ` : ''}${item.productName} – ${label}`
+                        : `Download – ${label}`}
+                    </strong>
                     <div className="muted" style={{ fontSize: '0.85rem' }}>
-                      Digitales Bild (hohe Auflösung)
+                      {isPrint
+                        ? 'Digitale Datei inbegriffen – zum Herunterladen klicken'
+                        : 'Digitales Bild (hohe Auflösung)'}
                     </div>
                   </div>
                   <span className="li-download-icon" aria-hidden="true">
@@ -205,6 +225,7 @@ export default function OrderDetail() {
                   {item.productType !== 'digital' && (
                     <div className="muted" style={{ fontSize: '0.85rem' }}>
                       Menge {item.qty}
+                      {item.includesDigital ? ' · Digitale Datei inbegriffen' : ''}
                     </div>
                   )}
                 </div>

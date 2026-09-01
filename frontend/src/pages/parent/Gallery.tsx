@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError, imageUrl } from '../../api/client';
 import { Alert, Spinner, TrustNote } from '../../components/common';
 import { ProtectedImage } from '../../components/ProtectedImage';
+import { ProductMockup, hasMockup } from '../../components/ProductMockups';
 import { useCart } from '../../context/Cart';
-import { formatPrice } from '../../lib/format';
+import { formatPrice, hasTieredPrice, lineTotalCents } from '../../lib/format';
 
 interface Photo {
   id: string;
@@ -15,6 +16,7 @@ interface Photo {
   previewUrl: string;
   purchased: boolean;
   inCart: boolean;
+  digitalInCart: boolean;
 }
 interface PhotoGroup {
   id: string;
@@ -24,11 +26,55 @@ interface PhotoGroup {
 }
 interface Product {
   id: string;
+  code: string;
   name: string;
   description: string;
-  type: string;
+  type: 'digital' | 'print';
+  kind: 'digital' | 'photo' | 'sticker' | 'magnet';
   price_cents: number;
+  additional_price_cents: number | null;
+  includes_digital: boolean;
+  scope: 'all' | 'portrait' | 'group';
   currency: string;
+}
+
+/** What the gallery knows about a photo's purchase/cart state (kept up to date locally). */
+interface PhotoState {
+  /** The digital file was already bought (download available under "Bestellungen"). */
+  purchased: boolean;
+  /** Anything for this photo is in the cart. */
+  inCart: boolean;
+  /** The digital file is covered by the cart: a download line or a print that includes it. */
+  digitalInCart: boolean;
+}
+
+/** Products that may be ordered for a photo (stickers/magnets: portraits only). */
+function productsForPhoto(products: Product[], isClassPhoto: boolean): Product[] {
+  return products.filter((p) =>
+    p.scope === 'portrait' ? !isClassPhoto : p.scope === 'group' ? isClassPhoto : true,
+  );
+}
+
+/** The "Nur digital" download cannot be bought twice: blocked when owned or covered by the cart. */
+function isBlocked(product: Product, state: PhotoState): boolean {
+  return product.type === 'digital' && (state.purchased || state.digitalInCart);
+}
+
+function firstSelectable(products: Product[], state: PhotoState): string {
+  return products.find((p) => !isBlocked(p, state))?.id ?? products[0]?.id ?? '';
+}
+
+/** Short facts shown beneath a product name (what is included, tiered price). */
+function productHints(p: Product): string[] {
+  const hints: string[] = [];
+  if (p.type === 'digital') hints.push('Download in voller Auflösung');
+  if (p.includes_digital) hints.push('digitale Datei inbegriffen');
+  if (p.type === 'print' && !p.includes_digital) hints.push('ohne digitale Datei');
+  if (hasTieredPrice(p.price_cents, p.additional_price_cents)) {
+    hints.push(`jedes weitere ${formatPrice(p.additional_price_cents ?? 0, p.currency)}`);
+  }
+  if (p.type === 'print') hints.push('wird per Post versandt');
+  return hints;
 }
 
 export default function Gallery() {
@@ -38,35 +84,35 @@ export default function Gallery() {
   const [error, setError] = useState('');
   // Whether the sellable products could be loaded. When this fails (or no
   // product is configured) the photos are still shown, but we explain clearly
-  // why the "in den Warenkorb" buttons are missing instead of leaving a silent,
+  // why the order controls are missing instead of leaving a silent,
   // broken-looking gallery where nothing can be ordered.
   const [productsFailed, setProductsFailed] = useState(false);
   const [active, setActive] = useState<Photo | null>(null);
-  // Digital downloads can only be bought once. Track which photos are already
-  // owned or already in the cart so the same photo can't be added twice.
-  const [purchasedIds, setPurchasedIds] = useState<Set<string>>(new Set());
-  const [cartIds, setCartIds] = useState<Set<string>>(new Set());
+  // Per-photo purchase/cart state. Seeded from the server and updated locally
+  // whenever something is added, so the controls react instantly (e.g. the
+  // download option is greyed out once a print that includes it is in the cart).
+  const [states, setStates] = useState<Record<string, PhotoState>>({});
   const { refresh: refreshCart } = useCart();
 
   useEffect(() => {
     (async () => {
-      // Load photos and the sellable products independently. Previously both ran
-      // in a single Promise.all, so a failing (or empty) product list took the
-      // whole gallery down and the parent saw nothing at all. Now the photos
+      // Load photos and the sellable products independently. A failing (or
+      // empty) product list must never take the whole gallery down: the photos
       // always render; the buy controls degrade gracefully with an explanation.
       try {
         const photoRes = await api<{ groups: PhotoGroup[] }>('/api/parent/photos');
         setGroups(photoRes.groups);
-        const purchased = new Set<string>();
-        const inCart = new Set<string>();
+        const next: Record<string, PhotoState> = {};
         for (const g of photoRes.groups) {
           for (const p of g.photos) {
-            if (p.purchased) purchased.add(p.id);
-            if (p.inCart) inCart.add(p.id);
+            next[p.id] = {
+              purchased: !!p.purchased,
+              inCart: !!p.inCart,
+              digitalInCart: !!p.digitalInCart,
+            };
           }
         }
-        setPurchasedIds(purchased);
-        setCartIds(inCart);
+        setStates(next);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Fotos konnten nicht geladen werden.');
       }
@@ -85,11 +131,28 @@ export default function Gallery() {
     })();
   }, []);
 
-  const markInCart = (photoId: string) => setCartIds((prev) => new Set(prev).add(photoId));
+  const stateOf = (p: Photo): PhotoState =>
+    states[p.id] ?? { purchased: p.purchased, inCart: p.inCart, digitalInCart: p.digitalInCart };
+
+  const onAdded = (photoId: string, product: Product) => {
+    setStates((prev) => {
+      const cur = prev[photoId] ?? { purchased: false, inCart: false, digitalInCart: false };
+      return {
+        ...prev,
+        [photoId]: {
+          ...cur,
+          inCart: true,
+          digitalInCart: cur.digitalInCart || product.type === 'digital' || product.includes_digital,
+        },
+      };
+    });
+    refreshCart();
+  };
 
   if (loading) return <Spinner label="Fotos werden geladen …" />;
 
   const totalPhotos = groups.reduce((n, g) => n + g.photos.length, 0);
+  const portraitOnlyProducts = products.filter((p) => p.scope === 'portrait');
 
   return (
     <div>
@@ -101,7 +164,7 @@ export default function Gallery() {
 
       {error && <Alert kind="error">{error}</Alert>}
 
-      {/* Ohne verfügbare Produkte gibt es keine „In den Warenkorb"-Knöpfe. Statt
+      {/* Ohne verfügbare Produkte gibt es keine Bestell-Schaltflächen. Statt
           einer stillen, scheinbar kaputten Galerie erklären wir das und bieten
           den Weg zur Hilfe an, damit sich niemand fragt, warum keine Bestellung
           möglich ist. */}
@@ -126,85 +189,86 @@ export default function Gallery() {
         </div>
       )}
 
-      {groups.map((g) => (
-        <section key={g.id} className="gallery-section">
-          <div className="gallery-section-head">
-            <h2>{g.title}</h2>
-            <div className="gallery-section-actions">
-              <span className="soft photo-count">
-                {g.photos.length} {g.photos.length === 1 ? 'Foto' : 'Fotos'}
-              </span>
+      {totalPhotos > 0 && products.length > 0 && <PriceLegend products={products} />}
+
+      {groups.map((g) => {
+        const isGroupSection = g.kind === 'group';
+        return (
+          <section key={g.id} className="gallery-section">
+            <div className="gallery-section-head">
+              <h2>{g.title}</h2>
+              <div className="gallery-section-actions">
+                <span className="soft photo-count">
+                  {g.photos.length} {g.photos.length === 1 ? 'Foto' : 'Fotos'}
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="photo-grid">
-            {g.photos.map((p) => {
-              const purchased = purchasedIds.has(p.id);
-              const inCart = cartIds.has(p.id);
-              return (
-                <figure className="photo-tile" key={p.id}>
-                  <div
-                    className="photo-media"
-                    onClick={() => setActive(p)}
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Foto vergrössern"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setActive(p);
-                      }
-                    }}
-                  >
-                    {/* Uniform, centre-cropped tiles: every photo takes up the
-                        same amount of space and is shown from its centre. */}
-                    <ProtectedImage src={p.thumbUrl} cover />
-                    <span className="photo-zoom" aria-hidden="true">
-                      ⤢ Ansehen
-                    </span>
+            {isGroupSection && portraitOnlyProducts.length > 0 && (
+              <p className="soft gallery-section-note">
+                Gruppenfotos gibt es als Druck oder als digitale Datei – Sticker und Magnete nur
+                für Einzelfotos.
+              </p>
+            )}
+            <div className="photo-grid">
+              {g.photos.map((p) => {
+                const state = stateOf(p);
+                return (
+                  <figure className="photo-tile" key={p.id}>
+                    <div
+                      className="photo-media"
+                      onClick={() => setActive(p)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Foto vergrössern"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setActive(p);
+                        }
+                      }}
+                    >
+                      {/* Uniform, centre-cropped tiles: every photo takes up the
+                          same amount of space and is shown from its centre. */}
+                      <ProtectedImage src={p.thumbUrl} cover />
+                      <span className="photo-zoom" aria-hidden="true">
+                        ⤢ Ansehen
+                      </span>
 
-                    {(purchased || inCart) && (
-                      <div className="photo-state">
-                        <span className={`pill ${purchased ? 'green' : 'blue'}`}>
-                          {purchased ? '✓ Gekauft' : '✓ Im Warenkorb'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                      {(state.purchased || state.inCart) && (
+                        <div className="photo-state">
+                          {state.purchased && <span className="pill green">✓ Download gekauft</span>}
+                          {state.inCart && <span className="pill blue">✓ Im Warenkorb</span>}
+                        </div>
+                      )}
+                    </div>
 
-                  <PhotoControls
-                    photo={p}
-                    products={products}
-                    purchased={purchased}
-                    inCart={inCart}
-                    onAdded={(photoId, productType) => {
-                      if (productType === 'digital') markInCart(photoId);
-                      refreshCart();
-                    }}
-                  />
-                </figure>
-              );
-            })}
-          </div>
-        </section>
-      ))}
+                    <PhotoControls
+                      photo={p}
+                      products={productsForPhoto(products, p.isClassPhoto)}
+                      state={state}
+                      onAdded={onAdded}
+                    />
+                  </figure>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
 
       {totalPhotos > 0 && (
         <TrustNote>
           Vorschaubilder sind mit Wasserzeichen versehen. Die hochwertige Originaldatei erhalten Sie
-          erst nach dem Kauf.
+          erst nach dem Kauf – bei jedem Druck (13×18 / 20×30 cm) ist sie inbegriffen.
         </TrustNote>
       )}
 
       {active && (
         <Lightbox
           photo={active}
-          products={products}
-          purchased={purchasedIds.has(active.id)}
-          inCart={cartIds.has(active.id)}
-          onAdded={(photoId, productType) => {
-            if (productType === 'digital') markInCart(photoId);
-            refreshCart();
-          }}
+          products={productsForPhoto(products, active.isClassPhoto)}
+          state={stateOf(active)}
+          onAdded={onAdded}
           onClose={() => setActive(null)}
         />
       )}
@@ -213,226 +277,257 @@ export default function Gallery() {
 }
 
 /**
- * Add-to-cart controls. Used both inline beneath every photo and inside the
- * enlarged preview.
+ * Compact, collapsible overview of everything that can be ordered and what it
+ * costs, so parents see the whole price list once instead of piecing it
+ * together photo by photo.
+ */
+function PriceLegend({ products }: { products: Product[] }) {
+  return (
+    <details className="price-legend card">
+      <summary>Produkte &amp; Preise im Überblick</summary>
+      <ul>
+        {products.map((p) => {
+          const hints = productHints(p);
+          if (p.scope === 'portrait') hints.push('nur für Einzelfotos');
+          return (
+            <li key={p.id}>
+              <strong>{p.name}</strong> – {formatPrice(p.price_cents, p.currency)}
+              {hints.length > 0 && <span className="soft"> · {hints.join(' · ')}</span>}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="soft price-legend-note">
+        Preise pro Foto. Die digitale Datei ist bei jedem Druck inbegriffen – Sie müssen sie nicht
+        zusätzlich bestellen.
+      </p>
+    </details>
+  );
+}
+
+/**
+ * Order controls beneath every photo (and inside the enlarged preview).
  *
- * The common case – buying the digital download – is a single click on the
- * primary button (no dropdown to operate). Print products are tucked away behind
- * a "weitere Option" toggle so the gallery stays uncluttered with 20+ photos.
- * When no digital product is configured the print picker is shown directly.
+ * All products are listed as one clearly labelled option list – no dropdown to
+ * open first – with the price at the right and a short line underneath saying
+ * what is included ("digitale Datei inbegriffen", "jedes weitere 4.-", …).
+ * Selecting a sticker or magnet product shows a mockup of the finished product
+ * built from the parent's own (watermarked) photo. One button adds the chosen
+ * product with the chosen quantity and shows the resulting price.
  */
 function PhotoControls({
   photo,
   products,
-  purchased,
-  inCart,
+  state,
   onAdded,
-  onClose,
+  large = false,
 }: {
   photo: Photo;
   products: Product[];
-  purchased: boolean;
-  inCart: boolean;
-  onAdded: (photoId: string, productType: string) => void;
-  onClose?: () => void;
+  state: PhotoState;
+  onAdded: (photoId: string, product: Product) => void;
+  /** Larger mockup (used inside the enlarged preview). */
+  large?: boolean;
 }) {
-  const digitalProduct = products.find((p) => p.type === 'digital');
-  const printProducts = products.filter((p) => p.type === 'print');
-
-  const [showPrint, setShowPrint] = useState(false);
-  const [printId, setPrintId] = useState(printProducts[0]?.id ?? '');
-  const [qty, setQty] = useState('1');
-  const [adding, setAdding] = useState<'digital' | 'print' | null>(null);
+  const [selectedId, setSelectedId] = useState(() => firstSelectable(products, state));
+  const [qtyText, setQtyText] = useState('1');
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [added, setAdded] = useState('');
+  const [notice, setNotice] = useState('');
 
-  const qtyNum = Math.min(99, Math.max(1, Math.floor(Number(qty) || 1)));
-  // A digital download that is already owned or already in the cart cannot be
-  // bought a second time.
-  const digitalBlocked = !!digitalProduct && (purchased || inCart);
+  // Keep the selection valid: when the chosen option becomes unavailable (e.g.
+  // the download was just added, or the product list changed) fall back to the
+  // first selectable product.
+  useEffect(() => {
+    const current = products.find((p) => p.id === selectedId);
+    if (!current || isBlocked(current, state)) {
+      setSelectedId(firstSelectable(products, state));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, state.purchased, state.digitalInCart]);
 
-  const add = async (productId: string, type: string, quantity: number, successMsg: string) => {
+  const selected = products.find((p) => p.id === selectedId) ?? null;
+  const qty = Math.min(99, Math.max(1, Math.floor(Number(qtyText) || 1)));
+  const isDigital = selected?.type === 'digital';
+  const effectiveQty = isDigital ? 1 : qty;
+  const total = selected
+    ? lineTotalCents(selected.price_cents, selected.additional_price_cents, effectiveQty)
+    : 0;
+  const currency = selected?.currency ?? products[0]?.currency ?? 'chf';
+
+  const select = (p: Product) => {
+    if (isBlocked(p, state)) return;
+    setSelectedId(p.id);
     setError('');
-    setAdding(type === 'digital' ? 'digital' : 'print');
+    setNotice('');
+  };
+
+  const changeQty = (next: number) => setQtyText(String(Math.min(99, Math.max(1, next))));
+
+  const add = async () => {
+    if (!selected) return;
+    setError('');
+    setNotice('');
+    setBusy(true);
     try {
-      await api('/api/parent/cart', {
+      const res = await api<{ ok: boolean; removedDigital?: boolean }>('/api/parent/cart', {
         method: 'POST',
-        body: { photoId: photo.id, productId, qty: quantity },
+        body: { photoId: photo.id, productId: selected.id, qty: effectiveQty },
       });
-      onAdded(photo.id, type);
-      if (onClose) {
-        onClose();
-      } else {
-        setAdded(successMsg);
-      }
+      onAdded(photo.id, selected);
+      setQtyText('1');
+      setNotice(
+        res.removedDigital
+          ? '✓ Im Warenkorb. Der separate Download wurde entfernt – die digitale Datei ist im Druck bereits inbegriffen.'
+          : `✓ ${effectiveQty > 1 ? `${effectiveQty}× ` : ''}${selected.name} im Warenkorb.`,
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Konnte nicht hinzugefügt werden.');
     } finally {
-      setAdding(null);
+      setBusy(false);
     }
   };
 
-  const selectedPrint = printProducts.find((p) => p.id === printId);
+  if (products.length === 0) return null;
 
   return (
-    <div className="photo-buy">
+    <div className={`photo-buy${large ? ' large' : ''}`}>
       {error && <Alert kind="error">{error}</Alert>}
 
-      {/* Primary action: the digital download as a one-click purchase. */}
-      {digitalProduct &&
-        (digitalBlocked ? (
-          <>
-            <Alert kind="info">
-              {purchased
-                ? 'Dieses Foto haben Sie bereits als digitalen Download gekauft.'
-                : 'Dieses Foto liegt bereits als digitaler Download in Ihrem Warenkorb.'}
-            </Alert>
-            <Link to={purchased ? '/bestellungen' : '/warenkorb'} className="btn block small">
-              {purchased ? 'Zu den Bestellungen' : 'Zum Warenkorb'}
-            </Link>
-          </>
-        ) : (
-          <button
-            className="btn block small"
-            onClick={() =>
-              add(digitalProduct.id, 'digital', 1, '✓ Download im Warenkorb.')
-            }
-            disabled={adding !== null}
-          >
-            {adding === 'digital'
-              ? 'Wird hinzugefügt …'
-              : `Digital in den Warenkorb · ${formatPrice(digitalProduct.price_cents, digitalProduct.currency)}`}
-          </button>
-        ))}
-
-      {/* Secondary option: print products behind a lightweight toggle. */}
-      {printProducts.length > 0 &&
-        (digitalProduct ? (
-          <>
+      <div className="product-options" role="radiogroup" aria-label="Produkt wählen">
+        {products.map((p) => {
+          const blocked = isBlocked(p, state);
+          const checked = p.id === selectedId && !blocked;
+          const hints = blocked
+            ? [state.purchased ? 'bereits gekauft – siehe Bestellungen' : 'bereits im Warenkorb bzw. im Druck inbegriffen']
+            : productHints(p);
+          return (
             <button
               type="button"
-              className="linklike buy-more-toggle"
-              aria-expanded={showPrint}
-              onClick={() => setShowPrint((v) => !v)}
+              key={p.id}
+              role="radio"
+              aria-checked={checked}
+              aria-disabled={blocked || undefined}
+              className={`product-option${checked ? ' selected' : ''}${blocked ? ' blocked' : ''}`}
+              onClick={() => select(p)}
             >
-              {showPrint ? '− Druck-Optionen ausblenden' : '+ Auch als Druck bestellen'}
+              <span className="product-option-radio" aria-hidden="true" />
+              <span className="product-option-main">
+                <span className="product-option-name">{p.name}</span>
+                <span className="product-option-sub">
+                  {hints.map((h, i) => (
+                    <span key={h} className={h === 'digitale Datei inbegriffen' ? 'incl' : undefined}>
+                      {i > 0 ? ' · ' : ''}
+                      {h === 'digitale Datei inbegriffen' ? '✓ ' : ''}
+                      {h}
+                    </span>
+                  ))}
+                </span>
+              </span>
+              <span className="product-option-price">{formatPrice(p.price_cents, p.currency)}</span>
             </button>
-            {showPrint && (
-              <PrintPicker
-                photoId={photo.id}
-                printProducts={printProducts}
-                printId={printId}
-                setPrintId={setPrintId}
-                qty={qty}
-                setQty={setQty}
-                qtyNum={qtyNum}
-                busy={adding === 'print'}
-                onAdd={() =>
-                  selectedPrint &&
-                  add(selectedPrint.id, 'print', qtyNum, '✓ Druck im Warenkorb.')
-                }
-              />
-            )}
-          </>
-        ) : (
-          // No digital product configured → the print picker is the main control.
-          <PrintPicker
-            photoId={photo.id}
-            printProducts={printProducts}
-            printId={printId}
-            setPrintId={setPrintId}
-            qty={qty}
-            setQty={setQty}
-            qtyNum={qtyNum}
-            busy={adding === 'print'}
-            onAdd={() =>
-              selectedPrint &&
-              add(selectedPrint.id, 'print', qtyNum, '✓ Druck im Warenkorb.')
-            }
-          />
-        ))}
-
-      {added && <p className="buy-success">{added}</p>}
-    </div>
-  );
-}
-
-function PrintPicker({
-  photoId,
-  printProducts,
-  printId,
-  setPrintId,
-  qty,
-  setQty,
-  qtyNum,
-  busy,
-  onAdd,
-}: {
-  photoId: string;
-  printProducts: Product[];
-  printId: string;
-  setPrintId: (id: string) => void;
-  qty: string;
-  setQty: (v: string) => void;
-  qtyNum: number;
-  busy: boolean;
-  onAdd: () => void;
-}) {
-  const selectedPrint = printProducts.find((p) => p.id === printId) ?? printProducts[0];
-  return (
-    <>
-      <div className="buy-row">
-        <select
-          value={printId}
-          onChange={(e) => setPrintId(e.target.value)}
-          aria-label="Druckprodukt auswählen"
-        >
-          {printProducts.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} – {formatPrice(p.price_cents, p.currency)}
-            </option>
-          ))}
-        </select>
-        <input
-          id={`qty-${photoId}`}
-          className="qty-input"
-          type="number"
-          inputMode="numeric"
-          aria-label="Menge"
-          title="Menge"
-          min={1}
-          max={99}
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          onBlur={() => setQty(String(qtyNum))}
-        />
+          );
+        })}
       </div>
-      <button type="button" className="btn secondary block small" onClick={onAdd} disabled={busy || !printId}>
-        {busy
-          ? 'Wird hinzugefügt …'
-          : selectedPrint
-            ? `Druck in den Warenkorb · ${formatPrice(selectedPrint.price_cents * qtyNum, selectedPrint.currency)}`
-            : 'Druck in den Warenkorb'}
-      </button>
-    </>
+
+      {selected && (
+        <div className="product-detail">
+          {hasMockup(selected.kind) && (
+            <div className="product-mockup-wrap">
+              <ProductMockup
+                kind={selected.kind}
+                src={photo.thumbUrl}
+                className={large ? 'mock-large' : undefined}
+              />
+              <p className="product-mockup-note">
+                Unverbindliche Vorschau mit Ihrem Foto – das Wasserzeichen erscheint nur hier, nicht
+                auf dem fertigen Produkt. Ausschnitt und Farben können leicht abweichen.
+              </p>
+            </div>
+          )}
+
+          {!isDigital && (
+            <div className="qty-row">
+              <span className="qty-label" id={`qty-label-${photo.id}`}>
+                Menge
+              </span>
+              <div className="qty-stepper" role="group" aria-labelledby={`qty-label-${photo.id}`}>
+                <button
+                  type="button"
+                  onClick={() => changeQty(qty - 1)}
+                  disabled={qty <= 1 || busy}
+                  aria-label="Menge verringern"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={99}
+                  value={qtyText}
+                  onChange={(e) => setQtyText(e.target.value)}
+                  onBlur={() => setQtyText(String(qty))}
+                  aria-label="Menge"
+                />
+                <button
+                  type="button"
+                  onClick={() => changeQty(qty + 1)}
+                  disabled={qty >= 99 || busy}
+                  aria-label="Menge erhöhen"
+                >
+                  +
+                </button>
+              </div>
+              {qty > 1 && hasTieredPrice(selected.price_cents, selected.additional_price_cents) && (
+                <span className="qty-hint">
+                  1× {formatPrice(selected.price_cents, currency)} + {qty - 1}×{' '}
+                  {formatPrice(selected.additional_price_cents ?? 0, currency)}
+                </span>
+              )}
+            </div>
+          )}
+
+          <button type="button" className="btn block" onClick={add} disabled={busy}>
+            {busy ? 'Wird hinzugefügt …' : `In den Warenkorb · ${formatPrice(total, currency)}`}
+          </button>
+        </div>
+      )}
+
+      {notice && <p className="buy-success">{notice}</p>}
+
+      {state.inCart && (
+        <Link to="/warenkorb" className="linklike buy-cart-link">
+          Zum Warenkorb
+        </Link>
+      )}
+    </div>
   );
 }
 
 function Lightbox({
   photo,
   products,
-  purchased,
-  inCart,
+  state,
   onAdded,
   onClose,
 }: {
   photo: Photo;
   products: Product[];
-  purchased: boolean;
-  inCart: boolean;
-  onAdded: (photoId: string, productType: string) => void;
+  state: PhotoState;
+  onAdded: (photoId: string, product: Product) => void;
   onClose: () => void;
 }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const previewSrc = useMemo(() => imageUrl(photo.previewUrl), [photo.previewUrl]);
+
   return (
     <div className="lightbox" onClick={onClose}>
       <div className="inner" onClick={(e) => e.stopPropagation()}>
@@ -440,23 +535,13 @@ function Lightbox({
           ×
         </button>
         <img
-          src={imageUrl(photo.previewUrl)}
+          src={previewSrc}
           alt="Vergrösserte Vorschau des Fotos (mit Wasserzeichen)"
           draggable={false}
           onContextMenu={(e) => e.preventDefault()}
         />
-        <div
-          className="lb-actions"
-          style={{ flexDirection: 'column', alignItems: 'stretch', maxWidth: 420, margin: '14px auto 0' }}
-        >
-          <PhotoControls
-            photo={photo}
-            products={products}
-            purchased={purchased}
-            inCart={inCart}
-            onAdded={onAdded}
-            onClose={onClose}
-          />
+        <div className="lb-actions lb-actions-buy">
+          <PhotoControls photo={photo} products={products} state={state} onAdded={onAdded} large />
         </div>
       </div>
     </div>

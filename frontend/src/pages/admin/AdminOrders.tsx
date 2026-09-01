@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../../api/client';
 import { Alert, Modal, SendToSelfCheckbox, Spinner, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
-import { formatPrice, formatDate } from '../../lib/format';
+import { formatPrice, formatDate, productKindLabel } from '../../lib/format';
 
 interface PrintItem {
   photo_id: string;
   product_name: string;
+  kind?: string;
   qty: number;
   child_name: string | null;
 }
@@ -35,8 +36,12 @@ interface DetailItem {
   photo_id: string;
   product_name: string;
   product_type?: string;
+  product_kind?: string;
+  includes_digital?: number;
   qty: number;
   unit_price_cents: number;
+  additional_price_cents?: number | null;
+  line_total_cents?: number;
   original_filename: string;
 }
 interface OrderDetail {
@@ -320,7 +325,7 @@ function OrderDetailBody({ loading, detail }: { loading: boolean; detail?: Order
         <div>
           <h3 style={{ margin: '0 0 6px' }}>Zum Ausdrucken</h3>
           <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0 }}>
-            Diese Positionen enthalten ein Druckprodukt und müssen versendet werden.
+            Diese Positionen (Fotos, Sticker, Magnete) müssen produziert und versendet werden.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
             {printItems.map((i) => (
@@ -355,10 +360,20 @@ function OrderDetailBody({ loading, detail }: { loading: boolean; detail?: Order
             {items.map((i) => (
               <tr key={i.id}>
                 <td>{i.product_name}</td>
-                <td>{i.product_type === 'print' ? 'Druck' : 'Digital'}</td>
+                <td>
+                  {productKindLabel(i.product_kind, i.product_type)}
+                  {i.includes_digital === 1 ? ' + Digital' : ''}
+                </td>
                 <td className="muted">{i.original_filename}</td>
                 <td>{i.qty}</td>
-                <td>{formatPrice(i.unit_price_cents * i.qty, order.currency)}</td>
+                <td>
+                  {formatPrice(
+                    typeof i.line_total_cents === 'number'
+                      ? i.line_total_cents
+                      : i.unit_price_cents * i.qty,
+                    order.currency,
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

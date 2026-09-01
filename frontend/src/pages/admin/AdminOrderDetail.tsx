@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
-import { formatPrice, formatDate } from '../../lib/format';
+import { formatPrice, formatDate, productKindLabel } from '../../lib/format';
 
 interface ShippingAddress {
   first_name: string;
@@ -29,8 +29,12 @@ interface Item {
   photo_id: string;
   product_name: string;
   product_type?: string;
+  product_kind?: string;
+  includes_digital?: number;
   qty: number;
   unit_price_cents: number;
+  additional_price_cents?: number | null;
+  line_total_cents?: number;
   original_filename: string;
 }
 
@@ -117,7 +121,7 @@ export default function AdminOrderDetail() {
         <div className="card mb">
           <h2>Zum Ausdrucken</h2>
           <p className="muted" style={{ fontSize: '0.82rem' }}>
-            Diese Positionen enthalten ein Druckprodukt und müssen versendet werden.
+            Diese Positionen (Fotos, Sticker, Magnete) müssen produziert und versendet werden.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
             {printItems.map((i) => (
@@ -148,10 +152,20 @@ export default function AdminOrderDetail() {
             {items.map((i) => (
               <tr key={i.id}>
                 <td>{i.product_name}</td>
-                <td>{i.product_type === 'print' ? 'Druck' : 'Digital'}</td>
+                <td>
+                  {productKindLabel(i.product_kind, i.product_type)}
+                  {i.includes_digital === 1 ? ' + Digital' : ''}
+                </td>
                 <td className="muted">{i.original_filename}</td>
                 <td>{i.qty}</td>
-                <td>{formatPrice(i.unit_price_cents * i.qty, order.currency)}</td>
+                <td>
+                  {formatPrice(
+                    typeof i.line_total_cents === 'number'
+                      ? i.line_total_cents
+                      : i.unit_price_cents * i.qty,
+                    order.currency,
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

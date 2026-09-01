@@ -49,6 +49,13 @@ import {
   commitImport,
   type Mapping,
 } from '../services/import';
+import {
+  PRODUCT_KINDS,
+  PRODUCT_SCOPES,
+  productView,
+  type ProductDoc,
+} from '../services/products';
+import { itemTotalCents, resolveLine, type OrderItemDoc } from '../services/orders';
 
 const router = Router();
 
@@ -57,6 +64,8 @@ const PHOTO_STATUSES = ['uploaded', 'processed', 'assigned', 'disabled'] as cons
 // of the shopping flow and are never shown as real orders. Admins only ever set
 // one of the three customer-facing statuses below.
 const ADMIN_ORDER_STATUSES = ['pending', 'completed', 'cancelled'] as const;
+// Confirmed, revenue-bearing orders (paid and not cancelled).
+const CONFIRMED_ORDER_STATUSES = new Set(['pending', 'completed']);
 
 async function audit(action: string, detail: string, actor = 'admin') {
   await setById(COL.auditLog, newId('aud'), {
@@ -493,12 +502,16 @@ async function eventRevenueTotals(): Promise<{
 }> {
   const [orders, orderItems] = await Promise.all([
     runQuery<{ id: string; status: string }>(col(COL.orders)),
-    runQuery<{ order_id: string; photo_id: string; qty: number; unit_price_cents: number }>(
-      col(COL.orderItems),
-    ),
+    runQuery<{
+      order_id: string;
+      photo_id: string;
+      qty: number;
+      unit_price_cents: number;
+      line_total_cents?: number;
+    }>(col(COL.orderItems)),
   ]);
   const orderById = new Map(orders.map((o) => [o.id, o]));
-  const countsForRevenue = (status: string) => status === 'pending' || status === 'completed';
+  const countsForRevenue = (status: string) => CONFIRMED_ORDER_STATUSES.has(status);
 
   const relevantItems = orderItems.filter((item) => {
     const order = orderById.get(item.order_id);
@@ -514,7 +527,8 @@ async function eventRevenueTotals(): Promise<{
   for (const item of relevantItems) {
     const eventId = photoEvent.get(item.photo_id)?.event_id;
     if (!eventId) continue;
-    revenue.set(eventId, (revenue.get(eventId) ?? 0) + (item.unit_price_cents ?? 0) * (item.qty ?? 0));
+    // Line totals honour the tiered prices (first unit vs. further units).
+    revenue.set(eventId, (revenue.get(eventId) ?? 0) + itemTotalCents(item));
     let set = orderSets.get(eventId);
     if (!set) {
       set = new Set<string>();
@@ -952,7 +966,7 @@ router.get(
     const event = await getById<{ name: string; status: string }>(COL.events, eventId);
     if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
 
-    const [children, photos, childLinks, photoLinks] = await Promise.all([
+    const [children, photos, childLinks, photoLinks, allOrders, allOrderItems] = await Promise.all([
       runQuery<{ id: string; name: string }>(col(COL.children).where('event_id', '==', eventId)),
       runQuery<{
         id: string;
@@ -963,12 +977,34 @@ router.get(
         status: string;
         sort_order: number;
         created_at: string;
+        width?: number | null;
+        height?: number | null;
       }>(col(COL.photos).where('event_id', '==', eventId)),
       runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
       runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
+      runQuery<{ id: string; status: string }>(col(COL.orders)),
+      runQuery<{ order_id: string; photo_id: string }>(col(COL.orderItems)),
     ]);
 
     const childById = new Map(children.map((c) => [c.id, c.name]));
+
+    // Wie oft ein Foto in bestätigten Bestellungen vorkommt – die Bearbeitung
+    // warnt damit, bevor ein bereits bestelltes Foto deaktiviert/gelöscht wird.
+    const confirmedOrderIds = new Set(
+      allOrders.filter((o) => CONFIRMED_ORDER_STATUSES.has(o.status)).map((o) => o.id),
+    );
+    const eventPhotoIds = new Set(photos.map((p) => p.id));
+    const orderedCount = new Map<string, number>();
+    for (const it of allOrderItems) {
+      if (!eventPhotoIds.has(it.photo_id) || !confirmedOrderIds.has(it.order_id)) continue;
+      orderedCount.set(it.photo_id, (orderedCount.get(it.photo_id) ?? 0) + 1);
+    }
+    // Doppelte Dateinamen innerhalb des Auftrags (meist dasselbe Kind zweimal).
+    const filenameCounts = new Map<string, number>();
+    for (const p of photos) {
+      const key = String(p.original_filename ?? '').trim().toLowerCase();
+      if (key) filenameCounts.set(key, (filenameCounts.get(key) ?? 0) + 1);
+    }
 
     // Eltern-Adressen dieses Auftrags ermitteln: entweder über ein Kind der
     // Klasse (email_children) oder über eine direkte Fotozuweisung (photo_emails).
@@ -1023,7 +1059,15 @@ router.get(
       original_filename: p.original_filename,
       status: p.status,
       is_class_photo: Number(p.is_class_photo) === 1 ? 1 : 0,
+      visible_to_event: Number(p.visible_to_event) === 1 ? 1 : 0,
       child_id: p.child_id ?? null,
+      width: p.width ?? null,
+      height: p.height ?? null,
+      ordered_count: orderedCount.get(p.id) ?? 0,
+      duplicate_filename:
+        (filenameCounts.get(String(p.original_filename ?? '').trim().toLowerCase()) ?? 0) > 1
+          ? 1
+          : 0,
     });
     const sortPhotos = (a: (typeof photos)[number], b: (typeof photos)[number]) =>
       (a.sort_order ?? 0) - (b.sort_order ?? 0) ||
@@ -1070,6 +1114,7 @@ router.get(
         children: children.length,
         emails: emails.length,
         unassigned: unassignedPhotos.length,
+        disabled: photos.filter((p) => p.status === 'disabled').length,
       },
     });
   }),
@@ -1135,9 +1180,21 @@ router.post(
 
     // Auto-assignment by file name is on by default; pass autoAssign=0 to skip.
     const autoAssign = String((req.query.autoAssign ?? req.body?.autoAssign) ?? '1') !== '0';
-    const children = autoAssign
-      ? await runQuery<{ name: string }>(col(COL.children).where('event_id', '==', req.params.id))
-      : [];
+    // Optional explicit target (used by "Auftrag bearbeiten"): `childId` assigns
+    // every uploaded photo to that child directly (no filename matching) and
+    // `asGroup=1` marks every uploaded photo as a group/class photo.
+    const targetChildId = String((req.query.childId ?? req.body?.childId) ?? '').trim();
+    const forceGroup = String((req.query.asGroup ?? req.body?.asGroup) ?? '') === '1';
+    if (targetChildId) {
+      const child = await getById<{ event_id: string }>(COL.children, targetChildId);
+      if (!child || child.event_id !== req.params.id) {
+        throw new ApiError(404, 'Kind nicht gefunden.');
+      }
+    }
+    const children =
+      autoAssign && !targetChildId && !forceGroup
+        ? await runQuery<{ name: string }>(col(COL.children).where('event_id', '==', req.params.id))
+        : [];
 
     // Detect photos that re-use a file name already present in this Auftrag/
     // Klasse (case-insensitive). This usually means the same child was uploaded
@@ -1172,10 +1229,17 @@ router.post(
       // photo for the whole class: tick "Gruppen-/Klassenfoto" and make it
       // visible to everyone in the Auftrag. These never get assigned to a single
       // child, so we skip the per-child filename matching for them.
-      const isGroupPhoto = isGroupPhotoFilename(file.originalname);
-      // Try to recognise the child from the file name (tolerant matching).
-      const match = autoAssign && !isGroupPhoto ? matchChildByFilename(file.originalname, children) : null;
-      const childId = match && !match.ambiguous ? match.childId : null;
+      const isGroupPhoto =
+        forceGroup || (!targetChildId && isGroupPhotoFilename(file.originalname));
+      // Try to recognise the child from the file name (tolerant matching) –
+      // unless the admin picked the target child explicitly.
+      const match =
+        autoAssign && !isGroupPhoto && !targetChildId
+          ? matchChildByFilename(file.originalname, children)
+          : null;
+      const childId = isGroupPhoto
+        ? null
+        : targetChildId || (match && !match.ambiguous ? match.childId : null);
       await setById(COL.photos, id, {
         event_id: req.params.id,
         child_id: isGroupPhoto ? null : childId,
@@ -1878,12 +1942,12 @@ router.get(
       runQuery<{ status: string; total_cents: number; currency: string; created_at: string; email_id: string }>(
         col(COL.orders),
       ),
-      runQuery<{ id: string; type: string }>(col(COL.products)),
+      runQuery<ProductDoc>(col(COL.products)),
       runQuery<{ id: string; event_id: string; child_id: string | null }>(col(COL.photos)),
       runQuery<{ id: string; name: string }>(col(COL.children)),
     ]);
 
-    const productType = new Map(products.map((p) => [p.id, p.type]));
+    const productById = new Map(products.map((p) => [p.id, productView(p)]));
     const photoMap = new Map(photos.map((p) => [p.id, p]));
     const childName = new Map(children.map((c) => [c.id, c.name]));
 
@@ -1896,20 +1960,20 @@ router.get(
       orders.map(async (o) => {
         const [e, items] = await Promise.all([
           getById<{ email: string }>(COL.parentEmails, o.email_id),
-          runQuery<{ photo_id: string; product_id: string; product_name: string; qty: number }>(
-            col(COL.orderItems).where('order_id', '==', o.id),
-          ),
+          runQuery<OrderItemDoc>(col(COL.orderItems).where('order_id', '==', o.id)),
         ]);
 
-        // Items that need printing/shipping – these carry the thumbnails the
-        // admin wants to see directly for pending orders.
+        // Items that need producing/shipping (prints, stickers, magnets) – these
+        // carry the thumbnails the admin wants to see directly for pending orders.
         const printItems = items
-          .filter((it) => productType.get(it.product_id) === 'print')
-          .map((it) => {
+          .map((it) => ({ it, line: resolveLine(it, productById.get(it.product_id) ?? null) }))
+          .filter(({ line }) => line.type === 'print')
+          .map(({ it, line }) => {
             const photo = photoMap.get(it.photo_id);
             return {
               photo_id: it.photo_id,
               product_name: it.product_name,
+              kind: line.kind,
               qty: it.qty,
               child_name: photo?.child_id ? childName.get(photo.child_id) ?? null : null,
             };
@@ -1954,19 +2018,24 @@ router.get(
     const parentEmail = await getById<{ email: string }>(COL.parentEmails, orderDoc.email_id);
     const order = { ...orderDoc, email: parentEmail?.email ?? '' };
 
-    const rawItems = await runQuery<Record<string, unknown> & { photo_id: string; product_id: string }>(
+    const rawItems = await runQuery<OrderItemDoc>(
       col(COL.orderItems).where('order_id', '==', req.params.id),
     );
     const items = await Promise.all(
       rawItems.map(async (oi) => {
         const [photo, product] = await Promise.all([
           getById<{ original_filename: string }>(COL.photos, oi.photo_id),
-          getById<{ type: string }>(COL.products, oi.product_id),
+          getById<ProductDoc>(COL.products, oi.product_id),
         ]);
+        const line = resolveLine(oi, product ? productView(product) : null);
         return {
           ...oi,
           original_filename: photo?.original_filename ?? '',
-          product_type: product?.type ?? 'digital',
+          product_type: line.type,
+          product_kind: line.kind,
+          includes_digital: line.includes_digital ? 1 : 0,
+          additional_price_cents: line.additional_price_cents,
+          line_total_cents: line.line_total_cents,
         };
       }),
     );
@@ -2004,15 +2073,19 @@ router.patch(
 // kann der Admin gezielt für eine einzelne Bestellung die Versandbestätigung an
 // die zugehörige Adresse schicken.
 async function orderHasPrint(orderId: string): Promise<boolean> {
-  const orderItems = await runQuery<{ product_id: string }>(
+  const orderItems = await runQuery<{ product_id: string; product_type?: string }>(
     col(COL.orderItems).where('order_id', '==', orderId),
   );
   if (orderItems.length === 0) return false;
+  // Newer lines carry a snapshot of the product type; older ones need the product.
+  if (orderItems.some((it) => it.product_type === 'print')) return true;
+  const unknown = orderItems.filter((it) => it.product_type !== 'digital');
+  if (unknown.length === 0) return false;
   const products = await getManyById<{ type: string }>(
     COL.products,
-    orderItems.map((it) => it.product_id),
+    unknown.map((it) => it.product_id),
   );
-  return orderItems.some((it) => products.get(it.product_id)?.type === 'print');
+  return unknown.some((it) => products.get(it.product_id)?.type === 'print');
 }
 
 router.post(
@@ -2129,9 +2202,13 @@ async function buildAnalytics(filterEventId?: string) {
         runQuery<{ id: string; email_id: string; status: string; total_cents: number; currency: string; created_at: string }>(
           col(COL.orders),
         ),
-        runQuery<{ order_id: string; photo_id: string; qty: number; unit_price_cents: number }>(
-          col(COL.orderItems),
-        ),
+        runQuery<{
+          order_id: string;
+          photo_id: string;
+          qty: number;
+          unit_price_cents: number;
+          line_total_cents?: number;
+        }>(col(COL.orderItems)),
         runQuery<{ id: string; event_id: string; sent_at: string; note?: string }>(col(COL.reminders)),
       ]);
 
@@ -2172,7 +2249,8 @@ async function buildAnalytics(filterEventId?: string) {
       if (!order || !countsForRevenue(order.status)) continue;
       const eventId = photoEvent.get(item.photo_id);
       if (!eventId) continue;
-      const amount = (item.unit_price_cents ?? 0) * (item.qty ?? 0);
+      // Line totals honour the tiered prices (first unit vs. further units).
+      const amount = itemTotalCents(item);
 
       eventRevenue.set(eventId, (eventRevenue.get(eventId) ?? 0) + amount);
 
@@ -2583,12 +2661,17 @@ router.delete(
 );
 
 // --- Products ------------------------------------------------------------
+// Product fields shared by create/update. See services/products.ts for the
+// meaning of kind / additional price / includes_digital / scope.
+const productKindSchema = z.enum(PRODUCT_KINDS as [string, ...string[]]);
+const productScopeSchema = z.enum(PRODUCT_SCOPES as [string, ...string[]]);
+
 router.get(
   '/products',
   asyncHandler(async (_req, res) => {
-    const products = (await runQuery<{ sort_order: number }>(col(COL.products))).sort(
-      (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
-    );
+    const products = (await runQuery<ProductDoc>(col(COL.products)))
+      .map(productView)
+      .sort((a, b) => a.sort_order - b.sort_order);
     res.json({ products });
   }),
 );
@@ -2598,25 +2681,37 @@ router.post(
   asyncHandler(async (req, res) => {
     const data = parse(
       z.object({
+        code: z.string().trim().max(60).optional(),
         name: z.string().trim().min(1).max(200),
         description: z.string().max(2000).default(''),
         type: z.enum(['digital', 'print']),
+        kind: productKindSchema.optional(),
         price_cents: z.number().int().min(0),
+        additional_price_cents: z.number().int().min(0).nullable().optional(),
+        includes_digital: z.boolean().optional(),
+        scope: productScopeSchema.optional(),
         sort_order: z.number().int().default(0),
       }),
       req.body,
     );
     const id = newId('prod');
     await setById(COL.products, id, {
+      code: data.code ?? '',
       name: data.name,
       description: data.description,
       type: data.type,
+      kind: data.kind ?? (data.type === 'digital' ? 'digital' : 'photo'),
       price_cents: data.price_cents,
+      additional_price_cents: data.additional_price_cents ?? null,
+      includes_digital: data.type === 'print' && data.includes_digital ? 1 : 0,
+      scope: data.scope ?? 'all',
       currency: config.stripe.currency,
       active: 1,
       sort_order: data.sort_order,
       created_at: nowIso(),
+      updated_at: nowIso(),
     });
+    await audit('product.create', `${id}: ${data.name}`);
     res.json({ id });
   }),
 );
@@ -2626,18 +2721,27 @@ router.patch(
   asyncHandler(async (req, res) => {
     const data = parse(
       z.object({
+        code: z.string().trim().max(60).optional(),
         name: z.string().trim().min(1).max(200).optional(),
         description: z.string().max(2000).optional(),
+        kind: productKindSchema.optional(),
         price_cents: z.number().int().min(0).optional(),
+        additional_price_cents: z.number().int().min(0).nullable().optional(),
+        includes_digital: z.boolean().optional(),
+        scope: productScopeSchema.optional(),
         active: z.boolean().optional(),
         sort_order: z.number().int().optional(),
       }),
       req.body,
     );
+    const product = await getById<ProductDoc>(COL.products, req.params.id);
+    if (!product) throw new ApiError(404, 'Produkt nicht gefunden.');
     const map: Record<string, unknown> = { ...data };
     if (data.active !== undefined) map.active = data.active ? 1 : 0;
+    if (data.includes_digital !== undefined) map.includes_digital = data.includes_digital ? 1 : 0;
     if (Object.keys(map).length) {
-      await updateById(COL.products, req.params.id, map);
+      await updateById(COL.products, req.params.id, { ...map, updated_at: nowIso() });
+      await audit('product.update', `${req.params.id}: ${JSON.stringify(data)}`);
     }
     res.json({ ok: true });
   }),

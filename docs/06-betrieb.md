@@ -145,7 +145,8 @@ Bevor du ein Event auf „published“ setzt:
   mit denselben Kindern verknüpft. Beim Import lassen sich mehrere Adressen direkt
   erfassen (Komma-getrennt in einer Spalte oder über eine zweite `E-Mail`-Spalte).
 - **Mehrere Kinder:** eine Adresse mit mehreren Kindern verknüpfen.
-- **Falsch zugeordnetes Foto:** Zuordnung ändern oder Foto deaktivieren/löschen.
+- **Falsch zugeordnetes Foto:** Adminbereich → **Aufträge** → beim Auftrag auf **„Bearbeiten“** klicken. Im Popup lässt sich jedes Foto direkt in der Kachel einem anderen Kind zuordnen, als Gruppenfoto markieren, **deaktivieren** (für Eltern ausgeblendet, Datei und Bestellungen bleiben erhalten), wieder aktivieren oder endgültig löschen. Bereits bestellte Fotos sind mit „Bestellt ×n“ markiert und werden vor dem Deaktivieren/Löschen extra bestätigt.
+- **Fotos nachträglich ergänzen:** ebenfalls über **Aufträge → „Bearbeiten“**: oben „Fotos hinzufügen“ (Zuordnung automatisch nach Dateiname, zu einem gewählten Kind oder als Gruppenfoto) oder direkt beim Kind über **„+ Fotos“**. Der Auftrag bleibt dabei veröffentlicht – die Änderungen sind für die Eltern sofort sichtbar.
 - **Eltern finden keine Fotos:** prüfen, ob (a) Adresse exakt stimmt, (b) Kind
   verknüpft, (c) Foto nicht deaktiviert, (d) Event „published“.
 - **Meldungen der Eltern:** Adminbereich → „Meldungen“ (Status pflegen).
@@ -193,8 +194,8 @@ docker compose ps                        # Status
 | Admin-Benutzername ändern (weg von „admin“) | Im Adminbereich anmelden → **Konto** in der Seitenleiste öffnen → Benutzername (und optional E-Mail) ändern und speichern. Anschließend funktioniert die Anmeldung mit dem neuen Benutzernamen **oder** der E-Mail-Adresse. Die Umbenennung bleibt auch nach einem Neustart erhalten; `ADMIN_USERNAME` greift nur beim Erststart (solange noch kein Admin existiert). |
 | Weiteren Admin anlegen | Im Adminbereich anmelden → **Konto** → **„Weitere Administratoren“** → **„Neuen Admin anlegen“** (Benutzername, optional E-Mail, Passwort). Der neue Admin meldet sich mit eigenem Login an und kann sein Passwort selbst ändern. Alternativ per CLI: `docker compose exec backend npm run create-admin -- BENUTZERNAME "Passwort" mail@example.com`. |
 | Upload schlägt fehl (große Datei) | `MAX_UPLOAD_MB` erhöhen; Cloudflare-Free begrenzt ~100 MB/Anfrage. |
-| Previews ohne Wasserzeichen | Im Backend-Image fehlten Schriftarten – das Wasserzeichen wird als Text gerendert und bleibt ohne Font unsichtbar. Im aktuellen Image sind `fontconfig`, `fonts-dejavu-core`/`fonts-liberation` **und die Website-Schrift Kalam** (aus `backend/assets/fonts`) enthalten. Beim Start zeigt das Log `watermark : OK (fonts available)`; steht dort `BROKEN`, Image neu bauen/ziehen. Bereits ohne Wasserzeichen erzeugte Fotos neu hochladen (oder im Admin neu verarbeiten). |
-| Wasserzeichen-Schrift ändern | Das Wasserzeichen nutzt standardmäßig die Website-Schrift „Kalam“. Über `IMG_WATERMARK_FONT_FAMILY` lässt sich die Schrift anpassen; die Schriftdatei muss dazu in `backend/assets/fonts` liegen (wird beim Image-Bau installiert). Die Fallbacks am Ende des Werts (`Liberation Sans`, `DejaVu Sans`, …) sollten stehen bleiben, damit das Wasserzeichen nie unsichtbar wird. |
+| Previews ohne Wasserzeichen | Im Backend-Image fehlten Schriftarten – das Wasserzeichen wird als Text gerendert und bleibt ohne Font unsichtbar. Im aktuellen Image sind `fontconfig`, `fonts-dejavu-core`/`fonts-liberation` **und die Schrift Comic Neue** (freie Schwester von Comic Sans MS, aus `backend/assets/fonts`) enthalten. Beim Start zeigt das Log `watermark : OK (fonts available)`; steht dort `BROKEN`, Image neu bauen/ziehen. Bereits ohne Wasserzeichen erzeugte Fotos neu hochladen (oder im Admin neu verarbeiten). |
+| Wasserzeichen-Schrift ändern | Die Website nutzt überall **Comic Sans MS**. Da diese Schrift proprietär ist und nicht mitgeliefert werden darf, rendert das Backend das Wasserzeichen mit der freien, sehr ähnlichen **Comic Neue** (`backend/assets/fonts`). Legst du eine lizenzierte `Comic Sans MS`-TTF in `backend/assets/fonts` und baust das Image neu, wird sie automatisch verwendet (sie steht in `IMG_WATERMARK_FONT_FAMILY` an erster Stelle). Die Fallbacks am Ende des Werts (`Liberation Sans`, `DejaVu Sans`, …) sollten stehen bleiben, damit das Wasserzeichen nie unsichtbar wird. |
 | Foto erscheint bei Eltern nicht | Checkliste 6.3 „Eltern finden keine Fotos“. |
 | Stripe-Bestellung bleibt „Kauf gestartet“ | Webhook fehlt/falsch. Endpoint `…/webhook/stripe` und `STRIPE_WEBHOOK_SECRET` prüfen. |
 
@@ -227,6 +228,50 @@ docker compose exec backend npm run create-admin -- BENUTZERNAME "Passwort" mail
 **Notfall (ausgesperrt):** Siehe Troubleshooting – `ADMIN_PASSWORD` +
 `ADMIN_PASSWORD_RESET_ON_BOOT=true` setzen, einmal neu starten, danach den
 Schalter wieder auf `false`.
+
+## 6.10 Produkte & Preise
+
+Das Sortiment (Sammlung `products` in Firestore) wird beim Start des Backends
+aus `backend/src/services/products.ts` eingespielt – **einmal pro Katalog-
+Version** (Marker `settings/product_catalog`). Spätere Änderungen an einzelnen
+Produkten über die Admin-API (`PATCH /api/admin/products/:id`) bleiben also
+erhalten. Aktueller Katalog:
+
+| Produkt | Preis | Jedes weitere (gleiches Foto) | Digitale Datei | Erhältlich für |
+|---|---|---|---|---|
+| Druck 13×18 cm | 15.- CHF | +4.- CHF | **inbegriffen** | Einzel- und Gruppenfotos |
+| Druck 20×30 cm | 17.- CHF | +7.- CHF | **inbegriffen** | Einzel- und Gruppenfotos |
+| Nur digital (Download) | 13.- CHF | – (nur 1× pro Foto) | – | Einzel- und Gruppenfotos |
+| Sticker-Bogen (16 Stück, 3×4 cm) | 11.- CHF pro Bogen | 11.- CHF | nein | nur Einzelfotos |
+| Magnete-Set (3 Stück, 5×5 cm) | 13.- CHF pro Set | 13.- CHF | nein | nur Einzelfotos |
+
+So funktioniert die Preislogik:
+
+- **Staffelpreis pro Foto und Produkt:** Das erste Stück einer Position (z. B.
+  „Druck 13×18 cm“ von Foto A) kostet den Grundpreis, jedes weitere Stück
+  **derselben Position** den Zusatzpreis. 3× 13×18 von Foto A = 15 + 4 + 4 =
+  23.- CHF. Ein weiteres Foto (Foto B) beginnt wieder beim Grundpreis, weil auch
+  dessen digitale Datei inbegriffen ist.
+- **Digitale Datei inbegriffen:** Bei jedem Druck (13×18 / 20×30) wird mit der
+  Zahlung derselbe Download freigeschaltet wie bei „Nur digital“. Legt eine
+  Familie einen Druck in den Warenkorb, wird ein bereits vorhandener separater
+  Download desselben Fotos automatisch entfernt; umgekehrt lässt sich „Nur
+  digital“ nicht mehr hinzufügen, wenn ein Druck des Fotos im Warenkorb liegt.
+  In der Galerie ist diese Option dann ausgegraut. Sticker und Magnete enthalten
+  **keine** digitale Datei.
+- **Produkt-Vorschauen:** Wählen Eltern Sticker oder Magnete, zeigt die App
+  eine Vorschau des fertigen Produkts mit dem eigenen Foto – rein im Browser aus
+  dem **mit Wasserzeichen geschützten** Vorschaubild gebaut (es wird kein
+  neues Bild erzeugt).
+- Jede Bestellposition speichert Grundpreis, Zusatzpreis, Positionstotal und
+  Produktart als Momentaufnahme; spätere Preisänderungen ändern alte
+  Bestellungen nicht.
+
+Preise oder Namen ändern: Werte in `backend/src/services/products.ts` anpassen
+und `PRODUCT_CATALOG_VERSION` um 1 erhöhen – beim nächsten Start wird der
+Katalog einmalig neu eingespielt. Alternativ einzelne Produkte per Admin-API
+(`GET/POST/PATCH /api/admin/products`) pflegen (Felder: `name`, `price_cents`,
+`additional_price_cents`, `kind`, `includes_digital`, `scope`, `active`).
 
 ## 6.9 Sicherheits-Checkliste (vor Go-Live)
 

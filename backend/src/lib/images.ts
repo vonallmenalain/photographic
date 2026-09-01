@@ -52,11 +52,12 @@ function watermarkSvg(width: number, height: number, text: string): Buffer {
   const line = unit.repeat(repeats).slice(0, -separator.length);
   const safeLine = escapeXml(line);
   // Font family for the watermark text. Configurable (IMG_WATERMARK_FONT_FAMILY)
-  // so it stays in sync with the typeface used across the website (Kalam by
-  // default). librsvg only renders text when it can resolve a font, so the
-  // configured value keeps the metric-compatible families we always ship
-  // ("Liberation Sans"/"DejaVu Sans") as fallbacks; the matching font files
-  // are installed into the runtime image (see backend/Dockerfile).
+  // so it stays in sync with the typeface used across the website (Comic Sans
+  // MS, rendered with the bundled free "Comic Neue" in the container). librsvg
+  // only renders text when it can resolve a font, so the configured value
+  // keeps the families we always ship ("Liberation Sans"/"DejaVu Sans") as
+  // fallbacks; the font files are installed into the runtime image (see
+  // backend/Dockerfile).
   const fontFamily = config.images.watermarkFontFamily;
   const texts: string[] = [];
   for (let y = -height; y < height * 2; y += stepY) {
