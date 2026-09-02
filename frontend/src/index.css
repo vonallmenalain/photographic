@@ -63,7 +63,15 @@ p { margin: 0 0 1rem; }
 .brand-mark {
   font-family: var(--font);
   font-size: 1.85rem;
-  line-height: 1;
+  /* Comic Sans MS und Comic Neue haben ausgeprägte Ober- und Unterlängen – die
+     Schrift braucht rund 1.4em Höhe, das „g“ und das „p“ in „Photographic“
+     reichen deutlich unter die Grundlinie. Mit `line-height: 1` war die Box des
+     Schriftzugs nur 1em hoch, die Unterlängen ragten unten heraus – und auf
+     schmalen Screens schnitt sie das dort nötige `overflow: hidden` (für das
+     Kürzen mit Ellipse, siehe Media-Query weiter unten) sichtbar ab. 1.5 lässt
+     Ober- und Unterlängen komplett in der Box. Die Position des Schriftzugs
+     ändert sich dadurch nicht: er bleibt in der 64px hohen Leiste zentriert. */
+  line-height: 1.5;
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--text);
@@ -1378,6 +1386,9 @@ a.line-item-download .li-download-icon {
        content gutters) to free up room for the nav.
      • The brand may shrink and, as an absolute last resort on tiny screens,
        truncates with an ellipsis instead of colliding with the nav links.
+       NB: the `overflow: hidden` that `text-overflow: ellipsis` needs clips
+       vertically as well, so the wordmark's `line-height` (see `.brand-mark`)
+       must stay tall enough for the descenders — don't set it back to 1.
      • The action group keeps its intrinsic size and never wraps. */
   .parent-theme .appbar .container { padding-left: 14px; padding-right: 14px; }
   .parent-theme .appbar-inner { gap: 10px; }
