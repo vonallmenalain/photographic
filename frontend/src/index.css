@@ -1031,16 +1031,25 @@ tr.clickable-row { cursor: pointer; }
 }
 
 /* ==========================================================================
-   Warm beige theme — parent ("Eltern") view only.
+   Neutral grey theme — parent ("Eltern") view only.
    The whole parent experience is wrapped in `.parent-theme`, so we can re-skin
-   it into a bright, airy beige look with soft amber bokeh accents without
-   touching the admin area, which keeps its own cool blue/slate look.
+   it into a clean, neutral grey look without touching the admin area, which
+   keeps its own cool blue/slate look.
 
-   How the colours work on a LIGHT backdrop:
-   • The page background is warm sand/beige with soft golden "bokeh" glows.
-   • Text that sits directly on that backdrop is dark espresso — legible and rich.
-   • Content surfaces (cards, inputs, dropdowns …) stay on near-white cream so
-     they lift off the background with subtle depth.
+   The palette is built from the two anchor tones:
+   • Whitesmoke #F5F5F5 — the page ground and secondary surfaces.
+   • Gainsboro  #DCDCDC — hairlines, and the deeper end of the background wash.
+
+   How the colours work on that light, neutral backdrop:
+   • The page background is a soft Gainsboro → Whitesmoke wash.
+   • Content surfaces (cards, inputs, dropdowns …) are plain white so they lift
+     off the grey ground with a subtle, neutral shadow.
+   • Text and accents are graphite — deliberately monochrome, so the photos are
+     the only colour in the interface. Because a graphite link cannot be told
+     apart from graphite body text by colour alone, running-text links are
+     underlined (see `.parent-theme a:not([class])` below) — WCAG 1.4.1.
+   • Only status signals (success / danger / warning) keep a hue, muted enough
+     to sit calmly in the neutral system.
    ========================================================================== */
 .parent-theme {
   /* Same website font as everywhere else (Comic Sans MS, see :root). Set as the
@@ -1048,42 +1057,53 @@ tr.clickable-row { cursor: pointer; }
      inputs, badges …) picks it up. */
   font-family: var(--font);
 
-  /* Warm beige palette. Dark espresso text on the light backdrop; near-white
-     cream surfaces with warm hairlines. */
-  --bg: #f2e8d4;
-  --surface: #fffdf8;
-  --surface-2: #f7f0e4;
-  --border: #dccfb8;
-  --text: #3a2a1b;
-  --text-soft: #6d543e;
-  --text-muted: #9a8163;
-  --primary: #a0621d;
-  --primary-dark: #834f15;
-  --success: #4e7226;
-  --danger: #bb4a22;
-  --warning: #9e6b10;
-  --shadow: 0 2px 6px rgba(60, 40, 15, 0.10), 0 16px 40px rgba(60, 40, 15, 0.09);
-  --shadow-sm: 0 1px 3px rgba(60, 40, 15, 0.10);
+  /* Neutral grey palette. Graphite text and accents on a Whitesmoke ground;
+     white surfaces with Gainsboro hairlines. */
+  --bg: #f5f5f5;          /* Whitesmoke */
+  --surface: #ffffff;
+  --surface-2: #f5f5f5;   /* Whitesmoke */
+  --border: #dcdcdc;      /* Gainsboro  */
+  --text: #1f2225;
+  --text-soft: #4e545a;
+  --text-muted: #6e7378;
+  --primary: #33383e;
+  --primary-dark: #1e2227;
+  --success: #2f7a4f;
+  --danger: #b23b2e;
+  --warning: #8a6712;
+  --shadow: 0 2px 6px rgba(20, 22, 25, 0.08), 0 16px 40px rgba(20, 22, 25, 0.07);
+  --shadow-sm: 0 1px 3px rgba(20, 22, 25, 0.09);
 
   position: relative;
   isolation: isolate;
   min-height: 100vh;
   color: var(--text);
-  /* Warm sand-beige radial gradient — slightly deeper at the top centre and
-     brightening toward the edges, giving the same soft depth as before but in
-     a light, airy beige. Animated bokeh orbs are layered on top via `.parent-bg`
-     (see Layout). */
-  background: radial-gradient(120% 120% at 50% 0%, #e8dbc8 0%, #f0e7d5 55%, #f6edd8 100%);
+  /* Neutral grey radial wash — Gainsboro at the top centre, brightening to
+     Whitesmoke toward the edges. Soft grey orbs are layered on top via
+     `.parent-bg` (see Layout). */
+  background: radial-gradient(120% 120% at 50% 0%, #dcdcdc 0%, #eaeaea 55%, #f5f5f5 100%);
   background-attachment: fixed;
 }
 
-/* Animated "bokeh" light layer: a few large, blurred amber orbs drifting slowly
-   behind the content, echoing the warm out-of-focus lights of a cozy bar. They
-   are purely decorative (pointer-events: none) and sit behind every surface. */
+/* Running-text links are underlined: in a monochrome palette the graphite link
+   colour alone is not a reliable distinction from the surrounding copy.
+   `:not([class])` keeps this to plain links — buttons, nav links and the brand
+   all carry a class and are styled on their own. */
+.parent-theme a:not([class]) {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(31, 34, 37, 0.35);
+}
+.parent-theme a:not([class]):hover { text-decoration-color: currentColor; }
+
+/* Soft light layer: a few large, blurred grey orbs drifting slowly behind the
+   content, giving the flat grey ground a little depth. They are purely
+   decorative (pointer-events: none) and sit behind every surface. */
 .parent-bg {
   position: fixed;
   inset: 0;
-  z-index: -1; /* behind all content, above the parent's wood background box */
+  z-index: -1; /* behind all content */
   overflow: hidden;
   pointer-events: none;
 }
@@ -1092,28 +1112,28 @@ tr.clickable-row { cursor: pointer; }
   border-radius: 50%;
   filter: blur(52px);
   mix-blend-mode: multiply;
-  opacity: 0.65;
+  opacity: 0.5;
   will-change: transform;
   transform: translateZ(0);
 }
 .parent-bg .b1 {
   width: 360px; height: 360px; left: -70px; top: 10%;
-  background: radial-gradient(circle, rgba(195, 145, 70, 0.55), transparent 66%);
+  background: radial-gradient(circle, rgba(160, 165, 172, 0.42), transparent 66%);
   animation: bokehDrift 17s ease-in-out infinite alternate;
 }
 .parent-bg .b2 {
   width: 420px; height: 420px; right: -120px; top: 42%;
-  background: radial-gradient(circle, rgba(175, 118, 48, 0.42), transparent 66%);
+  background: radial-gradient(circle, rgba(148, 154, 161, 0.34), transparent 66%);
   animation: bokehDrift 22s 1.5s ease-in-out infinite alternate-reverse;
 }
 .parent-bg .b3 {
   width: 300px; height: 300px; left: 24%; bottom: -90px;
-  background: radial-gradient(circle, rgba(215, 168, 88, 0.38), transparent 66%);
+  background: radial-gradient(circle, rgba(172, 177, 183, 0.32), transparent 66%);
   animation: bokehDrift 26s 3s ease-in-out infinite alternate;
 }
 .parent-bg .b4 {
   width: 200px; height: 200px; left: 62%; top: 6%;
-  background: radial-gradient(circle, rgba(228, 185, 100, 0.34), transparent 64%);
+  background: radial-gradient(circle, rgba(184, 189, 195, 0.30), transparent 64%);
   animation: bokehDrift 19s 0.8s ease-in-out infinite alternate-reverse;
 }
 @keyframes bokehDrift {
@@ -1126,67 +1146,67 @@ tr.clickable-row { cursor: pointer; }
   .parent-bg .bokeh { animation: none; }
 }
 
-/* Header: a translucent warm-beige bar with dark espresso lettering, a soft
-   blur so the bokeh glows shimmer through, and a thin golden→amber accent line
-   on top for a touch of warmth. */
+/* Header: a translucent white/Whitesmoke bar with graphite lettering, a soft
+   blur so the background wash shimmers through, and a thin silver→graphite
+   accent line on top. */
 .parent-theme .appbar {
   background:
-    linear-gradient(180deg, rgba(248, 240, 224, 0.94) 0%, rgba(240, 230, 212, 0.96) 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(245, 245, 245, 0.96) 100%);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(185, 158, 115, 0.40);
-  box-shadow: 0 2px 14px rgba(80, 52, 18, 0.12);
+  border-bottom: 1px solid rgba(220, 220, 220, 0.95);
+  box-shadow: 0 2px 14px rgba(20, 22, 25, 0.08);
 }
 .parent-theme .appbar::before {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #c9a84c 0%, #d4935a 55%, #a8662b 100%);
+  background: linear-gradient(90deg, #c8c8c8 0%, #9aa0a6 55%, #6e7479 100%);
 }
-.parent-theme .brand { color: #3a2a1b; }
+.parent-theme .brand { color: #1f2225; }
 .parent-theme .brand-mark {
-  color: #3a2a1b;
-  background: linear-gradient(135deg, #a0621d, #c97c30);
+  color: #1f2225;
+  background: linear-gradient(135deg, #2b3036, #5d646c);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: none;
 }
 .parent-theme .nav-link,
-.parent-theme .nav-actions .muted { color: #6d543e; }
-.parent-theme .nav-link:hover { color: #a0621d; }
+.parent-theme .nav-actions .muted { color: #4e545a; }
+.parent-theme .nav-link:hover { color: #1f2225; }
 
-/* Round header icon buttons on the beige bar */
+/* Square icon buttons in the header (see the "no rounded corners" block below) */
 .parent-theme .icon-btn {
-  background: rgba(90, 62, 28, 0.07);
-  border-color: rgba(130, 90, 40, 0.25);
-  color: #5d4331;
+  background: rgba(31, 34, 37, 0.05);
+  border-color: rgba(31, 34, 37, 0.16);
+  color: #4e545a;
 }
 .parent-theme .icon-btn:hover {
-  background: rgba(90, 62, 28, 0.13);
-  border-color: rgba(160, 98, 29, 0.45);
-  color: #3a2a1b;
+  background: rgba(31, 34, 37, 0.10);
+  border-color: rgba(31, 34, 37, 0.30);
+  color: #1f2225;
 }
 .parent-theme .icon-btn:focus-visible {
-  box-shadow: 0 0 0 3px rgba(160, 98, 29, 0.20);
+  box-shadow: 0 0 0 3px rgba(31, 34, 37, 0.18);
 }
 .parent-theme .cart-btn .cart-badge {
-  background: #a0621d;
+  background: #33383e;
   color: #fff;
-  box-shadow: 0 0 0 2px #f0e7d5;
+  box-shadow: 0 0 0 2px #f1f1f1;
 }
 .parent-theme .profile-btn[aria-expanded='true'] {
-  background: rgba(90, 62, 28, 0.13);
-  border-color: rgba(160, 98, 29, 0.45);
-  color: #3a2a1b;
+  background: rgba(31, 34, 37, 0.10);
+  border-color: rgba(31, 34, 37, 0.30);
+  color: #1f2225;
 }
-.parent-theme .profile-status { border-color: #dccfb8; }
+.parent-theme .profile-status { border-color: #dcdcdc; }
 
 /* ── Text colour scoping for card/input surfaces ────────────────────────────
    Surfaces explicitly re-declare text variables so any local overrides stay
-   consistent; on the beige backdrop the base --text is already dark espresso,
-   so this mainly ensures deeper nesting (e.g. inside portals) is also correct. */
+   consistent; on the grey backdrop the base --text is already graphite, so
+   this mainly ensures deeper nesting (e.g. inside portals) is also correct. */
 .parent-theme .card,
 .parent-theme .modal-card,
 .parent-theme .profile-dropdown,
@@ -1197,102 +1217,126 @@ tr.clickable-row { cursor: pointer; }
 .parent-theme input,
 .parent-theme select,
 .parent-theme textarea {
-  --text: #3a2a1b;
-  --text-soft: #6d543e;
-  --text-muted: #9a8163;
+  --text: #1f2225;
+  --text-soft: #4e545a;
+  --text-muted: #6e7378;
   color: var(--text);
 }
 
 /* Hero lock badge + section accents */
 .parent-theme .hero .lock-big {
-  background: linear-gradient(135deg, #c2772f, #e1a04a);
-  box-shadow: 0 8px 22px rgba(80, 52, 18, 0.22);
+  background: linear-gradient(135deg, #4a5057, #7d858d);
+  box-shadow: 0 8px 22px rgba(20, 22, 25, 0.20);
 }
 
-/* Headings sit directly on the beige backdrop → rich dark espresso with a very
-   soft warm lift shadow. Headings inside card surfaces share the same palette. */
+/* Headings sit directly on the grey backdrop → graphite, no lift shadow: on a
+   neutral ground a tinted shadow only muddies the letterforms. */
 .parent-theme h1,
 .parent-theme h2,
 .parent-theme h3 {
-  color: #3a2a1b;
-  text-shadow: 0 1px 2px rgba(210, 180, 140, 0.35);
+  color: #1f2225;
+  text-shadow: none;
 }
 .parent-theme .card h1,
 .parent-theme .card h2,
 .parent-theme .card h3,
 .parent-theme .modal-card h2 {
-  color: #3a2a1b;
+  color: #1f2225;
   text-shadow: none;
 }
 
-/* Near-white cream cards lifting off the beige backdrop: a warm hairline plus
-   a soft ambient shadow that reads as gentle depth without heaviness. */
+/* White cards lifting off the grey backdrop: a Gainsboro hairline plus a soft
+   neutral shadow that reads as gentle depth without heaviness. */
 .parent-theme .card {
-  border-color: #dccfb8;
-  box-shadow: 0 2px 6px rgba(80, 52, 18, 0.10), 0 20px 44px rgba(80, 52, 18, 0.10);
+  border-color: #dcdcdc;
+  box-shadow: 0 2px 6px rgba(20, 22, 25, 0.07), 0 20px 44px rgba(20, 22, 25, 0.08);
 }
 .parent-theme .photo-tile {
-  box-shadow: 0 2px 6px rgba(80, 52, 18, 0.10), 0 16px 36px rgba(80, 52, 18, 0.10);
+  box-shadow: 0 2px 6px rgba(20, 22, 25, 0.07), 0 16px 36px rgba(20, 22, 25, 0.08);
 }
 .parent-theme .photo-tile:hover {
-  box-shadow: 0 6px 14px rgba(80, 52, 18, 0.14), 0 24px 56px rgba(80, 52, 18, 0.15);
+  box-shadow: 0 6px 14px rgba(20, 22, 25, 0.12), 0 24px 56px rgba(20, 22, 25, 0.13);
 }
 
-/* Inputs on cream paper */
+/* Inputs on white paper */
 .parent-theme input,
 .parent-theme select,
-.parent-theme textarea { background: #fffaf1; }
+.parent-theme textarea { background: #ffffff; }
 .parent-theme input:focus,
 .parent-theme select:focus,
 .parent-theme textarea:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(138, 90, 43, 0.18);
+  box-shadow: 0 0 0 3px rgba(31, 34, 37, 0.14);
 }
 
-/* Photo tiles + the "on photo" buy button in warm tones */
-.parent-theme .btn.on-photo { background: #fbf5ea; color: var(--text); }
-.parent-theme .btn.on-photo:hover { background: #f1e6d2; }
-.parent-theme .pill.green { background: rgba(233, 240, 220, 0.95); color: #4d6a2c; }
-.parent-theme .pill.blue { background: rgba(244, 232, 212, 0.95); color: #7a5320; }
+/* Photo tiles + the "on photo" buy button in neutral tones */
+.parent-theme .btn.on-photo { background: #f5f5f5; color: var(--text); }
+.parent-theme .btn.on-photo:hover { background: #e6e6e6; }
+.parent-theme .pill.green { background: rgba(232, 241, 236, 0.95); color: #2b6d48; }
+.parent-theme .pill.blue { background: rgba(240, 240, 240, 0.95); color: #4e545a; }
 
-/* Badges + alerts retuned to the rustic palette */
-.parent-theme .badge.class { background: #efe2cb; color: #7a5320; }
-.parent-theme .badge.green { background: #e9f0dc; color: #4d6a2c; }
-.parent-theme .badge.red { background: #f6e2d6; color: #94371a; }
-.parent-theme .badge.amber { background: #f6e9cf; color: #8a6312; }
-.parent-theme .alert.error { background: #f6e2d6; color: #8f3217; border-color: #e6bda6; }
-.parent-theme .alert.success { background: #e9f0dc; color: #46632a; border-color: #cad9ab; }
-.parent-theme .alert.info { background: #f4e8d4; color: #7a5320; border-color: #e0cba2; }
+/* Badges + alerts retuned to the neutral palette; status colours stay legible
+   but muted so they do not fight the grey system. */
+.parent-theme .badge.class { background: #ececec; color: #4e545a; }
+.parent-theme .badge.green { background: #e6f0ea; color: #2b6d48; }
+.parent-theme .badge.red { background: #f6e6e4; color: #96342a; }
+.parent-theme .badge.amber { background: #f3ecdb; color: #7a5c10; }
+.parent-theme .alert.error { background: #f6e6e4; color: #96342a; border-color: #e4c4bf; }
+.parent-theme .alert.success { background: #e6f0ea; color: #2b6d48; border-color: #bcd8c8; }
+.parent-theme .alert.info { background: #f0f0f0; color: #4e545a; border-color: #dcdcdc; }
 .parent-theme .buy-success,
-.parent-theme .photo-toast.success { color: #46632a; }
-.parent-theme .photo-toast.success { background: #e9f0dc; }
-.parent-theme .photo-toast.error { background: #f6e2d6; color: #8f3217; }
-.parent-theme .profile-dropdown-item-danger:hover { background: #f6e2d6; color: var(--danger); }
+.parent-theme .photo-toast.success { color: #2b6d48; }
+.parent-theme .photo-toast.success { background: #e6f0ea; }
+.parent-theme .photo-toast.error { background: #f6e6e4; color: #96342a; }
+.parent-theme .profile-dropdown-item-danger:hover { background: #f6e6e4; color: var(--danger); }
 
-/* Footer sits on the beige backdrop → warm muted espresso, with amber links. */
-.parent-theme .footer { color: #7a6248; }
-.parent-theme .footer a { color: #a0621d; }
-.parent-theme .footer a:hover { color: #c07830; }
+/* Footer sits on the grey backdrop → muted graphite, links a shade darker. */
+.parent-theme .footer { color: #6e7378; }
+.parent-theme .footer a { color: #33383e; }
+.parent-theme .footer a:hover { color: #1f2225; }
 
-/* Gallery-Vorschau stage: intentionally kept dark (deep espresso/walnut) so
-   photos pop; the surrounding page is beige but the stage has its own dark shell. */
+/* Gallery-Vorschau stage: intentionally kept dark (neutral charcoal) so photos
+   pop; the surrounding page is light grey but the stage has its own dark shell. */
 .parent-theme .gp-stage {
-  background: radial-gradient(120% 120% at 50% 0%, #2c1d10 0%, #1a1009 60%, #120b06 100%);
+  background: radial-gradient(120% 120% at 50% 0%, #303235 0%, #202225 60%, #151719 100%);
 }
 .parent-theme .gp-slide.is-center img {
   box-shadow:
     0 36px 90px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(247, 220, 176, 0.18),
-    0 0 120px rgba(214, 158, 84, 0.22);
+    0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 0 120px rgba(190, 195, 200, 0.18);
 }
 .parent-theme .preview-enter {
-  color: #fffdf8;
+  color: #ffffff;
   background: var(--primary);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 .parent-theme .preview-enter:hover {
   background: var(--primary-dark);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* ── Keine abgerundeten Bilder und Buttons (Kundenapp) ──────────────────────
+   Fotos und Bedienelemente laufen mit scharfen Kanten aus; Karten, Eingabe-
+   felder und Plaketten behalten ihre Rundung. */
+.parent-theme .photo-tile,
+.parent-theme .photo-frame,
+.parent-theme .gp-cell,
+.parent-theme .gp-lb-img,
+.parent-theme .lightbox img,
+.parent-theme .li-thumb-btn {
+  border-radius: 0;
+}
+.parent-theme .btn,
+.parent-theme .icon-btn,
+.parent-theme .preview-enter,
+.parent-theme .lightbox .close,
+.parent-theme .gp-lb-close,
+.parent-theme .gp-lb-nav,
+.parent-theme .modal-close,
+.parent-theme .qty-stepper,
+.parent-theme a.line-item-download .li-download-icon {
+  border-radius: 0;
 }
 
 /* ==========================================================================
@@ -1564,7 +1608,7 @@ input.input-error,
 .product-option-sub { font-size: 0.74rem; color: var(--text-soft); }
 .product-option-sub .incl { color: var(--success); font-weight: 600; }
 .product-option-price { flex: none; font-weight: 700; font-size: 0.92rem; white-space: nowrap; }
-.parent-theme .product-option.selected { box-shadow: 0 0 0 2px rgba(160, 98, 29, 0.18); }
+.parent-theme .product-option.selected { box-shadow: 0 0 0 2px rgba(31, 34, 37, 0.18); }
 
 .product-detail { display: flex; flex-direction: column; gap: 8px; }
 .qty-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
