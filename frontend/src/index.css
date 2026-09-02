@@ -1073,6 +1073,12 @@ tr.clickable-row { cursor: pointer; }
   --warning: #8a6712;
   --shadow: 0 2px 6px rgba(20, 22, 25, 0.08), 0 16px 40px rgba(20, 22, 25, 0.07);
   --shadow-sm: 0 1px 3px rgba(20, 22, 25, 0.09);
+  /* Die Kundenapp läuft durchgehend scharfkantig aus. Über die beiden Radius-
+     Variablen erben Karten, Buttons, Eingabefelder, Hinweise, Toasts und das
+     Profil-Dropdown das automatisch; fest verdrahtete Radien werden weiter
+     unten einzeln zurückgesetzt (siehe "Scharfe Kanten"). */
+  --radius: 0;
+  --radius-sm: 0;
 
   position: relative;
   isolation: isolate;
@@ -1316,9 +1322,21 @@ tr.clickable-row { cursor: pointer; }
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
 }
 
-/* ── Keine abgerundeten Bilder und Buttons (Kundenapp) ──────────────────────
-   Fotos und Bedienelemente laufen mit scharfen Kanten aus; Karten, Eingabe-
-   felder und Plaketten behalten ihre Rundung. */
+/* ── Scharfe Kanten in der ganzen Kundenapp ─────────────────────────────────
+   Die beiden Radius-Variablen oben stehen bereits auf 0 und decken damit alles
+   ab, was sie benutzt (Karten, Buttons, Eingabefelder, Hinweise, Dropdown,
+   Toasts …). Hier folgen nur noch die Stellen mit fest verdrahtetem Radius.
+
+   Bewusst rund bleiben – dort trägt die runde Form eine Bedeutung, die eine
+   eckige verlieren würde:
+   • .spinner              – der Ladekreis dreht sich; eckig wirkt er defekt.
+   • .parent-bg .bokeh     – weichgezeichnete Lichtkreise im Hintergrund.
+   • .product-option-radio – rund signalisiert Einfachauswahl (eckig läse sich
+                             als Mehrfachauswahl/Checkbox).
+   • .mock-*               – die Produkt-Vorschauen bilden die echte Form der
+                             Sticker und Magnete ab. */
+
+/* Bilder und Bildflächen */
 .parent-theme .photo-tile,
 .parent-theme .photo-frame,
 .parent-theme .gp-cell,
@@ -1327,15 +1345,36 @@ tr.clickable-row { cursor: pointer; }
 .parent-theme .li-thumb-btn {
   border-radius: 0;
 }
+
+/* Bedienelemente */
 .parent-theme .btn,
 .parent-theme .icon-btn,
 .parent-theme .preview-enter,
 .parent-theme .lightbox .close,
+.parent-theme .lightbox .lb-actions-buy,
 .parent-theme .gp-lb-close,
 .parent-theme .gp-lb-nav,
 .parent-theme .modal-close,
 .parent-theme .qty-stepper,
+.parent-theme .profile-dropdown-item,
+.parent-theme .linklike:focus-visible,
+.parent-theme a.line-item-download,
+.parent-theme .line-item-clickable,
 .parent-theme a.line-item-download .li-download-icon {
+  border-radius: 0;
+}
+
+/* Flächen und Plaketten */
+.parent-theme .card,
+.parent-theme .modal-card,
+.parent-theme .product-option,
+.parent-theme .badge,
+.parent-theme .pill,
+.parent-theme .chip,
+.parent-theme .photo-zoom,
+.parent-theme .cart-btn .cart-badge,
+.parent-theme .profile-status,
+.parent-theme .hero .lock-big {
   border-radius: 0;
 }
 
@@ -1452,7 +1491,7 @@ a.line-item-download .li-download-icon {
   /* Roomier reading: trim the big page + card padding. Longhand keeps the
      horizontal gutters from `.container` intact (see `.page-pad` above). */
   .parent-theme .page-pad { padding-top: 22px; padding-bottom: 48px; }
-  .parent-theme .card { padding: 18px; border-radius: 14px; }
+  .parent-theme .card { padding: 18px; }
   .parent-theme .hero { padding: 10px 0 18px; }
   .parent-theme .hero h1 { font-size: 1.45rem; }
   /* Slightly calmer headings on the content pages (e.g. "Fotos" on Bestellen). */
