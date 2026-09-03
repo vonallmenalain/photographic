@@ -1938,60 +1938,128 @@ const REAL_ORDER_STATUSES = new Set(['pending', 'completed', 'cancelled']);
 router.get(
   '/orders',
   asyncHandler(async (_req, res) => {
-    const [allOrders, products, photos, children] = await Promise.all([
+    const [allOrders, products, events, allItems] = await Promise.all([
       runQuery<{ status: string; total_cents: number; currency: string; created_at: string; email_id: string }>(
         col(COL.orders),
       ),
       runQuery<ProductDoc>(col(COL.products)),
-      runQuery<{ id: string; event_id: string; child_id: string | null }>(col(COL.photos)),
-      runQuery<{ id: string; name: string }>(col(COL.children)),
+      runQuery<{ name: string }>(col(COL.events)),
+      runQuery<OrderItemDoc>(col(COL.orderItems)),
     ]);
 
     const productById = new Map(products.map((p) => [p.id, productView(p)]));
-    const photoMap = new Map(photos.map((p) => [p.id, p]));
-    const childName = new Map(children.map((c) => [c.id, c.name]));
+    const eventName = new Map(events.map((e) => [e.id, String(e.name ?? '')]));
 
     const orders = allOrders
       .filter((o) => REAL_ORDER_STATUSES.has(o.status))
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
       .slice(0, 300);
+    const shownOrderIds = new Set(orders.map((o) => o.id));
 
-    const result = await Promise.all(
-      orders.map(async (o) => {
-        const [e, items] = await Promise.all([
-          getById<{ email: string }>(COL.parentEmails, o.email_id),
-          runQuery<OrderItemDoc>(col(COL.orderItems).where('order_id', '==', o.id)),
-        ]);
+    // Positionen EINMAL nach Bestellung gruppieren, statt für jede Bestellung
+    // eine eigene Abfrage abzusetzen. Dieselbe Liste liefert anschliessend auch
+    // den Auftrag und die Kindernamen jeder Bestellung.
+    const itemsByOrder = new Map<string, (typeof allItems)[number][]>();
+    for (const it of allItems) {
+      if (!shownOrderIds.has(it.order_id)) continue;
+      const list = itemsByOrder.get(it.order_id);
+      if (list) list.push(it);
+      else itemsByOrder.set(it.order_id, [it]);
+    }
 
-        // Items that need producing/shipping (prints, stickers, magnets) – these
-        // carry the thumbnails the admin wants to see directly for pending orders.
-        const printItems = items
-          .map((it) => ({ it, line: resolveLine(it, productById.get(it.product_id) ?? null) }))
-          .filter(({ line }) => line.type === 'print')
-          .map(({ it, line }) => {
-            const photo = photoMap.get(it.photo_id);
-            return {
-              photo_id: it.photo_id,
-              product_name: it.product_name,
-              kind: line.kind,
-              qty: it.qty,
-              child_name: photo?.child_id ? childName.get(photo.child_id) ?? null : null,
-            };
-          });
-
-        return {
-          id: o.id,
-          status: o.status,
-          total_cents: o.total_cents,
-          currency: o.currency,
-          created_at: o.created_at,
-          email: e?.email ?? '',
-          item_count: items.length,
-          has_print: printItems.length > 0,
-          print_items: printItems,
-        };
-      }),
+    // Nur die wirklich referenzierten Fotos/Adressen/Kinder laden, statt die
+    // kompletten Sammlungen zu streamen (das bremst den Adminbereich aus).
+    const [photoById, emailById] = await Promise.all([
+      getManyById<{ event_id: string; child_id: string | null }>(
+        COL.photos,
+        [...itemsByOrder.values()].flat().map((i) => i.photo_id),
+      ),
+      getManyById<{ email: string }>(
+        COL.parentEmails,
+        orders.map((o) => o.email_id),
+      ),
+    ]);
+    const childById = await getManyById<{ name: string }>(
+      COL.children,
+      [...photoById.values()].map((p) => p.child_id ?? ''),
     );
+
+    const result = orders.map((o) => {
+      const items = itemsByOrder.get(o.id) ?? [];
+      const email = emailById.get(o.email_id)?.email ?? '';
+
+      // Items that need producing/shipping (prints, stickers, magnets) – these
+      // carry the thumbnails the admin wants to see directly for pending orders.
+      const printItems = items
+        .map((it) => ({ it, line: resolveLine(it, productById.get(it.product_id) ?? null) }))
+        .filter(({ line }) => line.type === 'print')
+        .map(({ it, line }) => {
+          const photo = photoById.get(it.photo_id);
+          return {
+            photo_id: it.photo_id,
+            product_name: it.product_name,
+            kind: line.kind,
+            qty: it.qty,
+            child_name: photo?.child_id ? childById.get(photo.child_id)?.name ?? null : null,
+          };
+        });
+
+      // Auftrag (Schule/Klasse) einer Bestellung: Bestellungen tragen selbst
+      // keinen Auftrag, er ergibt sich aus den bestellten Fotos. Enthält eine
+      // Bestellung ausnahmsweise Fotos aus mehreren Aufträgen, gilt der mit den
+      // meisten Positionen als Hauptauftrag; die übrigen werden mitgeliefert,
+      // damit die Übersicht darauf hinweisen kann.
+      const eventCounts = new Map<string, number>();
+      const childNames = new Set<string>();
+      for (const it of items) {
+        const photo = photoById.get(it.photo_id);
+        if (!photo) continue;
+        // Nur noch existierende Aufträge zählen – Fotos eines gelöschten
+        // Auftrags landen in der Sammelkachel „Ohne Auftrag“.
+        if (photo.event_id && eventName.has(photo.event_id))
+          eventCounts.set(photo.event_id, (eventCounts.get(photo.event_id) ?? 0) + 1);
+        const name = photo.child_id ? childById.get(photo.child_id)?.name : null;
+        if (name) childNames.add(name);
+      }
+      const rankedEvents = [...eventCounts.entries()].sort(
+        (a, b) =>
+          b[1] - a[1] || (eventName.get(a[0]) ?? '').localeCompare(eventName.get(b[0]) ?? ''),
+      );
+      const eventId = rankedEvents[0]?.[0] ?? null;
+      const otherEventNames = rankedEvents
+        .slice(1)
+        .map(([id]) => eventName.get(id) ?? '')
+        .filter(Boolean);
+      const orderChildNames = [...childNames].sort((a, b) => a.localeCompare(b));
+
+      return {
+        id: o.id,
+        status: o.status,
+        total_cents: o.total_cents,
+        currency: o.currency,
+        created_at: o.created_at,
+        email,
+        item_count: items.length,
+        has_print: printItems.length > 0,
+        print_items: printItems,
+        event_id: eventId,
+        event_name: eventId ? eventName.get(eventId) ?? '' : '',
+        other_event_names: otherEventNames,
+        child_names: orderChildNames,
+        // Vorberechneter Freitext-Index (Auftrag/Schule, E-Mail-Adresse, Kind,
+        // Produkt), damit die Suche in der Übersicht ohne weitere Abfragen
+        // auskommt – analog zur Auftragsliste.
+        search_text: [
+          email,
+          eventId ? eventName.get(eventId) ?? '' : '',
+          ...otherEventNames,
+          ...orderChildNames,
+          ...items.map((it) => it.product_name ?? ''),
+        ]
+          .join(' ')
+          .toLowerCase(),
+      };
+    });
     res.json({ orders: result });
   }),
 );

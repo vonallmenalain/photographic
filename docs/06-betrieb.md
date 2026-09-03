@@ -135,6 +135,33 @@ Bevor du ein Event auf „published“ setzt:
   „Warenkorb“ / „Kauf gestartet“ sind nur interne Zwischenzustände des Kaufflusses.
 - **Events:** Entwurf → in Bearbeitung → bereit → veröffentlicht → archiviert · (deaktiviert)
 
+## 6.2a Bestellungen nach Auftrag (Schule/Klasse)
+
+Der Menüpunkt **„Bestellungen“** fasst alle bestätigten Bestellungen zu **einer
+Kachel je Auftrag** zusammen – also je Schule bzw. Klasse. Eine Bestellung trägt
+selbst keinen Auftrag; er wird aus den bestellten Fotos abgeleitet.
+
+- **Kopf der Kachel:** Auftragsname, Anzahl pendenter Bestellungen sowie
+  Bestellungen gesamt, Bestellungen mit Druck, Umsatz (ohne stornierte) und das
+  Datum der neuesten Bestellung. Ein Klick auf die Kachel klappt die
+  Bestellungen des Auftrags auf bzw. zu; **„Alle Aufträge einklappen“** schliesst
+  alle auf einmal und liefert so eine kompakte Übersicht.
+- **Suchen:** Freitext über Auftrag/Schule, E-Mail-Adresse, Kind und Produkt.
+  Mehrere Wörter werden einzeln gesucht („müller anna“ findet auch „Anna Müller“).
+- **Nur einen Auftrag anzeigen:** über die Auswahlliste neben der Suche. Die
+  Kachel des gewählten Auftrags klappt dabei automatisch auf.
+- **Sortierung der Kacheln:** neueste Bestellung, Auftrag A–Z, meiste
+  Bestellungen oder höchster Umsatz.
+- **Statusfilter:** „Alle“, „Nur mit Druck“ und „Pendent“; die Zahlen beziehen
+  sich immer auf die aktuelle Such-/Auftragsauswahl.
+- Suche, Auftragsauswahl, Sortierung und eingeklappte Kacheln bleiben für die
+  Dauer der Sitzung erhalten.
+- Bestellungen, deren Fotos zu keinem Auftrag mehr gehören (z. B. nach dem
+  Löschen eines Auftrags), sammelt die Kachel **„Ohne Auftrag“** am Schluss.
+- Enthält eine Bestellung ausnahmsweise Fotos aus mehreren Aufträgen, steht sie
+  beim Auftrag mit den meisten Positionen; die übrigen Aufträge sind in der
+  Bestellung als Hinweis vermerkt.
+
 ## 6.3 Supportfälle
 
 - **Falsche/alte E-Mail:** E-Mail-Detailseite → Adresse korrigieren oder Status

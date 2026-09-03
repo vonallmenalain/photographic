@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { Alert, Modal, SendToSelfCheckbox, Spinner, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
-import { formatPrice, formatDate, productKindLabel } from '../../lib/format';
+import { formatPrice, formatDate, formatDateShort, productKindLabel } from '../../lib/format';
+import { SummaryStat } from './EventAnalyticsPanel';
 
 interface PrintItem {
   photo_id: string;
@@ -21,6 +23,15 @@ interface OrderRow {
   item_count: number;
   has_print: boolean;
   print_items: PrintItem[];
+  /** Auftrag (Schule/Klasse) der Bestellung – vom Backend aus den Fotos abgeleitet. */
+  event_id?: string | null;
+  event_name?: string;
+  /** Weitere Aufträge, falls eine Bestellung Fotos aus mehreren Aufträgen enthält. */
+  other_event_names?: string[];
+  /** Kinder, deren Fotos in der Bestellung vorkommen. */
+  child_names?: string[];
+  /** Vom Backend vorberechneter Freitext-Index (alles in Kleinbuchstaben). */
+  search_text?: string;
 }
 
 interface ShippingAddress {
@@ -67,13 +78,111 @@ const STATUS_OPTIONS = [
 
 type Filter = 'all' | 'print' | 'pending';
 
-const FILTER_STORAGE_KEY = 'admin_orders_filter';
+type SortKey = 'recent' | 'name_asc' | 'orders_desc' | 'revenue_desc';
 
-function initialFilter(): Filter {
-  const stored = sessionStorage.getItem(FILTER_STORAGE_KEY);
-  return stored === 'print' || stored === 'pending' || stored === 'all' ? stored : 'all';
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: 'recent', label: 'Neueste Bestellung zuerst' },
+  { value: 'name_asc', label: 'Auftrag A–Z' },
+  { value: 'orders_desc', label: 'Meiste Bestellungen zuerst' },
+  { value: 'revenue_desc', label: 'Höchster Umsatz zuerst' },
+];
+
+/** Sammelkachel für Bestellungen, deren Fotos zu keinem Auftrag mehr gehören. */
+const NO_EVENT_KEY = '__none__';
+const NO_EVENT_LABEL = 'Ohne Auftrag';
+
+const STORAGE = {
+  filter: 'admin_orders_filter',
+  search: 'admin_orders_search',
+  event: 'admin_orders_event',
+  sort: 'admin_orders_sort',
+  collapsed: 'admin_orders_collapsed',
+};
+
+/** Kleiner Helfer: Auswahl für die Dauer der Sitzung merken (pro Browser-Tab). */
+function readStored(key: string, fallback = ''): string {
+  try {
+    return sessionStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writeStored(key: string, value: string): void {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    /* privater Modus o. ä. – die Auswahl wird dann einfach nicht gemerkt */
+  }
 }
 
+function initialFilter(): Filter {
+  const stored = readStored(STORAGE.filter);
+  return stored === 'print' || stored === 'pending' || stored === 'all' ? stored : 'all';
+}
+function initialSort(): SortKey {
+  const stored = readStored(STORAGE.sort);
+  return SORT_OPTIONS.some((o) => o.value === stored) ? (stored as SortKey) : 'recent';
+}
+function initialCollapsed(): Set<string> {
+  const stored = readStored(STORAGE.collapsed);
+  return new Set(stored ? stored.split('\n').filter(Boolean) : []);
+}
+
+/** Ein Auftrag (Schule/Klasse) mit allen zugehörigen Bestellungen. */
+interface OrderGroup {
+  key: string;
+  name: string;
+  orders: OrderRow[];
+  /** Anzahl pendenter Bestellungen – das, was noch zu tun ist. */
+  pending: number;
+  /** Anzahl Bestellungen mit Druckprodukt (Fotos, Sticker, Magnete). */
+  print: number;
+  /** Umsatz ohne stornierte Bestellungen. */
+  revenue_cents: number;
+  currency: string;
+  /** Zeitpunkt der neuesten Bestellung des Auftrags. */
+  latest: string;
+}
+
+/**
+ * Fasst die Bestellungen zu Kacheln je Auftrag zusammen. Eine Bestellung trägt
+ * selbst keinen Auftrag – das Backend leitet ihn aus den bestellten Fotos ab.
+ */
+function buildGroups(orders: OrderRow[]): OrderGroup[] {
+  const groups = new Map<string, OrderGroup>();
+  for (const o of orders) {
+    const key = o.event_id || NO_EVENT_KEY;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        name: o.event_name || NO_EVENT_LABEL,
+        orders: [],
+        pending: 0,
+        print: 0,
+        revenue_cents: 0,
+        currency: o.currency || 'chf',
+        latest: o.created_at,
+      };
+      groups.set(key, group);
+    }
+    group.orders.push(o);
+    if (o.status === 'pending') group.pending += 1;
+    if (o.has_print) group.print += 1;
+    // Stornierte Bestellungen zählen nicht zum Umsatz.
+    if (o.status !== 'cancelled') group.revenue_cents += o.total_cents;
+    if (String(o.created_at) > String(group.latest)) group.latest = o.created_at;
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Bestellübersicht des Adminbereichs, gruppiert nach Auftrag (Schule/Klasse):
+ * je Auftrag eine Kachel mit den Eckwerten (Bestellungen, Druck, Umsatz), darin
+ * die einzelnen Bestellungen zum Aufklappen. Oben lässt sich nach Auftrag,
+ * E-Mail-Adresse oder Kind suchen, gezielt ein einzelner Auftrag auswählen und
+ * die Reihenfolge der Kacheln bestimmen.
+ */
 export default function AdminOrders() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,8 +190,35 @@ export default function AdminOrders() {
   // and remember the admin's last choice for the rest of the session.
   const [filter, setFilterState] = useState<Filter>(initialFilter);
   const setFilter = (f: Filter) => {
-    sessionStorage.setItem(FILTER_STORAGE_KEY, f);
+    writeStored(STORAGE.filter, f);
     setFilterState(f);
+  };
+  const [collapsed, setCollapsedState] = useState<Set<string>>(initialCollapsed);
+  const setCollapsed = (next: Set<string>) => {
+    writeStored(STORAGE.collapsed, [...next].join('\n'));
+    setCollapsedState(next);
+  };
+  const [search, setSearchState] = useState(() => readStored(STORAGE.search));
+  const setSearch = (value: string) => {
+    writeStored(STORAGE.search, value);
+    setSearchState(value);
+  };
+  const [eventFilter, setEventFilterState] = useState(() => readStored(STORAGE.event, 'all'));
+  const setEventFilter = (value: string) => {
+    writeStored(STORAGE.event, value);
+    setEventFilterState(value);
+    // Wer gezielt einen Auftrag auswählt, will dessen Bestellungen sehen – auch
+    // wenn die Kachel zuvor eingeklappt war.
+    if (value !== 'all' && collapsed.has(value)) {
+      const next = new Set(collapsed);
+      next.delete(value);
+      setCollapsed(next);
+    }
+  };
+  const [sort, setSortState] = useState<SortKey>(initialSort);
+  const setSort = (value: SortKey) => {
+    writeStored(STORAGE.sort, value);
+    setSortState(value);
   };
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [details, setDetails] = useState<Record<string, OrderDetail>>({});
@@ -137,147 +273,225 @@ export default function AdminOrders() {
     load();
   };
 
-  const filtered = useMemo(() => {
-    if (filter === 'print') return orders.filter((o) => o.has_print);
-    if (filter === 'pending') return orders.filter((o) => o.status === 'pending');
-    return orders;
-  }, [orders, filter]);
+  // Auswahlliste der Aufträge: immer aus ALLEN Bestellungen, damit sie beim
+  // Tippen in der Suche nicht unter den Fingern wegspringt.
+  const eventOptions = useMemo(() => {
+    const counts = new Map<string, { name: string; count: number }>();
+    for (const o of orders) {
+      const key = o.event_id || NO_EVENT_KEY;
+      const entry = counts.get(key);
+      if (entry) entry.count += 1;
+      else counts.set(key, { name: o.event_name || NO_EVENT_LABEL, count: 1 });
+    }
+    return [...counts.entries()]
+      .map(([key, v]) => ({ key, ...v }))
+      .sort((a, b) => {
+        // "Ohne Auftrag" bleibt am Ende der Liste.
+        if (a.key === NO_EVENT_KEY) return 1;
+        if (b.key === NO_EVENT_KEY) return -1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [orders]);
+
+  // Suche + Auftragsauswahl (ohne Statusfilter) – Grundlage für die Zähler an
+  // den Statusknöpfen, damit diese zur aktuellen Auswahl passen.
+  const searched = useMemo(() => {
+    // Suchbegriff in Wörter zerlegen: So findet „müller anna“ auch „Anna Müller“.
+    const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return orders.filter((o) => {
+      if (eventFilter !== 'all' && (o.event_id || NO_EVENT_KEY) !== eventFilter) return false;
+      if (terms.length) {
+        const haystack = `${o.search_text ?? ''} ${o.email} ${o.event_name ?? ''} ${o.id}`.toLowerCase();
+        if (!terms.every((t) => haystack.includes(t))) return false;
+      }
+      return true;
+    });
+  }, [orders, search, eventFilter]);
 
   const counts = useMemo(
     () => ({
-      all: orders.length,
-      print: orders.filter((o) => o.has_print).length,
-      pending: orders.filter((o) => o.status === 'pending').length,
+      all: searched.length,
+      print: searched.filter((o) => o.has_print).length,
+      pending: searched.filter((o) => o.status === 'pending').length,
     }),
-    [orders],
+    [searched],
   );
+
+  const groups = useMemo(() => {
+    const filtered = searched.filter((o) => {
+      if (filter === 'print') return o.has_print;
+      if (filter === 'pending') return o.status === 'pending';
+      return true;
+    });
+    const list = buildGroups(filtered);
+    return list.sort((a, b) => {
+      // Die Sammelkachel "Ohne Auftrag" steht immer zuletzt.
+      if (a.key === NO_EVENT_KEY) return 1;
+      if (b.key === NO_EVENT_KEY) return -1;
+      switch (sort) {
+        case 'name_asc':
+          return a.name.localeCompare(b.name);
+        case 'orders_desc':
+          return b.orders.length - a.orders.length || a.name.localeCompare(b.name);
+        case 'revenue_desc':
+          return b.revenue_cents - a.revenue_cents || a.name.localeCompare(b.name);
+        case 'recent':
+        default:
+          return String(b.latest).localeCompare(String(a.latest));
+      }
+    });
+  }, [searched, filter, sort]);
+
+  const visibleCount = useMemo(
+    () => groups.reduce((sum, g) => sum + g.orders.length, 0),
+    [groups],
+  );
+
+  const hasFilters = search.trim() !== '' || eventFilter !== 'all' || filter !== 'all';
+  const resetFilters = () => {
+    setSearch('');
+    setEventFilter('all');
+    setFilter('all');
+  };
+
+  const toggleGroup = (key: string) => {
+    const next = new Set(collapsed);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setCollapsed(next);
+  };
+  const allCollapsed = groups.length > 0 && groups.every((g) => collapsed.has(g.key));
+  const toggleAllGroups = () => {
+    if (allCollapsed) {
+      const next = new Set(collapsed);
+      for (const g of groups) next.delete(g.key);
+      setCollapsed(next);
+    } else {
+      const next = new Set(collapsed);
+      for (const g of groups) next.add(g.key);
+      setCollapsed(next);
+    }
+  };
 
   if (loading) return <Spinner />;
 
   return (
     <div>
-      <h1>Bestellungen</h1>
+      <div className="orders-toolbar">
+        <h1 className="orders-toolbar-title">Bestellungen</h1>
+        {orders.length > 0 && (
+          <div className="orders-toolbar-controls">
+            <input
+              type="search"
+              className="orders-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Auftrag, Schule, E-Mail oder Kind suchen …"
+              aria-label="Bestellungen durchsuchen"
+            />
+            <select
+              value={eventFilter}
+              onChange={(e) => setEventFilter(e.target.value)}
+              aria-label="Nach Auftrag filtern"
+              title="Nur einen Auftrag anzeigen"
+            >
+              <option value="all">Alle Aufträge ({eventOptions.length})</option>
+              {eventOptions.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.name} ({o.count})
+                </option>
+              ))}
+            </select>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
+              aria-label="Aufträge sortieren"
+              title="Sortierung der Auftrags-Kacheln"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
       <p className="soft">
-        Alle bestätigten Bestellungen. Klicke auf eine Bestellung, um alle Details aufzuklappen. Den
-        Status kannst du direkt hier anpassen. Mit den Filtern kannst du gezielt nur Bestellungen mit
-        Druckprodukt oder pendente Bestellungen anzeigen.
+        Alle bestätigten Bestellungen – zusammengefasst zu einer Kachel je Auftrag (Schule bzw.
+        Klasse). Klicke auf eine Kachel, um die Bestellungen des Auftrags zu sehen, und auf eine
+        Bestellung, um alle Details aufzuklappen. Den Status kannst du direkt hier anpassen.
       </p>
 
       {shippingMsg && <Alert kind="success">{shippingMsg}</Alert>}
 
       <div className="card mb">
-        <div className="row" style={{ gap: 8 }}>
-          <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
-            Alle ({counts.all})
-          </FilterButton>
-          <FilterButton active={filter === 'print'} onClick={() => setFilter('print')}>
-            Nur mit Druck ({counts.print})
-          </FilterButton>
-          <FilterButton active={filter === 'pending'} onClick={() => setFilter('pending')}>
-            Pendent ({counts.pending})
-          </FilterButton>
+        <div className="row between" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
+              Alle ({counts.all})
+            </FilterButton>
+            <FilterButton active={filter === 'print'} onClick={() => setFilter('print')}>
+              Nur mit Druck ({counts.print})
+            </FilterButton>
+            <FilterButton active={filter === 'pending'} onClick={() => setFilter('pending')}>
+              Pendent ({counts.pending})
+            </FilterButton>
+          </div>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            {hasFilters && (
+              <button type="button" className="btn ghost small" onClick={resetFilters}>
+                Filter zurücksetzen
+              </button>
+            )}
+            {groups.length > 1 && (
+              <button type="button" className="btn ghost small" onClick={toggleAllGroups}>
+                {allCollapsed ? 'Alle Aufträge ausklappen' : 'Alle Aufträge einklappen'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="card">
-        {filtered.length === 0 ? (
-          <p className="muted">
-            {filter === 'all' ? 'Noch keine Bestellungen.' : 'Keine Bestellungen für diesen Filter.'}
+      {orders.length === 0 ? (
+        <p className="muted">Noch keine Bestellungen.</p>
+      ) : groups.length === 0 ? (
+        <p className="muted">
+          Keine Bestellungen für diese Auswahl.{' '}
+          {hasFilters && (
+            <button type="button" className="btn ghost small" onClick={resetFilters}>
+              Filter zurücksetzen
+            </button>
+          )}
+        </p>
+      ) : (
+        <>
+          <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0 }}>
+            {groups.length} {groups.length === 1 ? 'Auftrag' : 'Aufträge'} · {visibleCount}{' '}
+            {visibleCount === 1 ? 'Bestellung' : 'Bestellungen'}
           </p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {filtered.map((o) => {
-              const isOpen = !!expanded[o.id];
-              return (
-                <div
-                  key={o.id}
-                  style={{
-                    border: '1px solid var(--border)',
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    aria-expanded={isOpen}
-                    onClick={() => toggle(o.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        toggle(o.id);
-                      }
-                    }}
-                    className="row between"
-                    style={{ alignItems: 'flex-start', padding: 14, cursor: 'pointer', gap: 10 }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-                        <StatusBadge status={o.status} />
-                        {o.has_print && <span className="badge class">Druck</span>}
-                        <strong style={{ wordBreak: 'break-all' }}>{o.email}</strong>
-                      </div>
-                      <div className="muted" style={{ fontSize: '0.82rem', marginTop: 4 }}>
-                        {formatDate(o.created_at)} · {o.item_count} Position(en) ·{' '}
-                        {formatPrice(o.total_cents, o.currency)}
-                      </div>
-                    </div>
-                    <div
-                      className="row"
-                      style={{ gap: 10, alignItems: 'center' }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {o.has_print && (
-                        <button
-                          type="button"
-                          className="btn secondary small"
-                          onClick={() => {
-                            setShippingMsg('');
-                            setShippingOrder(o);
-                          }}
-                        >
-                          Versandbestätigung schicken
-                        </button>
-                      )}
-                      <select
-                        value={o.status}
-                        onChange={(e) => setStatus(o.id, e.target.value)}
-                        style={{ width: 170 }}
-                      >
-                        {!STATUS_OPTIONS.some((s) => s.value === o.status) && (
-                          <option value={o.status}>{o.status}</option>
-                        )}
-                        {STATUS_OPTIONS.map((s) => (
-                          <option key={s.value} value={s.value}>
-                            {s.label}
-                          </option>
-                        ))}
-                      </select>
-                      <Chevron open={isOpen} onClick={() => toggle(o.id)} />
-                    </div>
-                  </div>
-
-                  {isOpen && (
-                    <div
-                      style={{
-                        padding: 14,
-                        paddingTop: 0,
-                        borderTop: '1px solid var(--border)',
-                        marginTop: 0,
-                      }}
-                    >
-                      <OrderDetailBody
-                        loading={!!loadingDetail[o.id] && !details[o.id]}
-                        detail={details[o.id]}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div className="order-list">
+            {groups.map((g) => (
+              <EventOrderGroup
+                key={g.key}
+                group={g}
+                open={!collapsed.has(g.key)}
+                onToggle={() => toggleGroup(g.key)}
+                expanded={expanded}
+                details={details}
+                loadingDetail={loadingDetail}
+                onToggleOrder={toggle}
+                onStatus={setStatus}
+                onShip={(o) => {
+                  setShippingMsg('');
+                  setShippingOrder(o);
+                }}
+              />
+            ))}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       {shippingOrder && (
         <ShippingConfirmationModal
@@ -291,6 +505,194 @@ export default function AdminOrders() {
             load();
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Eine Kachel je Auftrag: Kopfzeile mit den Eckwerten des Auftrags, darunter –
+ * aufgeklappt – alle Bestellungen dieses Auftrags.
+ */
+function EventOrderGroup({
+  group,
+  open,
+  onToggle,
+  expanded,
+  details,
+  loadingDetail,
+  onToggleOrder,
+  onStatus,
+  onShip,
+}: {
+  group: OrderGroup;
+  open: boolean;
+  onToggle: () => void;
+  expanded: Record<string, boolean>;
+  details: Record<string, OrderDetail>;
+  loadingDetail: Record<string, boolean>;
+  onToggleOrder: (id: string) => void;
+  onStatus: (id: string, status: string) => void;
+  onShip: (order: OrderRow) => void;
+}) {
+  // Nur auslösen, wenn die Kopfzeile selbst fokussiert ist – nicht, wenn ein
+  // Bedienelement darin (z. B. der Link zum Auftrag) den Tastendruck erhält.
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onToggle();
+    }
+  };
+
+  return (
+    <div className={`order-row${open ? ' expanded' : ''}`}>
+      <div
+        className="order-row-head"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={onToggle}
+        onKeyDown={handleKeyDown}
+      >
+        <div className="order-row-bar">
+          <span className="order-row-toggle">
+            <span className="order-row-chevron" aria-hidden>
+              {open ? '▾' : '▸'}
+            </span>
+            <span className="order-row-title" title={group.name}>
+              {group.name}
+            </span>
+            {group.pending > 0 && <span className="badge amber">{group.pending} pendent</span>}
+          </span>
+          {group.key !== NO_EVENT_KEY && (
+            <div className="order-row-actions" onClick={(e) => e.stopPropagation()}>
+              <Link
+                className="btn secondary small"
+                to={`/admin/events/${group.key}`}
+                title="Auswertung dieses Auftrags öffnen"
+              >
+                Auftrag ansehen
+              </Link>
+            </div>
+          )}
+        </div>
+
+        <div className="order-row-stats">
+          <SummaryStat label="Bestellungen" value={String(group.orders.length)} />
+          <SummaryStat label="Mit Druck" value={String(group.print)} />
+          <SummaryStat label="Umsatz" value={formatPrice(group.revenue_cents, group.currency)} />
+          <SummaryStat label="Neueste Bestellung" value={formatDateShort(group.latest)} />
+        </div>
+      </div>
+
+      {open && (
+        <div className="order-row-detail">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {group.orders.map((o) => (
+              <OrderCard
+                key={o.id}
+                order={o}
+                open={!!expanded[o.id]}
+                detail={details[o.id]}
+                loadingDetail={!!loadingDetail[o.id]}
+                onToggle={() => onToggleOrder(o.id)}
+                onStatus={(status) => onStatus(o.id, status)}
+                onShip={() => onShip(o)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Eine einzelne Bestellung innerhalb einer Auftrags-Kachel. */
+function OrderCard({
+  order,
+  open,
+  detail,
+  loadingDetail,
+  onToggle,
+  onStatus,
+  onShip,
+}: {
+  order: OrderRow;
+  open: boolean;
+  detail?: OrderDetail;
+  loadingDetail: boolean;
+  onToggle: () => void;
+  onStatus: (status: string) => void;
+  onShip: () => void;
+}) {
+  const children = order.child_names ?? [];
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        className="row between"
+        style={{ alignItems: 'flex-start', padding: 14, cursor: 'pointer', gap: 10 }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+            <StatusBadge status={order.status} />
+            {order.has_print && <span className="badge class">Druck</span>}
+            <strong style={{ wordBreak: 'break-all' }}>{order.email}</strong>
+          </div>
+          <div className="muted" style={{ fontSize: '0.82rem', marginTop: 4 }}>
+            {formatDate(order.created_at)} · {order.item_count} Position(en) ·{' '}
+            {formatPrice(order.total_cents, order.currency)}
+            {children.length > 0 && ` · ${children.join(', ')}`}
+          </div>
+          {order.other_event_names && order.other_event_names.length > 0 && (
+            <div className="muted" style={{ fontSize: '0.78rem', marginTop: 2 }}>
+              Enthält auch Fotos aus: {order.other_event_names.join(', ')}
+            </div>
+          )}
+        </div>
+        <div
+          className="row"
+          style={{ gap: 10, alignItems: 'center' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {order.has_print && (
+            <button type="button" className="btn secondary small" onClick={onShip}>
+              Versandbestätigung schicken
+            </button>
+          )}
+          <select
+            value={order.status}
+            onChange={(e) => onStatus(e.target.value)}
+            style={{ width: 170 }}
+            aria-label="Status der Bestellung ändern"
+          >
+            {!STATUS_OPTIONS.some((s) => s.value === order.status) && (
+              <option value={order.status}>{order.status}</option>
+            )}
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <Chevron open={open} onClick={onToggle} />
+        </div>
+      </div>
+
+      {open && (
+        <div style={{ padding: 14, paddingTop: 0, borderTop: '1px solid var(--border)' }}>
+          <OrderDetailBody loading={loadingDetail && !detail} detail={detail} />
+        </div>
       )}
     </div>
   );
