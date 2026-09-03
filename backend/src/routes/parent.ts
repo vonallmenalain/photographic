@@ -474,14 +474,19 @@ router.post(
   }),
 );
 
+/**
+ * Preis ohne Währungsangabe ("15.-" / "15.50") – gleich wie in der App
+ * (siehe `formatPrice` im Frontend). Der Shop rechnet durchgehend in einer
+ * Währung, deshalb steht sie nicht an jedem einzelnen Betrag.
+ */
 function formatMoney(cents: number, currency: string): string {
   const code = currency.toUpperCase();
   if (code === 'CHF') {
     const hasRappen = Math.round(cents) % 100 !== 0;
     const francs = Math.round(cents) / 100;
-    return hasRappen ? `${francs.toFixed(2)} CHF` : `${Math.round(francs)}.- CHF`;
+    return hasRappen ? francs.toFixed(2) : `${Math.round(francs)}.-`;
   }
-  return `${(cents / 100).toFixed(2)} ${code}`;
+  return (cents / 100).toFixed(2);
 }
 
 async function sendConfirmationEmail(email: string, order: NonNullable<Awaited<ReturnType<typeof getOrderForEmail>>>) {

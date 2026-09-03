@@ -16,7 +16,7 @@ import type { Doc } from '../db';
  * Pricing is tiered per cart line (photo × product): the first unit costs
  * `price_cents`, every further unit of the SAME photo in the SAME product
  * costs `additional_price_cents` (falls back to the unit price when unset),
- * e.g. "13×18 cm: 15.- CHF, jedes weitere +4.-".
+ * e.g. "13×18 cm: 15.-, jedes weitere +4.-".
  *
  * Photo prints include the digital file (`includes_digital`): paying for such
  * a print creates the same download grant a digital purchase would, and a
