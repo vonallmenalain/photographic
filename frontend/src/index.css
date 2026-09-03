@@ -1031,30 +1031,37 @@ tr.clickable-row { cursor: pointer; }
 }
 
 /* ==========================================================================
-   Warmes Creme-Grau — nur Kundenapp ("Eltern"-Ansicht).
+   Weisse Holzwand — nur Kundenapp ("Eltern"-Ansicht).
    Die ganze Kundenapp steckt in `.parent-theme`, damit sie eigenständig
    umgefärbt werden kann, ohne den Adminbereich anzufassen; der behält sein
    kühles Blau/Schiefer.
 
-   Die Palette wächst aus zwei warmen Ankertönen:
-   • Creme #F7F3EC — Seitengrund und sekundäre Flächen.
-   • Sand  #E0D8CB — Haarlinien und das satte Ende des Hintergrundverlaufs.
+   Hinter der ganzen Kundenapp liegt ein Wandbild: weiss gekalkte, waagrechte
+   Holzbretter mit abgeblätterter Farbe an den Rändern, einem verzierten
+   Stuckfries und einer Zierleiste (`/backgrounds/wall.jpg`, eingehängt in
+   `.parent-bg`). Es ist bewusst fast weiss und kontrastarm — die Fotos sollen
+   die einzige Farbe im Interface bleiben.
 
-   So wirken die Farben auf diesem warmen, hellen Grund:
-   • Der Seitenhintergrund ist ein weicher Verlauf von Sand nach Creme.
+   Die Palette wächst aus zwei Ankertönen:
+   • Kalkweiss #F7F5F1 — Seitengrund (Grundton des Wandbilds) und sekundäre
+     Flächen.
+   • Sand      #E0D8CB — Haarlinien, passend zur warmen Patina der Wand.
+
+   So wirken die Farben auf diesem hellen Grund:
    • Inhaltsflächen (Karten, Eingabefelder, Dropdown …) sind warmes Weiss und
-     heben sich mit einem weichen, warmen Schatten vom Grund ab.
-   • Text und Akzente sind warmes Graubraun (Taupe) statt kühlem Graphit –
-     bewusst entsättigt, damit die Fotos die einzige Farbe im Interface
-     bleiben. Weil sich ein Link allein über diese Farbe nicht vom Fliesstext
-     unterscheidet, werden Links im Fliesstext unterstrichen
+     heben sich mit einem weichen Schatten von der Wand ab. Weil die Wand
+     selbst schon fast weiss ist, ist der Schatten kräftiger als früher auf
+     dem Cremegrund — sonst würden die Karten in der Wand verschwinden.
+   • Text und Akzente sind entsättigtes Graubraun statt kühlem Graphit. Weil
+     sich ein Link allein über diese Farbe nicht vom Fliesstext unterscheidet,
+     werden Links im Fliesstext unterstrichen
      (siehe `.parent-theme a:not([class])` weiter unten) — WCAG 1.4.1.
-   • Buttons sind ein mittleres Taupe (#736658) statt des früheren Dunkelgrau:
-     deutlich heller, mit 5.6:1 gegen die weisse Schrift aber weiterhin klar
-     über der AA-Schwelle (4.5:1). Alle Textfarben sind nachgerechnet:
-     Text 13.4:1, gedämpfter Text 4.6–5.7:1, je nach Untergrund.
+   • Buttons sind ein mittleres Warmgrau (#6B6863): gleich hell wie das frühere
+     Taupe #736658 (5.6:1 gegen die weisse Schrift, klar über der AA-Schwelle
+     von 4.5:1), aber deutlich weniger bunt — die Sättigung fällt von 24 % auf
+     8 %. Der dunkle Ton für Hover und flache Buttons ist #565350 (7.6:1).
    • Nur Statussignale (Erfolg / Fehler / Warnung) behalten einen Farbton,
-     gedämpft genug, um im warmen System ruhig zu bleiben.
+     gedämpft genug, um im ruhigen System nicht zu stören.
    ========================================================================== */
 .parent-theme {
   /* Same website font as everywhere else (Comic Sans MS, see :root). Set as the
@@ -1062,17 +1069,17 @@ tr.clickable-row { cursor: pointer; }
      inputs, badges …) picks it up. */
   font-family: var(--font);
 
-  /* Warme Creme-Palette: Taupe-Text und -Akzente auf Cremegrund, warmweisse
-     Flächen mit sandfarbenen Haarlinien. */
-  --bg: #f7f3ec;          /* Creme */
+  /* Warmgraue Palette auf der weiss gekalkten Wand: warmweisse Flächen mit
+     sandfarbenen Haarlinien, entsättigter Text und graue Buttons. */
+  --bg: #f7f5f1;          /* Kalkweiss – Grundton des Wandbilds */
   --surface: #fffcf7;     /* warmes Weiss */
-  --surface-2: #f2ece2;   /* Creme, eine Spur satter */
+  --surface-2: #f2efe9;   /* Kalkweiss, eine Spur satter */
   --border: #e0d8cb;      /* Sand */
   --text: #2b2723;
   --text-soft: #5a534b;
   --text-muted: #6d6459;
-  --primary: #736658;
-  --primary-dark: #5c5145;
+  --primary: #6b6863;
+  --primary-dark: #565350;
   --success: #2f7a4f;
   --danger: #b23b2e;
   --warning: #8a6712;
@@ -1089,16 +1096,14 @@ tr.clickable-row { cursor: pointer; }
   isolation: isolate;
   min-height: 100vh;
   color: var(--text);
-  /* Warmer, radialer Verlauf – Sand in der oberen Mitte, nach aussen hin
-     Creme. Der obere Ton bleibt bewusst hell genug, damit auch gedämpfter Text
-     dort noch 4.5:1 erreicht. Weiche Sandkreise liegen darüber (`.parent-bg`,
-     siehe Layout). */
-  background: radial-gradient(120% 120% at 50% 0%, #ebe3d7 0%, #f2ece2 55%, #f7f3ec 100%);
-  background-attachment: fixed;
+  /* Das Wandbild selbst liegt auf der fixierten Ebene `.parent-bg` (siehe
+     unten). Hier steht nur der Grundton, der die Seite trägt, solange das Bild
+     noch lädt – und der auf sehr hohen Seiten unter dem Bild durchscheint. */
+  background: var(--bg);
 }
 
 /* Links im Fliesstext werden unterstrichen: in dieser fast einfarbigen Palette
-   unterscheidet die Taupe-Linkfarbe allein den Link nicht verlässlich vom Text.
+   unterscheidet die graubraune Linkfarbe allein den Link nicht vom Text.
    `:not([class])` keeps this to plain links — buttons, nav links and the brand
    all carry a class and are styled on their own. */
 .parent-theme a:not([class]) {
@@ -1109,61 +1114,52 @@ tr.clickable-row { cursor: pointer; }
 }
 .parent-theme a:not([class]):hover { text-decoration-color: currentColor; }
 
-/* Weiche Lichtschicht: ein paar grosse, weichgezeichnete Sandkreise ziehen
-   langsam hinter dem Inhalt vorbei und geben dem flachen Cremegrund Tiefe. They are purely
-   decorative (pointer-events: none) and sit behind every surface. */
+/* ── Das Wandbild ───────────────────────────────────────────────────────────
+   Eine eigene, fixierte Ebene hinter allem: weiss gekalkte Holzbretter mit
+   Stuckfries. Bewusst ein eigenes `position: fixed`-Element statt
+   `background-attachment: fixed` auf `.parent-theme` – letzteres ruckelt auf
+   iOS Safari beim Scrollen und wird dort teils gar nicht fixiert.
+
+   `cover` schneidet je nach Fenster unterschiedlich zu; der Fries sitzt im
+   Bild bei 50–67 % Höhe und bleibt dadurch sowohl auf einem 16:9-Bildschirm
+   als auch auf einem hohen Handy im sichtbaren Ausschnitt.
+
+   Das Bild austauschen: einfach eine andere Datei unter
+   `frontend/public/backgrounds/wall.jpg` ablegen – hier ist nichts anzupassen.
+   Die Ebene ist rein dekorativ (`pointer-events: none`) und liegt hinter jeder
+   Fläche. */
 .parent-bg {
   position: fixed;
   inset: 0;
   z-index: -1; /* behind all content */
   overflow: hidden;
   pointer-events: none;
+  background: var(--bg) url('/backgrounds/wall.jpg') center / cover no-repeat;
 }
-.parent-bg .bokeh {
+
+/* Weiche Lichtschicht über der Wand: oben aufgehellt, damit die transluzente
+   Kopfleiste sauber aufsitzt, nach unten hin eine Spur tiefer, damit die Seite
+   nicht ausfranst. */
+.parent-bg::after {
+  content: "";
   position: absolute;
-  border-radius: 50%;
-  filter: blur(52px);
-  mix-blend-mode: multiply;
-  opacity: 0.5;
-  will-change: transform;
-  transform: translateZ(0);
-}
-.parent-bg .b1 {
-  width: 360px; height: 360px; left: -70px; top: 10%;
-  background: radial-gradient(circle, rgba(198, 183, 159, 0.42), transparent 66%);
-  animation: bokehDrift 17s ease-in-out infinite alternate;
-}
-.parent-bg .b2 {
-  width: 420px; height: 420px; right: -120px; top: 42%;
-  background: radial-gradient(circle, rgba(190, 175, 152, 0.34), transparent 66%);
-  animation: bokehDrift 22s 1.5s ease-in-out infinite alternate-reverse;
-}
-.parent-bg .b3 {
-  width: 300px; height: 300px; left: 24%; bottom: -90px;
-  background: radial-gradient(circle, rgba(205, 191, 168, 0.32), transparent 66%);
-  animation: bokehDrift 26s 3s ease-in-out infinite alternate;
-}
-.parent-bg .b4 {
-  width: 200px; height: 200px; left: 62%; top: 6%;
-  background: radial-gradient(circle, rgba(212, 199, 177, 0.30), transparent 64%);
-  animation: bokehDrift 19s 0.8s ease-in-out infinite alternate-reverse;
-}
-@keyframes bokehDrift {
-  0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(28px, -26px) scale(1.08); }
-  100% { transform: translate(-22px, 24px) scale(0.94); }
+  inset: 0;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0.16) 22%,
+      rgba(255, 255, 255, 0) 48%
+    ),
+    radial-gradient(130% 80% at 50% 100%, rgba(107, 97, 82, 0.10), transparent 62%);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .parent-bg .bokeh { animation: none; }
-}
-
-/* Kopfleiste: eine transluzente warmweisse/cremefarbene Leiste mit Taupe-
-   Schrift, weich verwaschen, damit der Hintergrundverlauf durchschimmert, und
-   mit einer feinen Sand→Taupe-Akzentlinie zuoberst. */
+/* Kopfleiste: eine transluzente warmweisse Leiste, weich verwaschen, damit
+   die Wand dahinter durchschimmert, und mit einer feinen Grauverlaufs-
+   Akzentlinie zuoberst. */
 .parent-theme .appbar {
   background:
-    linear-gradient(180deg, rgba(255, 253, 248, 0.94) 0%, rgba(247, 243, 236, 0.96) 100%);
+    linear-gradient(180deg, rgba(255, 254, 252, 0.94) 0%, rgba(248, 246, 242, 0.96) 100%);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(224, 216, 203, 0.95);
@@ -1174,12 +1170,12 @@ tr.clickable-row { cursor: pointer; }
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #ddd3c2 0%, #b3a691 55%, #8c7f6d 100%);
+  background: linear-gradient(90deg, #ded9d1 0%, #b6b1a8 55%, #8b8680 100%);
 }
 .parent-theme .brand { color: #2b2723; }
 .parent-theme .brand-mark {
   color: #2b2723;
-  background: linear-gradient(135deg, #3a332b, #7a6e5e);
+  background: linear-gradient(135deg, #383531, #77736c);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1204,9 +1200,9 @@ tr.clickable-row { cursor: pointer; }
   box-shadow: 0 0 0 3px rgba(43, 39, 35, 0.18);
 }
 .parent-theme .cart-btn .cart-badge {
-  background: #736658;
+  background: var(--primary);
   color: #fff;
-  box-shadow: 0 0 0 2px #f5f0e7;
+  box-shadow: 0 0 0 2px #f8f6f2;
 }
 .parent-theme .profile-btn[aria-expanded='true'] {
   background: rgba(43, 39, 35, 0.10);
@@ -1217,7 +1213,7 @@ tr.clickable-row { cursor: pointer; }
 
 /* ── Text colour scoping for card/input surfaces ────────────────────────────
    Surfaces explicitly re-declare text variables so any local overrides stay
-   consistent; auf dem Cremegrund ist --text bereits Taupe, das hier
+   consistent; auf der Wand ist --text bereits Graubraun, das hier
    this mainly ensures deeper nesting (e.g. inside portals) is also correct. */
 .parent-theme .card,
 .parent-theme .modal-card,
@@ -1237,11 +1233,11 @@ tr.clickable-row { cursor: pointer; }
 
 /* Hero lock badge + section accents */
 .parent-theme .hero .lock-big {
-  background: linear-gradient(135deg, #6b6052, #9c9081);
+  background: linear-gradient(135deg, #666360, #9b9791);
   box-shadow: 0 8px 22px rgba(74, 60, 42, 0.20);
 }
 
-/* Überschriften stehen direkt auf dem Cremegrund → Taupe, ohne Schlagschatten:
+/* Überschriften stehen direkt auf der Wand → Graubraun, ohne Schlagschatten:
    auf einem hellen, warmen Grund macht ein getönter Schatten die Buchstaben nur
    unsauber. */
 .parent-theme h1,
@@ -1258,17 +1254,28 @@ tr.clickable-row { cursor: pointer; }
   text-shadow: none;
 }
 
-/* Warmweisse Karten heben sich vom Cremegrund ab: eine sandfarbene Haarlinie
-   und ein weicher, warmer Schatten – Tiefe ohne Schwere. */
+/* Warmweisse Karten heben sich von der Wand ab: eine sandfarbene Haarlinie und
+   ein weicher, warmer Schatten – Tiefe ohne Schwere. Weil die Wand selbst fast
+   weiss ist, kommt zum weichen Schatten eine engere Kontaktschattierung dazu;
+   sonst schwimmen die Karten im Hintergrund. */
 .parent-theme .card {
   border-color: #e0d8cb;
-  box-shadow: 0 2px 6px rgba(74, 60, 42, 0.07), 0 20px 44px rgba(74, 60, 42, 0.08);
+  box-shadow:
+    0 1px 2px rgba(74, 60, 42, 0.10),
+    0 4px 10px rgba(74, 60, 42, 0.08),
+    0 22px 48px rgba(74, 60, 42, 0.10);
 }
 .parent-theme .photo-tile {
-  box-shadow: 0 2px 6px rgba(74, 60, 42, 0.07), 0 16px 36px rgba(74, 60, 42, 0.08);
+  box-shadow:
+    0 1px 2px rgba(74, 60, 42, 0.10),
+    0 4px 10px rgba(74, 60, 42, 0.08),
+    0 18px 40px rgba(74, 60, 42, 0.10);
 }
 .parent-theme .photo-tile:hover {
-  box-shadow: 0 6px 14px rgba(74, 60, 42, 0.12), 0 24px 56px rgba(74, 60, 42, 0.13);
+  box-shadow:
+    0 2px 4px rgba(74, 60, 42, 0.14),
+    0 8px 18px rgba(74, 60, 42, 0.13),
+    0 26px 58px rgba(74, 60, 42, 0.15);
 }
 
 /* Inputs on white paper */
@@ -1282,36 +1289,37 @@ tr.clickable-row { cursor: pointer; }
   box-shadow: 0 0 0 3px rgba(43, 39, 35, 0.14);
 }
 
-/* Flache Buttons (ghost) tragen ihre Farbe als Text auf dem Seitengrund. Das
-   hellere Button-Taupe (--primary) käme dort auf 4.4:1 – knapp unter AA –,
-   deshalb nehmen sie den dunkleren Ton (6.99:1 auf Creme). */
+/* Flache Buttons (ghost) tragen ihre Farbe als Text direkt auf der Wand. Das
+   hellere Buttongrau (--primary) läge dort je nach Stelle bei 4.4–5.4:1, in
+   den abgeblätterten Stellen also knapp unter AA; deshalb nehmen sie den
+   dunkleren Ton, der überall auf der Wand mindestens 6.1:1 erreicht. */
 .parent-theme .btn.ghost { color: var(--primary-dark); }
 
-/* Fotokacheln und der Kaufknopf auf dem Foto in warmen Cremetönen */
-.parent-theme .btn.on-photo { background: #f7f3ec; color: var(--text); }
-.parent-theme .btn.on-photo:hover { background: #ece4d7; }
+/* Fotokacheln und der Kaufknopf auf dem Foto im Kalkweiss der Wand */
+.parent-theme .btn.on-photo { background: #f5f3ee; color: var(--text); }
+.parent-theme .btn.on-photo:hover { background: #e7e4dc; }
 .parent-theme .pill.green { background: rgba(234, 241, 228, 0.95); color: #2b6d48; }
-.parent-theme .pill.blue { background: rgba(242, 236, 226, 0.95); color: #5a534b; }
+.parent-theme .pill.blue { background: rgba(242, 239, 233, 0.95); color: #5a534b; }
 
 /* Plaketten und Hinweise auf die warme Palette abgestimmt; die Statusfarben
-   bleiben gut lesbar, aber gedämpft, damit sie das Cremesystem nicht stören. */
+   bleiben gut lesbar, aber gedämpft, damit sie die ruhige Wand nicht stören. */
 .parent-theme .badge.class { background: #ece5d9; color: #5a534b; }
 .parent-theme .badge.green { background: #e8f0e2; color: #2b6d48; }
 .parent-theme .badge.red { background: #f7e7df; color: #96342a; }
 .parent-theme .badge.amber { background: #f4ecd8; color: #7a5c10; }
 .parent-theme .alert.error { background: #f7e7df; color: #96342a; border-color: #e7c8b9; }
 .parent-theme .alert.success { background: #e8f0e2; color: #2b6d48; border-color: #c7d8b9; }
-.parent-theme .alert.info { background: #f2ece2; color: #5a534b; border-color: #e0d8cb; }
+.parent-theme .alert.info { background: #f2efe9; color: #5a534b; border-color: #e0d8cb; }
 .parent-theme .buy-success,
 .parent-theme .photo-toast.success { color: #2b6d48; }
 .parent-theme .photo-toast.success { background: #e8f0e2; }
 .parent-theme .photo-toast.error { background: #f7e7df; color: #96342a; }
 .parent-theme .profile-dropdown-item-danger:hover { background: #f7e7df; color: var(--danger); }
 
-/* Die Fusszeile steht auf dem Cremegrund → gedämpftes Taupe, Links eine Spur
-   dunkler. */
+/* Die Fusszeile steht direkt auf der Wand → gedämpftes Graubraun, Links eine
+   Spur dunkler. */
 .parent-theme .footer { color: #6d6459; }
-.parent-theme .footer a { color: #736658; }
+.parent-theme .footer a { color: var(--primary); }
 .parent-theme .footer a:hover { color: #2b2723; }
 
 /* Galerie-Vorschaubühne: bleibt bewusst dunkel (warmes Anthrazit), damit die
@@ -1344,7 +1352,6 @@ tr.clickable-row { cursor: pointer; }
    Bewusst rund bleiben – dort trägt die runde Form eine Bedeutung, die eine
    eckige verlieren würde:
    • .spinner              – der Ladekreis dreht sich; eckig wirkt er defekt.
-   • .parent-bg .bokeh     – weichgezeichnete Lichtkreise im Hintergrund.
    • .product-option-radio – rund signalisiert Einfachauswahl (eckig läse sich
                              als Mehrfachauswahl/Checkbox).
    • .mock-*               – die Produkt-Vorschauen bilden die echte Form der
