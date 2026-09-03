@@ -4,7 +4,7 @@ import { api, ApiError, imageUrl } from '../../api/client';
 import { Alert, Spinner, TrustNote } from '../../components/common';
 import { ProductMockup, hasMockup } from '../../components/ProductMockups';
 import { useCart } from '../../context/Cart';
-import { formatPrice, hasTieredPrice } from '../../lib/format';
+import { formatPrice, formatPriceWithCurrency, hasTieredPrice } from '../../lib/format';
 
 interface CartItem {
   id: string;
@@ -239,7 +239,7 @@ export default function Cart() {
             <div className="row between" style={{ marginTop: 16 }}>
               <span className="soft">Gesamt</span>
               <strong style={{ fontSize: '1.2rem' }}>
-                {formatPrice(cart.total_cents, cart.currency)}
+                {formatPriceWithCurrency(cart.total_cents, cart.currency)}
               </strong>
             </div>
           </div>
