@@ -189,8 +189,6 @@ export default function Gallery() {
         </div>
       )}
 
-      {totalPhotos > 0 && products.length > 0 && <PriceLegend products={products} />}
-
       {groups.map((g) => {
         const isGroupSection = g.kind === 'group';
         return (
@@ -273,35 +271,6 @@ export default function Gallery() {
         />
       )}
     </div>
-  );
-}
-
-/**
- * Compact, collapsible overview of everything that can be ordered and what it
- * costs, so parents see the whole price list once instead of piecing it
- * together photo by photo.
- */
-function PriceLegend({ products }: { products: Product[] }) {
-  return (
-    <details className="price-legend card">
-      <summary>Produkte &amp; Preise im Überblick</summary>
-      <ul>
-        {products.map((p) => {
-          const hints = productHints(p);
-          if (p.scope === 'portrait') hints.push('nur für Einzelfotos');
-          return (
-            <li key={p.id}>
-              <strong>{p.name}</strong> – {formatPrice(p.price_cents, p.currency)}
-              {hints.length > 0 && <span className="soft"> · {hints.join(' · ')}</span>}
-            </li>
-          );
-        })}
-      </ul>
-      <p className="soft price-legend-note">
-        Preise pro Foto. Die digitale Datei ist bei jedem Druck inbegriffen – Sie müssen sie nicht
-        zusätzlich bestellen.
-      </p>
-    </details>
   );
 }
 
