@@ -36,7 +36,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="container">
           Diese App schützt Kinderfotos bewusst. Die Fotos sind nur nach Bestätigung Ihrer
           E-Mail-Adresse sichtbar. · <Link to="/datenschutz">Datenschutz</Link> ·{' '}
-          <Link to="/hilfe">Hilfe & Kontakt</Link>
+          <Link to="/impressum">Impressum</Link> · <Link to="/hilfe">Hilfe & Kontakt</Link>
         </div>
       </footer>
     </div>

@@ -71,6 +71,22 @@ interface OrderDoc {
   updated_at: string;
 }
 
+/**
+ * The statuses that make an order a real, customer-facing purchase.
+ *
+ * `cart` and `checkout_started` are internal stages of the shopping flow: an
+ * open cart, and a checkout the parent started but has not paid (they closed
+ * the Stripe page, went back, or the payment failed). Neither is a purchase, so
+ * neither is ever listed or counted anywhere — not for the parent, not for the
+ * admin.
+ */
+export const REAL_ORDER_STATUSES = ['pending', 'completed', 'cancelled'] as const;
+
+/** Whether an order status is a real purchase rather than an internal stage. */
+export function isRealOrder(status: string): boolean {
+  return (REAL_ORDER_STATUSES as readonly string[]).includes(status);
+}
+
 /** A shipping address is only usable when every field is filled in. */
 export function isCompleteAddress(a?: ShippingAddress | null): a is ShippingAddress {
   if (!a) return false;
@@ -94,6 +110,13 @@ export function isCompleteAddress(a?: ShippingAddress | null): a is ShippingAddr
  */
 export interface OrderItemDoc {
   order_id: string;
+  /**
+   * Id of the cart line this order line was copied from (see beginCheckout).
+   * Lets a successful payment remove exactly the lines that were bought.
+   * Absent on cart lines themselves and on orders from before the copy-on-
+   * checkout change.
+   */
+  cart_item_id?: string | null;
   photo_id: string;
   product_id: string;
   qty: number;
@@ -490,7 +513,16 @@ async function recalcTotal(orderId: string): Promise<void> {
   await updateById(COL.orders, orderId, { total_cents: total, updated_at: nowIso() });
 }
 
-/** Transitions the cart into a real order ready for payment. */
+/**
+ * Snapshots the cart into a new order that is ready for payment.
+ *
+ * The cart is **copied, not consumed**: it keeps its own document and lines for
+ * the whole payment. Going back from the payment page therefore leaves the
+ * warenkorb exactly as it was, and only a successful payment empties the bought
+ * lines out of it (see markOrderPaid). Copying also freezes what is being paid
+ * for — editing the cart while the Stripe page is open can no longer change the
+ * order Stripe is charging for.
+ */
 export async function beginCheckout(
   emailId: string,
   shippingAddress?: ShippingAddress | null,
@@ -498,15 +530,11 @@ export async function beginCheckout(
   const cart = await getCart(emailId);
   if (cart.items.length === 0) throw new ApiError(400, 'Ihr Warenkorb ist leer.');
 
-  const update: Record<string, unknown> = {
-    status: 'checkout_started',
-    updated_at: nowIso(),
-  };
-
   // Orders containing a physical product (print, sticker sheet, magnet set)
   // require a complete delivery address so it can be shipped. Digital-only
   // orders never need one.
   const hasPrint = cart.items.some((i) => i.product_type === 'print');
+  let address: ShippingAddress | null = null;
   if (hasPrint) {
     if (!isCompleteAddress(shippingAddress)) {
       throw new ApiError(
@@ -514,13 +542,75 @@ export async function beginCheckout(
         'Für Fotos zum Ausdrucken wird eine vollständige Lieferadresse benötigt.',
       );
     }
-    update.shipping_address = normalizeAddress(shippingAddress);
+    address = normalizeAddress(shippingAddress);
   } else if (isCompleteAddress(shippingAddress)) {
-    update.shipping_address = normalizeAddress(shippingAddress);
+    address = normalizeAddress(shippingAddress);
   }
 
-  await updateById(COL.orders, cart.id, update);
-  return { orderId: cart.id, total_cents: cart.total_cents, currency: cart.currency };
+  const now = nowIso();
+  const orderId = newId('ord');
+  await setById(COL.orders, orderId, {
+    email_id: emailId,
+    status: 'checkout_started',
+    currency: cart.currency,
+    total_cents: cart.total_cents,
+    shipping_address: address,
+    created_at: now,
+    updated_at: now,
+  });
+
+  // `cart_item_id` remembers where each line came from, so the payment removes
+  // exactly what was bought and anything added afterwards stays in the cart.
+  for (const line of cart.items) {
+    await setById(COL.orderItems, newId('oi'), {
+      order_id: orderId,
+      cart_item_id: line.id,
+      photo_id: line.photo_id,
+      product_id: line.product_id,
+      qty: line.qty,
+      unit_price_cents: line.unit_price_cents,
+      additional_price_cents: line.additional_price_cents,
+      line_total_cents: line.line_total_cents,
+      product_name: line.product_name,
+      product_type: line.product_type,
+      product_kind: line.product_kind,
+      includes_digital: line.includes_digital ? 1 : 0,
+      created_at: now,
+    });
+  }
+
+  return { orderId, total_cents: cart.total_cents, currency: cart.currency };
+}
+
+/**
+ * Removes the cart lines a paid order was built from. Called once the payment
+ * succeeded — until then the cart stays untouched, so an abandoned checkout
+ * costs the parent nothing. Lines added after the checkout started carry a
+ * different id and survive.
+ */
+async function clearPurchasedCartLines(
+  emailId: string,
+  orderItems: OrderItemDoc[],
+): Promise<void> {
+  const sourceIds = orderItems
+    .map((i) => i.cart_item_id)
+    .filter((id): id is string => typeof id === 'string' && !!id);
+  if (sourceIds.length === 0) return;
+
+  const cart = await firstOf<OrderDoc>(
+    col(COL.orders).where('email_id', '==', emailId).where('status', '==', 'cart'),
+  );
+  if (!cart) return;
+
+  let removed = 0;
+  for (const id of sourceIds) {
+    const item = await getById<OrderItemDoc>(COL.orderItems, id);
+    // Only ever touch lines that are still in this parent's own cart.
+    if (!item || item.order_id !== cart.id) continue;
+    await deleteById(COL.orderItems, id);
+    removed += 1;
+  }
+  if (removed > 0) await recalcTotal(cart.id);
 }
 
 function normalizeAddress(a: ShippingAddress): ShippingAddress {
@@ -549,11 +639,18 @@ function normalizeAddress(a: ShippingAddress): ShippingAddress {
  */
 export async function markOrderPaid(orderId: string, provider: string, ref: string): Promise<void> {
   const order = await getById<OrderDoc>(COL.orders, orderId);
-  if (!order) return;
-  // Already in a final state – nothing to do.
-  if (order.status === 'pending' || order.status === 'completed' || order.status === 'cancelled') {
+  if (!order) {
+    // A payment without an order to book it on must never pass silently: it
+    // means money was taken and nothing was unlocked.
+    // eslint-disable-next-line no-console
+    console.error(
+      `[orders] payment for unknown order ${orderId} (provider=${provider}, ref=${ref}) — ` +
+        'nothing was unlocked, handle this manually.',
+    );
     return;
   }
+  // Already in a final state – nothing to do.
+  if (isRealOrder(order.status)) return;
 
   const items = await itemsForOrder(orderId);
   let hasPrint = false;
@@ -593,6 +690,9 @@ export async function markOrderPaid(orderId: string, provider: string, ref: stri
     completed_at: hasPrint ? null : now,
     updated_at: now,
   });
+
+  // The payment went through, so what was bought may now leave the cart.
+  await clearPurchasedCartLines(order.email_id, items);
 }
 
 export interface OrderDetail {
@@ -703,7 +803,7 @@ export async function listOrdersForEmail(
   }[]
 > {
   const orders = (await runQuery<OrderDoc>(col(COL.orders).where('email_id', '==', emailId)))
-    .filter((o) => o.status !== 'cart')
+    .filter((o) => isRealOrder(o.status))
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return Promise.all(
@@ -718,6 +818,43 @@ export async function listOrdersForEmail(
       has_print: await orderHasPrint(o.id),
     })),
   );
+}
+
+/**
+ * How long an unpaid checkout is kept before it is treated as abandoned.
+ *
+ * Comfortably beyond both the 24 h lifetime of a Stripe Checkout session and
+ * Stripe's webhook retry window, so a payment can no longer arrive for an order
+ * that is removed here.
+ */
+const ABANDONED_CHECKOUT_DAYS = 7;
+
+/**
+ * Deletes checkouts that were started but never paid, together with their
+ * lines. Every click on "Zur Zahlung" snapshots the cart into its own order;
+ * the ones the parent never paid are drafts that would otherwise pile up in
+ * Firestore forever. Paid orders are never touched — only `checkout_started`
+ * without a payment qualifies.
+ *
+ * Returns the number of removed orders.
+ */
+export async function sweepAbandonedCheckouts(): Promise<number> {
+  const cutoff = new Date(Date.now() - ABANDONED_CHECKOUT_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  // Filtering the date in code keeps this to a single-field query, so no
+  // composite Firestore index is needed.
+  const stale = (
+    await runQuery<OrderDoc>(col(COL.orders).where('status', '==', 'checkout_started'))
+  ).filter((o) => !o.paid_at && String(o.created_at ?? '') < cutoff);
+
+  for (const order of stale) {
+    await deleteWhere(col(COL.orderItems).where('order_id', '==', order.id));
+    await deleteById(COL.orders, order.id);
+  }
+  if (stale.length > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[orders] removed ${stale.length} abandoned checkout(s) older than ${ABANDONED_CHECKOUT_DAYS} days`);
+  }
+  return stale.length;
 }
 
 /** Whether an order contains at least one physical product (Druck, Sticker, Magnete). */
