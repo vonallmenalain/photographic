@@ -7,6 +7,7 @@ import { config } from './config';
 import { migrate } from './db/migrate';
 import { archiveExpiredEvents } from './services/events';
 import { checkWatermarkRendering } from './lib/images';
+import { describeStripe, stripeWarnings } from './lib/stripeStatus';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { requestTiming } from './middleware/requestTiming';
 import parentRoutes from './routes/parent';
@@ -91,7 +92,7 @@ async function main() {
     console.log(`[server] public app : ${config.publicAppUrl}`);
     console.log(`[server] firestore   : project ${config.firebase.projectId}${emulator ? ' (EMULATOR)' : ''}`);
     console.log(`[server] parent auth : ${config.firebase.parentAuthEnabled ? 'Firebase + code fallback' : 'code only'}`);
-    console.log(`[server] stripe      : ${config.stripe.enabled ? 'enabled' : 'manual/test mode'}`);
+    console.log(`[server] stripe      : ${describeStripe()}`);
     console.log(`[server] mail        : ${config.mail.devLogOnly ? 'DEV LOG ONLY' : config.mail.host}`);
     console.log(`[server] watermark   : ${watermarkOk ? 'OK (fonts available)' : 'BROKEN — no fonts, previews NOT watermarked!'}`);
     // When parents can ONLY log in via the SMTP code flow but no SMTP server is
@@ -103,6 +104,7 @@ async function main() {
           'verification e-mails are NOT being sent. Configure SMTP_* or set FIREBASE_PARENT_AUTH=true.',
       );
     }
+    for (const warning of stripeWarnings()) console.warn(`[server] ${warning}`);
   });
 }
 

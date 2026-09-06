@@ -224,7 +224,8 @@ docker compose ps                        # Status
 | Previews ohne Wasserzeichen | Im Backend-Image fehlten Schriftarten – das Wasserzeichen wird als Text gerendert und bleibt ohne Font unsichtbar. Im aktuellen Image sind `fontconfig`, `fonts-dejavu-core`/`fonts-liberation` **und die Schrift Comic Neue** (freie Schwester von Comic Sans MS, aus `backend/assets/fonts`) enthalten. Beim Start zeigt das Log `watermark : OK (fonts available)`; steht dort `BROKEN`, Image neu bauen/ziehen. Bereits ohne Wasserzeichen erzeugte Fotos neu hochladen (oder im Admin neu verarbeiten). |
 | Wasserzeichen-Schrift ändern | Die Website nutzt überall **Comic Sans MS**. Da diese Schrift proprietär ist und nicht mitgeliefert werden darf, rendert das Backend das Wasserzeichen mit der freien, sehr ähnlichen **Comic Neue** (`backend/assets/fonts`). Legst du eine lizenzierte `Comic Sans MS`-TTF in `backend/assets/fonts` und baust das Image neu, wird sie automatisch verwendet (sie steht in `IMG_WATERMARK_FONT_FAMILY` an erster Stelle). Die Fallbacks am Ende des Werts (`Liberation Sans`, `DejaVu Sans`, …) sollten stehen bleiben, damit das Wasserzeichen nie unsichtbar wird. |
 | Foto erscheint bei Eltern nicht | Checkliste 6.3 „Eltern finden keine Fotos“. |
-| Stripe-Bestellung bleibt „Kauf gestartet“ | Webhook fehlt/falsch. Endpoint `…/webhook/stripe` und `STRIPE_WEBHOOK_SECRET` prüfen. |
+| Stripe-Bestellung bleibt „Kauf gestartet“ | Webhook fehlt/falsch. Endpoint `…/webhook/stripe` und `STRIPE_WEBHOOK_SECRET` prüfen. Nach dem Wechsel Sandbox → Live muss der Webhook **im Live-Modus neu** angelegt werden (eigenes `whsec_…`) – siehe [docs/05-stripe.md, 5.6](05-stripe.md#56-von-der-sandbox-in-den-produktivmodus-wechseln-go-live). |
+| Zahlungen kommen nie auf dem Konto an | Es läuft noch der Sandbox-Schlüssel. `docker compose logs backend` zeigt dann `[server] stripe : TEST/Sandbox …`; erwartet wird `LIVE (CHF) – real payments, webhook configured`. Umstellung: [docs/05-stripe.md, 5.6](05-stripe.md#56-von-der-sandbox-in-den-produktivmodus-wechseln-go-live). |
 
 ## 6.8 Admin-Konten & Passwörter verwalten
 
@@ -311,5 +312,8 @@ Katalog einmalig neu eingespielt. Alternativ einzelne Produkte per Admin-API
 - [ ] Backups des `data/`-Ordners eingerichtet.
 - [ ] Testdurchlauf: anlegen → hochladen → zuordnen → veröffentlichen →
       verifizieren → kaufen → herunterladen.
+- [ ] Falls mit Stripe bezahlt wird: Live-Schlüssel **und** Live-Webhook gesetzt,
+      Log zeigt `stripe : LIVE (CHF) – real payments, webhook configured`
+      ([docs/05-stripe.md, 5.6](05-stripe.md#56-von-der-sandbox-in-den-produktivmodus-wechseln-go-live)).
 
 ➡️ Fachlicher Abgleich mit dem Konzept: **[7. Konzept-Abgleich](07-konzept-abgleich.md)**.
