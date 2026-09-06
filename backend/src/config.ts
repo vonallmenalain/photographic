@@ -63,6 +63,22 @@ function normalizePaymentMethods(raw: string): string[] {
   return result;
 }
 
+/**
+ * Derives whether the configured Stripe secret key belongs to the LIVE or the
+ * TEST/Sandbox environment. Stripe encodes this in the key prefix
+ * (`sk_live_…`/`rk_live_…` vs. `sk_test_…`/`rk_test_…`), so the switch from a
+ * sandbox to production is nothing but exchanging the key – and a forgotten
+ * test key in production is the classic reason why "payments" never produce
+ * real money. We surface the detected mode at startup (see index.ts).
+ */
+function detectStripeMode(secretKey: string): 'live' | 'test' | 'unknown' {
+  const key = secretKey.trim();
+  if (!key) return 'unknown';
+  if (/^(sk|rk)_live_/.test(key)) return 'live';
+  if (/^(sk|rk)_test_/.test(key)) return 'test';
+  return 'unknown';
+}
+
 const isProd = (process.env.NODE_ENV ?? 'development') === 'production';
 
 /**
@@ -193,6 +209,10 @@ export const config = {
     webhookSecret: optional('STRIPE_WEBHOOK_SECRET'),
     currency: optional('CURRENCY', 'chf'),
     enabled: !!optional('STRIPE_SECRET_KEY'),
+    // 'live' = real money (sk_live_…), 'test' = Stripe sandbox/test mode
+    // (sk_test_…). Only used for diagnostics/logging – never to change
+    // behaviour, so live and test flows stay byte-for-byte identical.
+    mode: detectStripeMode(optional('STRIPE_SECRET_KEY')),
     // Which payment methods the Stripe Checkout page offers. We pin this in code
     // (instead of relying on the Stripe Dashboard's "automatic payment methods")
     // so the available methods are explicit and reproducible. Default: card +
