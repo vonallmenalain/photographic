@@ -6,6 +6,7 @@ import fs from 'fs';
 import { config } from './config';
 import { migrate } from './db/migrate';
 import { archiveExpiredEvents } from './services/events';
+import { sweepAbandonedCheckouts } from './services/orders';
 import { checkWatermarkRendering } from './lib/images';
 import { describeStripe, stripeWarnings } from './lib/stripeStatus';
 import { errorHandler, notFound } from './middleware/errorHandler';
@@ -72,14 +73,22 @@ async function main() {
   fs.mkdirSync(config.storageDir, { recursive: true });
   await migrate();
 
-  // Auto-archive expired galleries: once on startup and then periodically.
+  // Auto-archive expired galleries and drop checkouts that were started but
+  // never paid: once on startup and then periodically.
   const runArchiveSweep = () =>
     archiveExpiredEvents().catch((err) => {
       // eslint-disable-next-line no-console
       console.error('[archive] sweep failed', err);
     });
+  const runCheckoutSweep = () =>
+    sweepAbandonedCheckouts().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('[orders] abandoned-checkout sweep failed', err);
+    });
   await runArchiveSweep();
+  await runCheckoutSweep();
   setInterval(runArchiveSweep, 6 * 60 * 60 * 1000).unref();
+  setInterval(runCheckoutSweep, 6 * 60 * 60 * 1000).unref();
 
   const watermarkOk = await checkWatermarkRendering();
 

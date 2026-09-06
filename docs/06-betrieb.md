@@ -132,7 +132,13 @@ Bevor du ein Event auf „published“ setzt:
 - **Bestellungen (vereinfacht):** **Pendent** (Bestellung mit Druck, muss noch
   versendet werden – automatisch) · **Abgeschlossen** (digitale Bestellung bezahlt
   oder Druck manuell als erledigt markiert) · **Storniert** (nur manuell).
-  „Warenkorb“ / „Kauf gestartet“ sind nur interne Zwischenzustände des Kaufflusses.
+  „Warenkorb“ / „Kauf gestartet“ sind nur interne Zwischenzustände des Kaufflusses
+  und erscheinen weder bei den Eltern noch im Adminbereich. Der Warenkorb bleibt
+  während des ganzen Bezahlvorgangs bestehen: „Zur Zahlung“ legt eine Kopie als
+  Bestellung an, und erst die erfolgreiche Zahlung räumt die gekauften Zeilen aus
+  dem Warenkorb. Bricht jemand auf der Bezahlseite ab, bleibt sein Warenkorb also
+  unverändert; der nie bezahlte „Kauf gestartet“ wird nach 7 Tagen automatisch
+  entfernt.
 - **Events:** Entwurf → in Bearbeitung → bereit → veröffentlicht → archiviert · (deaktiviert)
 
 ## 6.2a Bestellungen nach Auftrag (Schule/Klasse)

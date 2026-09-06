@@ -55,7 +55,13 @@ import {
   productView,
   type ProductDoc,
 } from '../services/products';
-import { itemTotalCents, resolveLine, type OrderItemDoc } from '../services/orders';
+import {
+  REAL_ORDER_STATUSES,
+  isRealOrder,
+  itemTotalCents,
+  resolveLine,
+  type OrderItemDoc,
+} from '../services/orders';
 
 const router = Router();
 
@@ -484,7 +490,7 @@ router.get(
       countQuery(col(COL.photos)),
       countQuery(col(COL.parentEmails)),
       countQuery(col(COL.parentEmails).where('status', '==', 'verified')),
-      countQuery(col(COL.orders).where('status', '!=', 'cart')),
+      countQuery(col(COL.orders).where('status', 'in', [...REAL_ORDER_STATUSES])),
       countQuery(col(COL.reports).where('status', '==', 'open')),
     ]);
     res.json({ events, publishedEvents, photos, emails, verifiedEmails, orders, openReports });
@@ -1672,7 +1678,7 @@ router.get(
     const orders = (await runQuery<{ status: string; total_cents: number; currency: string; created_at: string }>(
       col(COL.orders).where('email_id', '==', req.params.id),
     ))
-      .filter((o) => o.status !== 'cart')
+      .filter((o) => isRealOrder(o.status))
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
       .map((o) => ({ id: o.id, status: o.status, total_cents: o.total_cents, currency: o.currency, created_at: o.created_at }));
 
@@ -1931,9 +1937,6 @@ router.post(
 );
 
 // --- Orders --------------------------------------------------------------
-// Only confirmed orders are real "Bestellungen". `cart` and `checkout_started`
-// are intermediate states of the shopping flow and never surface here.
-const REAL_ORDER_STATUSES = new Set(['pending', 'completed', 'cancelled']);
 
 router.get(
   '/orders',
@@ -1951,7 +1954,7 @@ router.get(
     const eventName = new Map(events.map((e) => [e.id, String(e.name ?? '')]));
 
     const orders = allOrders
-      .filter((o) => REAL_ORDER_STATUSES.has(o.status))
+      .filter((o) => isRealOrder(o.status))
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
       .slice(0, 300);
     const shownOrderIds = new Set(orders.map((o) => o.id));

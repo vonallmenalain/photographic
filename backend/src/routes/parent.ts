@@ -342,10 +342,10 @@ router.post(
   '/checkout',
   requireParent,
   asyncHandler(async (req, res) => {
-    // Read the cart (and its line items) BEFORE beginCheckout transitions it
-    // from status "cart" to "checkout_started". Otherwise getCart would no
-    // longer find a cart and silently create a new, empty one, so the Stripe
-    // session would be created without line_items.
+    // beginCheckout copies the cart into its own order and leaves the cart
+    // itself alone, so the parent can return from the payment page and still
+    // find their warenkorb. Only a successful payment empties the bought lines
+    // out of it (see markOrderPaid).
     const { shippingAddress } = parse(
       z.object({ shippingAddress: shippingAddressSchema.optional() }),
       req.body ?? {},

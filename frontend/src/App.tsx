@@ -12,6 +12,7 @@ import Orders from './pages/parent/Orders';
 import OrderDetail from './pages/parent/OrderDetail';
 import Help from './pages/parent/Help';
 import Privacy from './pages/parent/Privacy';
+import Imprint from './pages/parent/Imprint';
 
 import AdminApp from './pages/admin/AdminApp';
 
@@ -41,6 +42,7 @@ function ParentRoutes() {
             <Route path="/bestellung/:id" element={<RequireParent><OrderDetail /></RequireParent>} />
             <Route path="/hilfe" element={<Help />} />
             <Route path="/datenschutz" element={<Privacy />} />
+            <Route path="/impressum" element={<Imprint />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>
