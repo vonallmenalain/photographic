@@ -113,6 +113,21 @@ async function deleteChildCascade(childId: string): Promise<void> {
   await deleteById(COL.children, childId);
 }
 
+/**
+ * Entfernt eine Bestellung endgültig – samt allem, was ausschliesslich an ihr
+ * hängt: den Bestellpositionen und den Download-Freigaben (die gekauften
+ * Digitalfotos sind für diese Adresse danach nicht mehr herunterladbar).
+ * Fotos, Kinder und E-Mail-Adressen bleiben unberührt, sie gehören zum Auftrag
+ * und nicht zur Bestellung.
+ */
+async function deleteOrderCascade(orderId: string): Promise<void> {
+  await Promise.all([
+    deleteWhere(col(COL.orderItems).where('order_id', '==', orderId)),
+    deleteWhere(col(COL.downloadGrants).where('order_id', '==', orderId)),
+  ]);
+  await deleteById(COL.orders, orderId);
+}
+
 // --- Auth ----------------------------------------------------------------
 type AdminUser = { username: string; password_hash: string; email?: string };
 
@@ -2135,6 +2150,28 @@ router.patch(
     }
     await updateById(COL.orders, req.params.id, update);
     await audit('order.update', `${req.params.id}: ${status}`);
+    res.json({ ok: true });
+  }),
+);
+
+// Bestellung endgültig löschen. Gedacht für Testbestellungen, die nach dem
+// Wechsel in den Produktivbetrieb nicht in der Übersicht stehen bleiben sollen –
+// „Storniert“ oder „Abgeschlossen“ blenden eine Bestellung ja nicht aus.
+// Entfernt werden nur die Bestellung selbst, ihre Positionen und ihre
+// Download-Freigaben; Fotos, Kinder und Adressen bleiben bestehen.
+router.delete(
+  '/orders/:id',
+  asyncHandler(async (req, res) => {
+    const order = await getById<{ status: string }>(COL.orders, req.params.id);
+    if (!order) throw new ApiError(404, 'Bestellung nicht gefunden.');
+    // Warenkörbe und angefangene Kaufvorgänge sind interne Zwischenzustände und
+    // gehören den Eltern – sie werden nie im Adminbereich gelöscht (ein nie
+    // bezahlter Kaufvorgang räumt sich nach 7 Tagen selbst auf).
+    if (!isRealOrder(order.status)) {
+      throw new ApiError(400, 'Nur bestätigte Bestellungen können gelöscht werden.');
+    }
+    await deleteOrderCascade(req.params.id);
+    await audit('order.delete', `${req.params.id}: ${order.status}`);
     res.json({ ok: true });
   }),
 );

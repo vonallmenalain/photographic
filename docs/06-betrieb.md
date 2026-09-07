@@ -138,7 +138,9 @@ Bevor du ein Event auf „published“ setzt:
   Bestellung an, und erst die erfolgreiche Zahlung räumt die gekauften Zeilen aus
   dem Warenkorb. Bricht jemand auf der Bezahlseite ab, bleibt sein Warenkorb also
   unverändert; der nie bezahlte „Kauf gestartet“ wird nach 7 Tagen automatisch
-  entfernt.
+  entfernt. Der Status blendet eine Bestellung nie aus – auch „Storniert“ nicht.
+  Soll eine Bestellung wirklich verschwinden (typisch: eine Testbestellung aus
+  der Stripe-Sandbox), wird sie in der Übersicht gelöscht (6.2a).
 - **Events:** Entwurf → in Bearbeitung → bereit → veröffentlicht → archiviert · (deaktiviert)
 
 ## 6.2a Bestellungen nach Auftrag (Schule/Klasse)
@@ -164,6 +166,15 @@ selbst keinen Auftrag; er wird aus den bestellten Fotos abgeleitet.
   Dauer der Sitzung erhalten.
 - Bestellungen, deren Fotos zu keinem Auftrag mehr gehören (z. B. nach dem
   Löschen eines Auftrags), sammelt die Kachel **„Ohne Auftrag“** am Schluss.
+- **Bestellung löschen:** Rechts bei jeder Bestellung steht **„Löschen“**. Damit
+  verschwindet sie endgültig – aus der Übersicht, aus dem Umsatz und aus den
+  Auswertungen. Gedacht ist das vor allem für Testbestellungen, die nach dem
+  Go-Live nicht stehen bleiben sollen; ein Status („Abgeschlossen“, „Storniert“)
+  blendet eine Bestellung ja nicht aus. Mitgelöscht werden die Bestellpositionen
+  und die Download-Freigaben: bereits gekaufte Digitalfotos kann die betroffene
+  Adresse danach nicht mehr herunterladen. Fotos, Kinder und E-Mail-Adressen
+  bleiben unverändert bestehen. Ein Popup fragt vorher nach – rückgängig machen
+  lässt sich das Löschen nicht.
 - Enthält eine Bestellung ausnahmsweise Fotos aus mehreren Aufträgen, steht sie
   beim Auftrag mit den meisten Positionen; die übrigen Aufträge sind in der
   Bestellung als Hinweis vermerkt.
