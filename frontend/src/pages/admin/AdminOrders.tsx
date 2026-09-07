@@ -224,7 +224,10 @@ export default function AdminOrders() {
   const [details, setDetails] = useState<Record<string, OrderDetail>>({});
   const [loadingDetail, setLoadingDetail] = useState<Record<string, boolean>>({});
   const [shippingOrder, setShippingOrder] = useState<OrderRow | null>(null);
-  const [shippingMsg, setShippingMsg] = useState('');
+  // Zu löschende Bestellung – das Popup fragt vor dem endgültigen Entfernen nach.
+  const [deletingOrder, setDeletingOrder] = useState<OrderRow | null>(null);
+  // Rückmeldung zur letzten Aktion (Versandbestätigung bzw. Löschen).
+  const [notice, setNotice] = useState('');
 
   const load = () =>
     api<{ orders: OrderRow[] }>('/api/admin/orders', { admin: true })
@@ -270,6 +273,26 @@ export default function AdminOrders() {
       return next;
     });
     if (expanded[id]) void fetchDetail(id);
+    load();
+  };
+
+  /**
+   * Räumt eine gelöschte Bestellung aus dem lokalen Zustand. Die Liste reagiert
+   * damit sofort; `load()` holt anschliessend den Serverstand nach, damit Kachel,
+   * Umsatz und Zähler auch dann stimmen, wenn nebenher bestellt wurde.
+   */
+  const removeFromList = (id: string) => {
+    setOrders((prev) => prev.filter((o) => o.id !== id));
+    setDetails((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setExpanded((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     load();
   };
 
@@ -421,10 +444,12 @@ export default function AdminOrders() {
       <p className="soft">
         Alle bestätigten Bestellungen – zusammengefasst zu einer Kachel je Auftrag (Schule bzw.
         Klasse). Klicke auf eine Kachel, um die Bestellungen des Auftrags zu sehen, und auf eine
-        Bestellung, um alle Details aufzuklappen. Den Status kannst du direkt hier anpassen.
+        Bestellung, um alle Details aufzuklappen. Den Status kannst du direkt hier anpassen; mit
+        „Löschen“ entfernst du eine Bestellung – etwa eine Testbestellung – endgültig aus der
+        Übersicht.
       </p>
 
-      {shippingMsg && <Alert kind="success">{shippingMsg}</Alert>}
+      {notice && <Alert kind="success">{notice}</Alert>}
 
       <div className="card mb">
         <div className="row between" style={{ gap: 8, flexWrap: 'wrap' }}>
@@ -484,8 +509,12 @@ export default function AdminOrders() {
                 onToggleOrder={toggle}
                 onStatus={setStatus}
                 onShip={(o) => {
-                  setShippingMsg('');
+                  setNotice('');
                   setShippingOrder(o);
+                }}
+                onDelete={(o) => {
+                  setNotice('');
+                  setDeletingOrder(o);
                 }}
               />
             ))}
@@ -499,10 +528,23 @@ export default function AdminOrders() {
           onClose={() => setShippingOrder(null)}
           onSent={(message) => {
             setShippingOrder(null);
-            setShippingMsg(message);
+            setNotice(message);
             // Der Versand setzt die Bestellung serverseitig auf „Abgeschlossen“ –
             // Liste neu laden, damit der Status sofort stimmt.
             load();
+          }}
+        />
+      )}
+
+      {deletingOrder && (
+        <DeleteOrderModal
+          order={deletingOrder}
+          onClose={() => setDeletingOrder(null)}
+          onDeleted={(message) => {
+            const id = deletingOrder.id;
+            setDeletingOrder(null);
+            setNotice(message);
+            removeFromList(id);
           }}
         />
       )}
@@ -524,6 +566,7 @@ function EventOrderGroup({
   onToggleOrder,
   onStatus,
   onShip,
+  onDelete,
 }: {
   group: OrderGroup;
   open: boolean;
@@ -534,6 +577,7 @@ function EventOrderGroup({
   onToggleOrder: (id: string) => void;
   onStatus: (id: string, status: string) => void;
   onShip: (order: OrderRow) => void;
+  onDelete: (order: OrderRow) => void;
 }) {
   // Nur auslösen, wenn die Kopfzeile selbst fokussiert ist – nicht, wenn ein
   // Bedienelement darin (z. B. der Link zum Auftrag) den Tastendruck erhält.
@@ -599,6 +643,7 @@ function EventOrderGroup({
                 onToggle={() => onToggleOrder(o.id)}
                 onStatus={(status) => onStatus(o.id, status)}
                 onShip={() => onShip(o)}
+                onDelete={() => onDelete(o)}
               />
             ))}
           </div>
@@ -617,6 +662,7 @@ function OrderCard({
   onToggle,
   onStatus,
   onShip,
+  onDelete,
 }: {
   order: OrderRow;
   open: boolean;
@@ -625,6 +671,7 @@ function OrderCard({
   onToggle: () => void;
   onStatus: (status: string) => void;
   onShip: () => void;
+  onDelete: () => void;
 }) {
   const children = order.child_names ?? [];
   return (
@@ -685,6 +732,14 @@ function OrderCard({
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            className="btn ghost small danger"
+            onClick={onDelete}
+            title="Bestellung endgültig löschen (z. B. eine Testbestellung)"
+          >
+            Löschen
+          </button>
           <Chevron open={open} onClick={onToggle} />
         </div>
       </div>
@@ -828,6 +883,81 @@ function FilterButton({
     <button className={`btn small ${active ? '' : 'ghost'}`} onClick={onClick} type="button">
       {children}
     </button>
+  );
+}
+
+/**
+ * Sicherheitsabfrage vor dem endgültigen Löschen einer Bestellung. Gedacht in
+ * erster Linie für Testbestellungen: „Storniert“ oder „Abgeschlossen“ blenden
+ * eine Bestellung nicht aus, hier verschwindet sie wirklich. Gelöscht werden
+ * die Bestellung, ihre Positionen und die zugehörigen Download-Freigaben –
+ * Fotos, Kinder und E-Mail-Adressen bleiben bestehen.
+ */
+function DeleteOrderModal({
+  order,
+  onClose,
+  onDeleted,
+}: {
+  order: OrderRow;
+  onClose: () => void;
+  onDeleted: (msg: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const remove = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/api/admin/orders/${order.id}`, { method: 'DELETE', admin: true });
+      onDeleted(`Bestellung von ${order.email} wurde gelöscht.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Bestellung konnte nicht gelöscht werden.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Bestellung löschen"
+      width={560}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
+            Abbrechen
+          </button>
+          <button type="button" className="btn danger" onClick={remove} disabled={busy}>
+            {busy ? 'Wird gelöscht …' : 'Endgültig löschen'}
+          </button>
+        </>
+      }
+    >
+      {error && <Alert kind="error">{error}</Alert>}
+      <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
+        Diese Bestellung wird mit allen Positionen unwiderruflich entfernt und verschwindet aus der
+        Übersicht, aus dem Umsatz und aus den Auswertungen. Auch die Download-Freigaben werden
+        gelöscht – bereits gekaufte Digitalfotos kann diese Adresse danach nicht mehr herunterladen.
+        Fotos, Kinder und E-Mail-Adressen bleiben unverändert bestehen.
+      </p>
+      <div
+        style={{
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          padding: '12px 14px',
+        }}
+      >
+        <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+          <StatusBadge status={order.status} />
+          {order.has_print && <span className="badge class">Druck</span>}
+          <strong style={{ wordBreak: 'break-all' }}>{order.email}</strong>
+        </div>
+        <div className="muted" style={{ fontSize: '0.82rem', marginTop: 4 }}>
+          {formatDate(order.created_at)} · {order.item_count} Position(en) ·{' '}
+          {formatPrice(order.total_cents, order.currency)}
+        </div>
+      </div>
+    </Modal>
   );
 }
 

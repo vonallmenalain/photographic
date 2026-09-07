@@ -180,6 +180,10 @@ p { margin: 0 0 1rem; }
 .btn.ghost:hover { background: var(--surface-2); }
 .btn.danger { background: var(--danger); }
 .btn.danger:hover { background: #b53636; }
+/* Zurückhaltender Löschen-Knopf für Listen: rot, aber ohne Farbfläche, damit
+   er neben den normalen Aktionen nicht die Aufmerksamkeit an sich zieht. */
+.btn.ghost.danger { background: transparent; color: var(--danger); }
+.btn.ghost.danger:hover { background: #fdeaea; }
 .btn.small { padding: 7px 12px; font-size: 0.85rem; }
 
 /* Forms */

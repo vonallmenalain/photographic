@@ -260,6 +260,12 @@ Ein einziger echter Durchlauf ist die einzige verlässliche Probe:
 
 ### Schritt 8 – Nach dem Go-Live sinnvoll (optional)
 
+- **Testbestellungen aufräumen**: Adminbereich → **Bestellungen** → bei jeder
+  Bestellung aus der Sandbox-Zeit auf **„Löschen“**. Sie verschwindet damit
+  endgültig aus Übersicht, Umsatz und Auswertungen – „Abgeschlossen“ oder
+  „Storniert“ blenden eine Bestellung nicht aus. Details in
+  [06-betrieb.md, 6.2a](06-betrieb.md#62a-bestellungen-nach-auftrag-schuleklasse).
+  Aufträge (Schulen/Klassen) aus der Testzeit löschst du unter **Aufträge**.
 - **Belege an Eltern**: Einstellungen → **Kunden-E-Mails** → „Erfolgreiche
   Zahlungen“ aktivieren, damit Stripe automatisch eine Quittung verschickt.
 - **Branding**: Einstellungen → **Branding** – Logo und Farben erscheinen auf
