@@ -569,6 +569,7 @@ router.get(
       defaults: {
         contact_email: config.mail.contactEmailDefault,
         shipping_fee_cents: config.shop.shippingFeeCentsDefault,
+        mail_from: config.mail.from,
       },
       currency: config.stripe.currency,
       mailFrom: config.mail.from,
@@ -583,6 +584,8 @@ router.put(
     const data = parse(
       z.object({
         contact_email: z.union([emailSchema, z.literal('')]).optional(),
+        sender_name: z.string().trim().max(100).optional(),
+        sender_email: emailSchema.optional(),
         shipping_fee_cents: z.number().int().min(0).max(100_000).optional(),
         report_notify_enabled: z.boolean().optional(),
         report_notify_emails: z.union([z.array(z.string()), z.string()]).optional(),
@@ -595,6 +598,8 @@ router.put(
     );
     const patch: Record<string, unknown> = {};
     if (data.contact_email !== undefined) patch.contact_email = data.contact_email;
+    if (data.sender_name !== undefined) patch.sender_name = data.sender_name;
+    if (data.sender_email !== undefined) patch.sender_email = data.sender_email;
     if (data.shipping_fee_cents !== undefined) patch.shipping_fee_cents = data.shipping_fee_cents;
     if (data.report_notify_enabled !== undefined) patch.report_notify_enabled = data.report_notify_enabled;
     if (data.report_notify_emails !== undefined) {

@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { Alert, Modal, Spinner, StatusBadge } from '../../components/common';
 import { formatDate } from '../../lib/format';
-import { NotificationSettingsCard } from './NotificationSettings';
-import EmailDeliveries from './EmailDeliveries';
 
 interface Report {
   id: string;
@@ -87,11 +85,10 @@ export default function Reports() {
       <h1>Meldungen</h1>
       <p className="soft">
         Anliegen von Eltern – etwa falsche Zuordnungen oder fehlende Fotos.
-        {openCount > 0 ? ` ${openCount} offen.` : ''}
+        {openCount > 0 ? ` ${openCount} offen.` : ''} Ob du bei einer neuen Meldung zusätzlich eine
+        E-Mail erhältst, stellst du unter <Link to="/admin/settings">Einstellungen</Link> ein.
       </p>
       {error && <Alert kind="error">{error}</Alert>}
-
-      <NotificationSettingsCard kind="report" />
 
       <div className="card mb">
         <div className="row" style={{ gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -164,8 +161,6 @@ export default function Reports() {
           </table>
         )}
       </div>
-
-      <EmailDeliveries />
 
       {active && (
         <Modal title="Meldung" width={620} onClose={() => setActiveId(null)}>

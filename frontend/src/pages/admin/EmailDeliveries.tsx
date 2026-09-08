@@ -31,7 +31,7 @@ interface Overview {
 }
 
 /**
- * „Nicht zustellbare E-Mails“ unter „Meldungen“: Zustellprotokoll der
+ * „Nicht zustellbare E-Mails“ unter „Einstellungen“: Zustellprotokoll der
  * ausgehenden E-Mails (gemeldet vom Resend-Webhook bzw. bei einem SMTP-Fehler
  * direkt beim Versand). Standardmässig nur die offenen Probleme; auf Wunsch
  * alle protokollierten E-Mails. Jedes Problem lässt sich als erledigt

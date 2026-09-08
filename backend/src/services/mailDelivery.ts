@@ -183,7 +183,7 @@ export async function notifyDeliveryProblem(id: string, doc: DeliveryDoc): Promi
     at: doc.status_at,
     parentEmailId: doc.parent_email_id,
     parentName: parent?.name ?? '',
-    adminLink: `${config.publicAppUrl}/admin/reports`,
+    adminLink: `${config.publicAppUrl}/admin/settings`,
   });
   await updateById(COL.emailDeliveries, id, { notified_at: nowIso(), updated_at: nowIso() });
 }

@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Photographic">
+  <!--
+    Favicon der App: eine kleine Foto-Collage. Zwei gekippte Abzüge liegen
+    übereinander, der vordere zeigt ein Miniatur-Motiv aus Himmel, Hügeln und
+    Sonne. Die Abzüge füllen die Kachel bewusst fast ganz aus und haben breite
+    weisse Ränder, damit das Bild auch als 16-Pixel-Icon im Browser-Tab noch als
+    „Fotos“ erkennbar bleibt.
+  -->
+  <defs>
+    <clipPath id="frontPhoto">
+      <rect x="19.5" y="22.5" width="31" height="25" rx="2" />
+    </clipPath>
+  </defs>
+
+  <!-- Kachel im Blau der App -->
+  <rect width="64" height="64" rx="14" fill="#2f6fed" />
+
+  <!-- Hinterer Abzug: nach links gekippt, warmer Ton -->
+  <g transform="rotate(-16 26 30)">
+    <rect x="8" y="14" width="34" height="30" rx="3.5" fill="#ffffff" />
+    <rect x="11" y="17" width="28" height="24" rx="2" fill="#f0b97f" />
+  </g>
+
+  <!-- Vorderer Abzug: leicht nach rechts gekippt, mit Motiv -->
+  <g transform="rotate(9 35 35)">
+    <rect x="16" y="19" width="38" height="32" rx="3.5" fill="#ffffff" />
+    <g clip-path="url(#frontPhoto)">
+      <rect x="19.5" y="22.5" width="31" height="25" fill="#bfe3f7" />
+      <circle cx="43.5" cy="29.5" r="4.2" fill="#ffc94d" />
+      <path d="M19.5 47.5 L30 32 L40 47.5 Z" fill="#2f7d4f" />
+      <path d="M33 47.5 L43.5 35.5 L50.5 47.5 Z" fill="#4fa268" />
+    </g>
+  </g>
+</svg>

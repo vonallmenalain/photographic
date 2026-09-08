@@ -1,6 +1,6 @@
 import nodemailer, { Transporter } from 'nodemailer';
 import { config } from '../config';
-import { getAppSettings } from '../services/settings';
+import { getAppSettings, mailFrom } from '../services/settings';
 import { recordSendFailure } from './mailLog';
 
 let transporter: Transporter | null = null;
@@ -46,7 +46,9 @@ interface SendArgs {
   /**
    * Antwortadresse. Ohne Angabe geht eine Antwort an die im Adminbereich
    * hinterlegte Kontaktadresse (Einstellungen → Kontakt-E-Mail-Adresse), damit
-   * Antworten der Eltern nicht an den "no-reply"-Absender verpuffen.
+   * Antworten der Eltern nicht an den "no-reply"-Absender verpuffen. Stimmt sie
+   * mit dem Absender überein, wird kein Reply-To gesetzt – dann genügt das
+   * "Von"-Feld.
    */
   replyTo?: string;
 }
@@ -54,12 +56,15 @@ interface SendArgs {
 export async function sendMail({ to, subject, html, text, replyTo }: SendArgs): Promise<void> {
   const t = getTransporter();
   const recipients = Array.isArray(to) ? to : [to];
-  const contact = await contactAddress();
-  const effectiveReplyTo = replyTo || contact || undefined;
+  const [from, contact] = await Promise.all([mailFrom(), contactAddress()]);
+  const explicitReplyTo = replyTo?.trim() ?? '';
+  const effectiveReplyTo =
+    explicitReplyTo || (contact && contact !== from.address ? contact : '') || undefined;
   if (!t) {
     // Dev mode: log so you can copy the code/link from the console.
     // eslint-disable-next-line no-console
     console.log('\n──────── E-MAIL (dev log only) ────────');
+    console.log(`Von:     ${from.name ? `${from.name} <${from.address}>` : from.address}`);
     console.log(`An:      ${recipients.join(', ')}`);
     if (effectiveReplyTo) console.log(`Antwort: ${effectiveReplyTo}`);
     console.log(`Betreff: ${subject}`);
@@ -69,7 +74,8 @@ export async function sendMail({ to, subject, html, text, replyTo }: SendArgs): 
   }
   try {
     await t.sendMail({
-      from: config.mail.from,
+      // Als Objekt übergeben: nodemailer kodiert den Anzeigenamen korrekt.
+      from: { name: from.name, address: from.address },
       to: recipients,
       subject,
       html,
@@ -78,7 +84,7 @@ export async function sendMail({ to, subject, html, text, replyTo }: SendArgs): 
     });
   } catch (err) {
     // Fehlgeschlagene Versände landen im Zustellprotokoll (Adminbereich →
-    // Meldungen → Nicht zustellbare E-Mails). Der Fehler geht danach unverändert
+    // Einstellungen → Nicht zustellbare E-Mails). Der Fehler geht danach unverändert
     // an den Aufrufer, der wie bisher entscheidet, ob er kritisch ist.
     await recordSendFailure(recipients, subject, err);
     throw err;
