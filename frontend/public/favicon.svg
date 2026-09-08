@@ -1,34 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Photographic">
   <!--
-    Favicon der App: eine kleine Foto-Collage. Zwei gekippte Abzüge liegen
-    übereinander, der vordere zeigt ein Miniatur-Motiv aus Himmel, Hügeln und
-    Sonne. Die Abzüge füllen die Kachel bewusst fast ganz aus und haben breite
-    weisse Ränder, damit das Bild auch als 16-Pixel-Icon im Browser-Tab noch als
-    „Fotos“ erkennbar bleibt.
+    Favicon der App: eine kleine Foto-Collage in der Palette der Kundenapp
+    (siehe `.parent-theme` in src/index.css) – Kalkweiss, Sand und warmes Grau
+    statt bunter Farben. Der Grundton ist derselbe warmgraue Verlauf wie der
+    Schriftzug „Photographic“ in der Kopfzeile; er gibt dem hellen Icon zugleich
+    den Kontrast, den es im Browser-Tab braucht.
+
+    Alle Kanten sind bewusst scharf: die Kundenapp läuft durchgehend ohne
+    Rundungen aus (Radius 0). Die Abzüge füllen die Fläche fast ganz aus,
+    damit das Bild auch als 16-Pixel-Icon noch als „Fotos“ lesbar bleibt.
   -->
   <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4b463f" />
+      <stop offset="1" stop-color="#77736c" />
+    </linearGradient>
     <clipPath id="frontPhoto">
-      <rect x="19.5" y="22.5" width="31" height="25" rx="2" />
+      <rect x="19.5" y="22.5" width="31" height="25" />
     </clipPath>
   </defs>
 
-  <!-- Kachel im Blau der App -->
-  <rect width="64" height="64" rx="14" fill="#2f6fed" />
+  <!-- Grundfläche im Warmgrau des Schriftzugs -->
+  <rect width="64" height="64" fill="url(#tile)" />
 
-  <!-- Hinterer Abzug: nach links gekippt, warmer Ton -->
+  <!-- Hinterer Abzug: nach links gekippt, sandfarbenes Motiv -->
   <g transform="rotate(-16 26 30)">
-    <rect x="8" y="14" width="34" height="30" rx="3.5" fill="#ffffff" />
-    <rect x="11" y="17" width="28" height="24" rx="2" fill="#f0b97f" />
+    <rect x="8" y="14" width="34" height="30" fill="#f2efe9" />
+    <rect x="11" y="17" width="28" height="24" fill="#d9c3a5" />
   </g>
 
-  <!-- Vorderer Abzug: leicht nach rechts gekippt, mit Motiv -->
+  <!-- Vorderer Abzug: leicht nach rechts gekippt, mit Miniatur-Motiv -->
   <g transform="rotate(9 35 35)">
-    <rect x="16" y="19" width="38" height="32" rx="3.5" fill="#ffffff" />
+    <rect x="16" y="19" width="38" height="32" fill="#fffcf7" />
     <g clip-path="url(#frontPhoto)">
-      <rect x="19.5" y="22.5" width="31" height="25" fill="#bfe3f7" />
-      <circle cx="43.5" cy="29.5" r="4.2" fill="#ffc94d" />
-      <path d="M19.5 47.5 L30 32 L40 47.5 Z" fill="#2f7d4f" />
-      <path d="M33 47.5 L43.5 35.5 L50.5 47.5 Z" fill="#4fa268" />
+      <rect x="19.5" y="22.5" width="31" height="25" fill="#ded4c1" />
+      <circle cx="43.5" cy="29" r="4.4" fill="#c1913f" />
+      <path d="M19.5 47.5 L29 30.5 L40.5 47.5 Z" fill="#615a51" />
+      <path d="M32 47.5 L43.5 33 L50.5 47.5 Z" fill="#8a8073" />
     </g>
   </g>
 </svg>
