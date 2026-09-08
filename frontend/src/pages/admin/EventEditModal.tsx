@@ -117,8 +117,13 @@ export function EventEditModal({
   const [dragOver, setDragOver] = useState(false);
   // "+ E-Mail-Adresse": Kind, für das gerade das Formular offen ist.
   const [emailFormChildId, setEmailFormChildId] = useState<string | null>(null);
-  // Adresse, die gerade an Ort und Stelle korrigiert wird.
-  const [emailEdit, setEmailEdit] = useState<{ emailId: string; value: string } | null>(null);
+  // Adresse, die gerade an Ort und Stelle korrigiert wird – je Kind, weil
+  // dieselbe Adresse (Geschwister) bei mehreren Kindern stehen kann.
+  const [emailEdit, setEmailEdit] = useState<{
+    childId: string;
+    emailId: string;
+    value: string;
+  } | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dirtyRef = useRef(false);
@@ -561,7 +566,7 @@ export function EventEditModal({
                           </span>
                         ) : (
                           c.emails.map((e) =>
-                            emailEdit?.emailId === e.id ? (
+                            emailEdit?.emailId === e.id && emailEdit.childId === c.id ? (
                               <span key={e.id} className="photo-overview-child-email event-edit-email-edit">
                                 <span aria-hidden>–</span>
                                 <input
@@ -571,7 +576,7 @@ export function EventEditModal({
                                   disabled={emailBusy}
                                   aria-label={`E-Mail-Adresse ${e.email} korrigieren`}
                                   onChange={(ev) =>
-                                    setEmailEdit({ emailId: e.id, value: ev.target.value })
+                                    setEmailEdit({ childId: c.id, emailId: e.id, value: ev.target.value })
                                   }
                                   onKeyDown={(ev) => {
                                     if (ev.key === 'Enter') {
@@ -611,7 +616,9 @@ export function EventEditModal({
                                     title="E-Mail-Adresse korrigieren (z. B. Schreibfehler)"
                                     aria-label={`E-Mail-Adresse ${e.email} korrigieren`}
                                     disabled={emailBusy}
-                                    onClick={() => setEmailEdit({ emailId: e.id, value: e.email })}
+                                    onClick={() =>
+                                      setEmailEdit({ childId: c.id, emailId: e.id, value: e.email })
+                                    }
                                   >
                                     ✎
                                   </button>

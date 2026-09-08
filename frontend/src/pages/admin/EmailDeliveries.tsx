@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, ApiError } from '../../api/client';
+import { api, API_BASE, ApiError } from '../../api/client';
 import { Alert, StatusBadge } from '../../components/common';
 import { formatDate } from '../../lib/format';
 import { NotificationSettingsCard } from './NotificationSettings';
@@ -114,7 +114,7 @@ export default function EmailDeliveries() {
               Der Resend-Webhook ist noch nicht eingerichtet – Zustellprobleme werden zurzeit nur
               erfasst, wenn der Mailserver eine E-Mail schon beim Versand ablehnt. Einrichtung: in
               Resend unter „Webhooks“ die Adresse{' '}
-              <code>https://api.alae.app{overview.webhookPath}</code> mit den Ereignissen
+              <code>{API_BASE}{overview.webhookPath}</code> mit den Ereignissen
               „email.bounced“, „email.complained“, „email.failed“, „email.delivery_delayed“,
               „email.sent“ und „email.delivered“ anlegen und das Signing Secret als{' '}
               <code>RESEND_WEBHOOK_SECRET</code> in die <code>.env</code> eintragen (Anleitung:{' '}
