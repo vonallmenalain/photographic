@@ -121,22 +121,32 @@ export default function AdminSettings() {
                 {localPart}@{domain}
               </code>{' '}
               in deinem Postfach ankommen, richtest du bei Cloudflare (dort liegt die Domain{' '}
-              <code>{domain}</code>) einmalig eine kostenlose Weiterleitung ein:
+              <code>{domain}</code>) einmalig eine kostenlose Weiterleitung ein. Email Routing steht in
+              der Cloudflare-Oberfläche nicht beim Domain-Menü „E-Mail“ (dort gibt es nur DMARC
+              Management und Email Security), sondern kontoweit unter <strong>Compute</strong>:
             </p>
             <ol style={{ margin: '8px 0 0', paddingLeft: 20, fontSize: '0.88rem', lineHeight: 1.55 }}>
               <li>
-                Cloudflare-Dashboard → Domain <code>{domain}</code> → <strong>E-Mail → E-Mail-Routing</strong>{' '}
-                → „Erste Schritte“ / „Aktivieren“ (Cloudflare legt die nötigen MX-Einträge selbst an).
+                Cloudflare-Dashboard → über „Back to Domains“ zur Kontoübersicht → in der linken Leiste{' '}
+                <strong>Compute → Email Service → Email Routing</strong>. Direktlink:{' '}
+                <a href="https://dash.cloudflare.com/?to=/:account/email-service/routing" target="_blank" rel="noreferrer">
+                  dash.cloudflare.com/?to=/:account/email-service/routing
+                </a>
+                .
               </li>
               <li>
-                <strong>Zieladressen</strong>: das Postfach eintragen, das die E-Mails erhalten soll (z. B.
-                die E-Mail-Adresse eines Admin-Kontos). Cloudflare schickt dorthin eine
-                Bestätigungs-E-Mail – Link anklicken.
+                <strong>Onboard Domain</strong> → <code>{domain}</code> auswählen. Cloudflare legt die
+                nötigen DNS-Einträge (MX, SPF, DKIM) selbst an.
               </li>
               <li>
-                <strong>Routing-Regeln → Adresse erstellen</strong>: <code>{localPart}</code> als
-                benutzerdefinierte Adresse, Aktion „An E-Mail senden“, Ziel = die bestätigte
-                Zieladresse. Speichern.
+                Reiter <strong>Destination Addresses</strong>: das Postfach eintragen, das die E-Mails
+                erhalten soll (z. B. die E-Mail-Adresse eines Admin-Kontos). Cloudflare schickt dorthin
+                eine Bestätigungs-E-Mail – „Verify email address“ anklicken.
+              </li>
+              <li>
+                Reiter <strong>Routing Rules</strong> → <strong>Create routing rule</strong>: Email pattern{' '}
+                <code>{localPart}</code> mit Domain <code>{domain}</code>, Action „Send to an email“,
+                Destination = die bestätigte Adresse → Save.
               </li>
               <li>
                 Testen: Eine E-Mail an{' '}

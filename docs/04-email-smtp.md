@@ -146,27 +146,36 @@ schreibt automatisch an diese Adresse – und nicht an den `no-reply`-Absender.
 **Die App empfängt keine E-Mails.** Damit E-Mails an `photographic@alae.app`
 in einem Postfach ankommen, braucht es eine **Weiterleitung** auf der Domain.
 Da `alae.app` bei Cloudflare liegt, ist **Cloudflare Email Routing** (kostenlos)
-der einfachste Weg:
+der einfachste Weg. Wichtig: In der aktuellen Cloudflare-Oberfläche liegt Email
+Routing **nicht** im Menü der Domain (dort zeigt „Email“ nur *DMARC Management*
+und *Email Security*), sondern **kontoweit** unter *Compute → Email Service*.
 
-1. Cloudflare-Dashboard → Domain `alae.app` → **E-Mail → E-Mail-Routing** →
-   **Erste Schritte** / **E-Mail-Routing aktivieren**. Cloudflare legt die
-   nötigen DNS-Einträge (MX, SPF-TXT) selbst an; bestehende Einträge werden
-   angezeigt und müssen ggf. bestätigt werden.
+1. Cloudflare-Dashboard → über **Back to Domains** zur Kontoübersicht → in der
+   linken Leiste **Compute → Email Service → Email Routing**. Direktlink:
+   <https://dash.cloudflare.com/?to=/:account/email-service/routing>
+   (Cloudflare setzt das Konto selbst ein).
+2. **Onboard Domain** → `alae.app` auswählen. Cloudflare legt die nötigen
+   DNS-Einträge selbst an: MX-Einträge (Empfang über Cloudflare), einen
+   SPF-TXT-Eintrag und einen DKIM-TXT-Eintrag für die weitergeleiteten Mails.
    > Voraussetzung: Für `alae.app` gibt es noch keine anderen MX-Einträge
    > (kein anderes Postfach auf der Hauptdomain). Resend braucht für den
    > **Versand** keine MX-Einträge – der Versand über `no-reply@alae.app`
-   > läuft davon unberührt weiter.
-2. **Zieladressen**: das Postfach eintragen, das die E-Mails erhalten soll
-   (z. B. die E-Mail-Adresse deines Admin-Kontos). Cloudflare schickt dorthin
-   eine Bestätigungs-E-Mail – Link anklicken.
-3. **Routing-Regeln → Adresse erstellen**: benutzerdefinierte Adresse
-   `photographic`, Aktion **An E-Mail senden**, Ziel = die bestätigte
-   Zieladresse → Speichern. Optional: eine **Catch-all**-Regel, damit auch
+   > läuft davon unberührt weiter. Bestehende SPF-Einträge (z. B. der von
+   > Resend) werden von Cloudflare erkannt und ergänzt, nicht ersetzt.
+3. Reiter **Destination Addresses**: das Postfach eintragen, das die E-Mails
+   erhalten soll (z. B. die E-Mail-Adresse deines Admin-Kontos). Cloudflare
+   schickt dorthin eine Bestätigungs-E-Mail – **Verify email address**
+   anklicken. Zieladressen gelten kontoweit und lassen sich für jede Domain
+   des Kontos verwenden.
+4. Reiter **Routing Rules** → **Create routing rule**: bei *Email pattern*
+   `photographic` eintragen und `alae.app` wählen, *Action* **Send to an
+   email**, *Destination* = die bestätigte Zieladresse → **Save**. Optional:
+   im selben Reiter die **Catch-all rule** aktivieren, damit auch
    Tippfehler-Adressen (`fotographic@…`) ankommen.
-4. Testen: Eine E-Mail an `photographic@alae.app` schicken – sie muss im
+5. Testen: Eine E-Mail an `photographic@alae.app` schicken – sie muss im
    Zielpostfach ankommen. Das Ziel lässt sich dort jederzeit ändern, z. B. auf
    ein anderes Admin-Konto.
-5. Im Adminbereich unter **Einstellungen** dieselbe Adresse als
+6. Im Adminbereich unter **Einstellungen** dieselbe Adresse als
    Kontakt-E-Mail-Adresse eintragen und speichern. Sie erscheint sofort im
    Impressum, auf der Hilfe-Seite und als Antwortadresse.
 
