@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../../api/client';
-import { Alert, Modal, StatusBadge } from '../../components/common';
+import {
+  Alert,
+  DeliveryProblemBadge,
+  Modal,
+  StatusBadge,
+  type DeliveryProblemInfo,
+} from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
 import { AdminPhotoLightbox, type ManagedPhoto } from './PhotoManager';
 
@@ -22,6 +28,8 @@ interface OverviewChildEmail {
   email: string;
   name: string;
   status: string;
+  /** Letzte E-Mail an diese Adresse kam nicht an (Resend-Webhook / SMTP). */
+  delivery_problem: DeliveryProblemInfo | null;
 }
 interface OverviewChild {
   id: string;
@@ -34,6 +42,7 @@ interface OverviewEmail {
   email: string;
   name: string;
   status: string;
+  delivery_problem: DeliveryProblemInfo | null;
   childNames: string[];
   directPhotoCount: number;
 }
@@ -70,6 +79,9 @@ interface UploadResult {
  *
  *  - add photos (assigned automatically by file name, to a chosen child, or as
  *    group photo – also directly per child via "+ Fotos"),
+ *  - add a parent e-mail address directly to a child ("+ E-Mail-Adresse", e.g.
+ *    the second parent), correct a misspelt address in place or remove the
+ *    link between an address and the child,
  *  - re-assign a photo to another child / mark it as group photo,
  *  - deactivate a photo (hidden from parents, keeps files and orders) and
  *    reactivate it again,
@@ -103,6 +115,16 @@ export function EventEditModal({
     null,
   );
   const [dragOver, setDragOver] = useState(false);
+  // "+ E-Mail-Adresse": Kind, für das gerade das Formular offen ist.
+  const [emailFormChildId, setEmailFormChildId] = useState<string | null>(null);
+  // Adresse, die gerade an Ort und Stelle korrigiert wird – je Kind, weil
+  // dieselbe Adresse (Geschwister) bei mehreren Kindern stehen kann.
+  const [emailEdit, setEmailEdit] = useState<{
+    childId: string;
+    emailId: string;
+    value: string;
+  } | null>(null);
+  const [emailBusy, setEmailBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dirtyRef = useRef(false);
 
@@ -221,6 +243,105 @@ export function EventEditModal({
       setError(err instanceof ApiError ? err.message : 'Löschen fehlgeschlagen.');
     } finally {
       setBusy(photo.id, false);
+    }
+  };
+
+  // --- E-Mail-Adressen je Kind -------------------------------------------------
+  const addEmail = async (
+    child: OverviewChild,
+    email: string,
+    name: string,
+    sendInvitation: boolean,
+  ) => {
+    setError('');
+    setNotice('');
+    setEmailBusy(true);
+    try {
+      const res = await api<{
+        id: string;
+        email: string;
+        created: boolean;
+        linked: boolean;
+        invited: boolean;
+      }>(`/api/admin/children/${child.id}/emails`, {
+        method: 'POST',
+        admin: true,
+        body: { email: email.trim(), name: name.trim(), sendInvitation },
+      });
+      dirtyRef.current = true;
+      const what = res.created ? 'angelegt' : 'übernommen';
+      const link = res.linked
+        ? ` und mit „${child.name}“ verknüpft`
+        : ` – sie war bereits mit „${child.name}“ verknüpft`;
+      const invite = res.invited
+        ? ' Die Einladung wurde an diese Adresse gesendet.'
+        : sendInvitation
+          ? ' Die Einladung wurde nicht gesendet (Auftrag nicht veröffentlicht oder Versand fehlgeschlagen).'
+          : ' Die Einladung kannst du über „Einladung per E-Mail senden“ gezielt an diese Adresse schicken.';
+      setNotice(`E-Mail-Adresse ${res.email} ${what}${link}.${invite}`);
+      setEmailFormChildId(null);
+      await load(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'E-Mail-Adresse konnte nicht hinzugefügt werden.');
+    } finally {
+      setEmailBusy(false);
+    }
+  };
+
+  const saveEmailEdit = async () => {
+    if (!emailEdit) return;
+    const value = emailEdit.value.trim();
+    const current = data?.children
+      .flatMap((c) => c.emails)
+      .find((e) => e.id === emailEdit.emailId);
+    if (!value || (current && value.toLowerCase() === current.email.toLowerCase())) {
+      setEmailEdit(null);
+      return;
+    }
+    setError('');
+    setNotice('');
+    setEmailBusy(true);
+    try {
+      const res = await api<{ ok: boolean; addressChanged?: boolean }>(
+        `/api/admin/emails/${emailEdit.emailId}`,
+        { method: 'PATCH', admin: true, body: { email: value } },
+      );
+      dirtyRef.current = true;
+      setNotice(
+        `E-Mail-Adresse korrigiert zu ${value.toLowerCase()}.${
+          res.addressChanged
+            ? ' Die Bestätigung wurde zurückgesetzt – die Eltern müssen die neue Adresse einmal bestätigen; die Einladung kannst du gezielt an diese Adresse senden.'
+            : ''
+        }`,
+      );
+      setEmailEdit(null);
+      await load(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'E-Mail-Adresse konnte nicht geändert werden.');
+    } finally {
+      setEmailBusy(false);
+    }
+  };
+
+  const unlinkEmail = async (child: OverviewChild, email: OverviewChildEmail) => {
+    if (
+      !confirm(
+        `Verknüpfung zwischen ${email.email} und „${child.name}“ entfernen? Die Adresse sieht die Fotos dieses Kindes dann nicht mehr. Die Adresse selbst bleibt bestehen.`,
+      )
+    )
+      return;
+    setError('');
+    setNotice('');
+    setEmailBusy(true);
+    try {
+      await api(`/api/admin/emails/${email.id}/children/${child.id}`, { method: 'DELETE', admin: true });
+      dirtyRef.current = true;
+      setNotice(`Verknüpfung zwischen ${email.email} und „${child.name}“ entfernt.`);
+      await load(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Verknüpfung konnte nicht entfernt werden.');
+    } finally {
+      setEmailBusy(false);
     }
   };
 
@@ -444,19 +565,95 @@ export function EventEditModal({
                             – keine E-Mail-Adresse zugeordnet
                           </span>
                         ) : (
-                          c.emails.map((e) => (
-                            <span key={e.id} className="photo-overview-child-email">
-                              <span aria-hidden>–</span>
-                              <span className="photo-overview-child-email-addr">{e.email}</span>
-                              <StatusBadge status={e.status} />
-                            </span>
-                          ))
+                          c.emails.map((e) =>
+                            emailEdit?.emailId === e.id && emailEdit.childId === c.id ? (
+                              <span key={e.id} className="photo-overview-child-email event-edit-email-edit">
+                                <span aria-hidden>–</span>
+                                <input
+                                  type="email"
+                                  value={emailEdit.value}
+                                  autoFocus
+                                  disabled={emailBusy}
+                                  aria-label={`E-Mail-Adresse ${e.email} korrigieren`}
+                                  onChange={(ev) =>
+                                    setEmailEdit({ childId: c.id, emailId: e.id, value: ev.target.value })
+                                  }
+                                  onKeyDown={(ev) => {
+                                    if (ev.key === 'Enter') {
+                                      ev.preventDefault();
+                                      void saveEmailEdit();
+                                    }
+                                    if (ev.key === 'Escape') setEmailEdit(null);
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn small"
+                                  disabled={emailBusy}
+                                  onClick={() => void saveEmailEdit()}
+                                >
+                                  Speichern
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn ghost small"
+                                  disabled={emailBusy}
+                                  onClick={() => setEmailEdit(null)}
+                                >
+                                  Abbrechen
+                                </button>
+                              </span>
+                            ) : (
+                              <span key={e.id} className="photo-overview-child-email">
+                                <span aria-hidden>–</span>
+                                <span className="photo-overview-child-email-addr">{e.email}</span>
+                                <StatusBadge status={e.status} />
+                                <DeliveryProblemBadge problem={e.delivery_problem} />
+                                <span className="event-edit-email-actions">
+                                  <button
+                                    type="button"
+                                    className="event-edit-icon-btn"
+                                    title="E-Mail-Adresse korrigieren (z. B. Schreibfehler)"
+                                    aria-label={`E-Mail-Adresse ${e.email} korrigieren`}
+                                    disabled={emailBusy}
+                                    onClick={() =>
+                                      setEmailEdit({ childId: c.id, emailId: e.id, value: e.email })
+                                    }
+                                  >
+                                    ✎
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="event-edit-icon-btn danger"
+                                    title={`Verknüpfung mit „${c.name}“ entfernen`}
+                                    aria-label={`Verknüpfung zwischen ${e.email} und ${c.name} entfernen`}
+                                    disabled={emailBusy}
+                                    onClick={() => void unlinkEmail(c, e)}
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              </span>
+                            ),
+                          )
                         )}
                       </div>
                       <div className="row" style={{ gap: 8 }}>
                         <span className="muted" style={{ fontSize: '0.8rem' }}>
                           {c.photos.length} Foto(s)
                         </span>
+                        <button
+                          type="button"
+                          className="btn secondary small"
+                          title={`Weitere E-Mail-Adresse (z. B. zweiter Elternteil) mit „${c.name}“ verknüpfen`}
+                          disabled={emailBusy}
+                          onClick={() => {
+                            setEmailEdit(null);
+                            setEmailFormChildId((cur) => (cur === c.id ? null : c.id));
+                          }}
+                        >
+                          + E-Mail-Adresse
+                        </button>
                         <UploadButton
                           label="+ Fotos"
                           title={`Fotos hochladen und direkt „${c.name}“ zuordnen`}
@@ -465,6 +662,17 @@ export function EventEditModal({
                         />
                       </div>
                     </div>
+                    {emailFormChildId === c.id && (
+                      <ChildEmailForm
+                        childName={c.name}
+                        published={data.event.status === 'published'}
+                        busy={emailBusy}
+                        onSubmit={(email, name, sendInvitation) =>
+                          void addEmail(c, email, name, sendInvitation)
+                        }
+                        onCancel={() => setEmailFormChildId(null)}
+                      />
+                    )}
                     {c.photos.length === 0 ? (
                       <p className="photo-overview-warn">⚠ Keine Fotos zugeordnet</p>
                     ) : (
@@ -516,6 +724,96 @@ export function EventEditModal({
 
       {zoom && <AdminPhotoLightbox photo={zoom} onClose={() => setZoom(null)} />}
     </Modal>
+  );
+}
+
+/**
+ * Inline-Formular „+ E-Mail-Adresse“ unter dem Kind: Adresse (Pflicht), Name
+ * (optional) und – bei veröffentlichtem Auftrag – die Option, die Einladung
+ * sofort an diese Adresse zu schicken.
+ */
+function ChildEmailForm({
+  childName,
+  published,
+  busy,
+  onSubmit,
+  onCancel,
+}: {
+  childName: string;
+  published: boolean;
+  busy: boolean;
+  onSubmit: (email: string, name: string, sendInvitation: boolean) => void;
+  onCancel: () => void;
+}) {
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [sendInvitation, setSendInvitation] = useState(published);
+  return (
+    <form
+      className="event-edit-email-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!email.trim()) return;
+        onSubmit(email, name, published && sendInvitation);
+      }}
+    >
+      <div className="row" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 10 }}>
+        <div className="field" style={{ marginBottom: 0, minWidth: 240, flex: 1 }}>
+          <label style={{ fontSize: '0.8rem' }}>E-Mail-Adresse für „{childName}“</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="zweiter-elternteil@beispiel.ch"
+            autoFocus
+            required
+            disabled={busy}
+          />
+        </div>
+        <div className="field" style={{ marginBottom: 0, minWidth: 180 }}>
+          <label style={{ fontSize: '0.8rem' }}>Name (optional)</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="z. B. Familie Muster"
+            disabled={busy}
+          />
+        </div>
+        <button className="btn small" type="submit" disabled={busy || !email.trim()}>
+          {busy ? 'Wird hinzugefügt …' : 'Hinzufügen'}
+        </button>
+        <button type="button" className="btn ghost small" onClick={onCancel} disabled={busy}>
+          Abbrechen
+        </button>
+      </div>
+      {published ? (
+        <label
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'auto minmax(0, 1fr)',
+            alignItems: 'center',
+            gap: 8,
+            marginTop: 8,
+            fontSize: '0.82rem',
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={sendInvitation}
+            onChange={(e) => setSendInvitation(e.target.checked)}
+            style={{ width: 'auto', margin: 0 }}
+            disabled={busy}
+          />
+          <span>Einladung („Ihre Fotos sind bereit“) sofort an diese Adresse senden</span>
+        </label>
+      ) : (
+        <p className="muted" style={{ fontSize: '0.8rem', marginTop: 8, marginBottom: 0 }}>
+          Existiert die Adresse bereits (z. B. bei einem Geschwisterkind), wird sie übernommen und nur
+          mit diesem Kind verknüpft. Die Einladung geht erst nach dem Veröffentlichen raus.
+        </p>
+      )}
+    </form>
   );
 }
 

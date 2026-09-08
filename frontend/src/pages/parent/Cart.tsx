@@ -36,6 +36,12 @@ function lineDescription(item: CartItem): string {
   return 'Wird gedruckt und per Post versandt';
 }
 interface CartData {
+  /** Summe der Positionen ohne Versand. */
+  subtotal_cents?: number;
+  /** Versandpauschale (einmal pro Bestellung mit gedruckten Produkten). */
+  shipping_fee_cents?: number;
+  has_print?: boolean;
+  /** Zu bezahlender Betrag inkl. Versand. */
   total_cents: number;
   currency: string;
   items: CartItem[];
@@ -236,11 +242,33 @@ export default function Cart() {
                 </li>
               ))}
             </ul>
-            <div className="row between" style={{ marginTop: 16 }}>
-              <span className="soft">Gesamt</span>
-              <strong style={{ fontSize: '1.2rem' }}>
-                {formatPriceWithCurrency(cart.total_cents, cart.currency)}
-              </strong>
+            <div className="cart-summary">
+              {(cart.shipping_fee_cents ?? 0) > 0 && (
+                <>
+                  <div className="row between cart-summary-row">
+                    <span className="soft">Zwischensumme</span>
+                    <span>
+                      {formatPrice(
+                        cart.subtotal_cents ?? cart.total_cents - (cart.shipping_fee_cents ?? 0),
+                        cart.currency,
+                      )}
+                    </span>
+                  </div>
+                  <div className="row between cart-summary-row">
+                    <span className="soft">
+                      Versand per Post
+                      <span className="muted cart-summary-note"> · einmalig pro Bestellung</span>
+                    </span>
+                    <span>{formatPrice(cart.shipping_fee_cents ?? 0, cart.currency)}</span>
+                  </div>
+                </>
+              )}
+              <div className="row between cart-summary-row cart-summary-total">
+                <span className="soft">Gesamt</span>
+                <strong style={{ fontSize: '1.2rem' }}>
+                  {formatPriceWithCurrency(cart.total_cents, cart.currency)}
+                </strong>
+              </div>
             </div>
           </div>
 
@@ -249,7 +277,11 @@ export default function Cart() {
               <h2 style={{ marginTop: 0, fontSize: '1.1rem' }}>Lieferadresse für gedruckte Produkte</h2>
               <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
                 Ihre Bestellung enthält gedruckte Produkte (Fotos, Sticker oder Magnete). Bitte geben
-                Sie an, wohin wir sie senden dürfen. Der Versand erfolgt in ca. 3–4 Wochen.
+                Sie an, wohin wir sie senden dürfen. Der Versand erfolgt in ca. 3–4 Wochen
+                {(cart.shipping_fee_cents ?? 0) > 0
+                  ? ` und kostet einmalig ${formatPrice(cart.shipping_fee_cents ?? 0, cart.currency)} ${cart.currency.toUpperCase()} pro Bestellung`
+                  : ''}
+                .
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                 <AddressField

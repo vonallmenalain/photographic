@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import { Alert, Modal, SendToSelfCheckbox } from '../../components/common';
+import {
+  Alert,
+  DeliveryProblemBadge,
+  Modal,
+  SendToSelfCheckbox,
+  type DeliveryProblemInfo,
+} from '../../components/common';
 import { formatPrice, formatDateShort } from '../../lib/format';
 
 export interface Buyer {
@@ -403,6 +409,8 @@ interface ReminderEmail {
   // Zeitpunkt des letzten erfolgreichen Einladungs-Versands an diese Adresse
   // (null = es wurde noch keine Einladung verschickt).
   invitedAt: string | null;
+  // Letzte E-Mail an diese Adresse kam nicht an (Resend-Webhook / SMTP-Fehler).
+  deliveryProblem?: DeliveryProblemInfo | null;
 }
 interface ReminderChild {
   id: string;
@@ -497,19 +505,28 @@ function EmailDispatchModal({
       const endpoint = isReminder
         ? `/api/admin/events/${eventId}/send-reminder`
         : `/api/admin/events/${eventId}/notify`;
-      const res = await api<{ sent: number; failed: number; total: number; sentToSelf: boolean; devLogOnly: boolean }>(
-        endpoint,
-        {
-          method: 'POST',
-          admin: true,
-          body: {
-            emailIds: Array.from(selected),
-            sendToSelf,
-            ...(isReminder ? { mentionExtension } : {}),
-          },
+      const res = await api<{
+        sent: number;
+        failed: number;
+        failedEmails?: string[];
+        total: number;
+        sentToSelf: boolean;
+        devLogOnly: boolean;
+      }>(endpoint, {
+        method: 'POST',
+        admin: true,
+        body: {
+          emailIds: Array.from(selected),
+          sendToSelf,
+          ...(isReminder ? { mentionExtension } : {}),
         },
-      );
-      const extra = res.failed > 0 ? ` ${res.failed} konnten nicht zugestellt werden.` : '';
+      });
+      const extra =
+        res.failed > 0
+          ? ` ${res.failed} konnten nicht gesendet werden${
+              res.failedEmails?.length ? ` (${res.failedEmails.join(', ')})` : ''
+            } – Details unter „Meldungen“.`
+          : '';
       const self = res.sentToSelf ? ' Eine Kopie wurde an dich gesendet.' : '';
       const note = res.devLogOnly
         ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
@@ -610,11 +627,14 @@ function EmailDispatchModal({
                       />
                     </td>
                     <td>
-                      {e.verified ? (
-                        <span className="badge green">Bestätigt</span>
-                      ) : (
-                        <span className="badge amber">Nicht bestätigt</span>
-                      )}
+                      <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                        {e.verified ? (
+                          <span className="badge green">Bestätigt</span>
+                        ) : (
+                          <span className="badge amber">Nicht bestätigt</span>
+                        )}
+                        <DeliveryProblemBadge problem={e.deliveryProblem} />
+                      </span>
                     </td>
                     <td>
                       {e.hasOrdered ? (

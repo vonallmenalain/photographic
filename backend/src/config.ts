@@ -174,7 +174,11 @@ export const config = {
     from: optional('MAIL_FROM', 'Foto-Galerie <no-reply@example.com>'),
     // If no SMTP host is configured we log e-mails to the console (dev mode).
     devLogOnly: !optional('SMTP_HOST'),
-    supportEmail: optional('SUPPORT_EMAIL', 'support@example.com'),
+    // Öffentliche Kontaktadresse (Impressum, Hilfe, Reply-To der ausgehenden
+    // Mails). Die in der Umgebung gesetzte Adresse ist nur der Startwert – im
+    // Adminbereich unter „Einstellungen“ lässt sie sich jederzeit ändern (die
+    // dort gespeicherte Adresse hat Vorrang, siehe services/settings.ts).
+    contactEmailDefault: (optional('CONTACT_EMAIL') || optional('SUPPORT_EMAIL')).trim(),
     // Upper bound (ms) for establishing the SMTP connection / waiting on the
     // server, so a misconfigured host fails fast rather than stalling requests.
     timeoutMs: int('SMTP_TIMEOUT_MS', 10_000),
@@ -201,6 +205,21 @@ export const config = {
       'IMG_WATERMARK_FONT_FAMILY',
       "'Comic Sans MS', 'Comic Neue', 'Liberation Sans', 'DejaVu Sans', Arial, Helvetica, sans-serif",
     ),
+  },
+
+  // Versandpauschale (Rappen) für Bestellungen mit gedruckten Produkten –
+  // einmal pro Bestellung, unabhängig von der Anzahl. Auch dieser Wert ist nur
+  // der Startwert und wird im Adminbereich unter „Einstellungen“ gepflegt.
+  shop: {
+    shippingFeeCentsDefault: Math.max(0, int('SHIPPING_FEE_CENTS', 350)),
+  },
+
+  // Resend-Webhook (optional): meldet Zustellprobleme (Bounces, Beschwerden,
+  // Fehlschläge) der über Resend verschickten E-Mails an das Backend, damit sie
+  // im Adminbereich unter „Meldungen“ sichtbar werden. Signing Secret des in
+  // Resend angelegten Webhooks (beginnt mit whsec_); siehe docs/04-email-smtp.md.
+  resend: {
+    webhookSecret: optional('RESEND_WEBHOOK_SECRET').trim(),
   },
 
   // Stripe (optional). If not configured, checkout uses a manual/test flow.

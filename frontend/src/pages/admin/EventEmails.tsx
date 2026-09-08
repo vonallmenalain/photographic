@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import { Alert, Modal, StatusBadge, SendToSelfCheckbox } from '../../components/common';
+import {
+  Alert,
+  DeliveryProblemBadge,
+  Modal,
+  StatusBadge,
+  SendToSelfCheckbox,
+  type DeliveryProblemInfo,
+} from '../../components/common';
 
 interface EventRef {
   id: string;
@@ -206,6 +213,7 @@ interface NotifyRecipient {
   email: string;
   name: string;
   status: string;
+  deliveryProblem?: DeliveryProblemInfo | null;
 }
 interface NotifyInfo {
   recipientCount: number;
@@ -268,15 +276,24 @@ export function NotifyAllModal({
     setBusy(true);
     setError('');
     try {
-      const res = await api<{ sent: number; failed: number; total: number; sentToSelf: boolean; devLogOnly: boolean }>(
-        `/api/admin/events/${eventId}/notify`,
-        {
-          method: 'POST',
-          admin: true,
-          body: { emailIds: Array.from(selected), sendToSelf },
-        },
-      );
-      const extra = res.failed > 0 ? ` ${res.failed} konnten nicht zugestellt werden.` : '';
+      const res = await api<{
+        sent: number;
+        failed: number;
+        failedEmails?: string[];
+        total: number;
+        sentToSelf: boolean;
+        devLogOnly: boolean;
+      }>(`/api/admin/events/${eventId}/notify`, {
+        method: 'POST',
+        admin: true,
+        body: { emailIds: Array.from(selected), sendToSelf },
+      });
+      const extra =
+        res.failed > 0
+          ? ` ${res.failed} konnten nicht gesendet werden${
+              res.failedEmails?.length ? ` (${res.failedEmails.join(', ')})` : ''
+            } – Details unter „Meldungen“.`
+          : '';
       const self = res.sentToSelf ? ' Eine Kopie wurde an dich gesendet.' : '';
       const note = res.devLogOnly
         ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
@@ -341,7 +358,10 @@ export function NotifyAllModal({
                   {r.email}
                   {r.name ? <span className="muted"> · {r.name}</span> : null}
                 </span>
-                <StatusBadge status={r.status === 'verified' ? 'verified' : 'not_verified'} />
+                <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                  <StatusBadge status={r.status === 'verified' ? 'verified' : 'not_verified'} />
+                  <DeliveryProblemBadge problem={r.deliveryProblem} />
+                </span>
               </label>
             ))}
           </RecipientCheckboxList>

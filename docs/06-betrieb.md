@@ -191,9 +191,14 @@ selbst keinen Auftrag; er wird aus den bestellten Fotos abgeleitet.
 - **Mehrere Kinder:** eine Adresse mit mehreren Kindern verknüpfen.
 - **Falsch zugeordnetes Foto:** Adminbereich → **Aufträge** → beim Auftrag auf **„Bearbeiten“** klicken. Im Popup lässt sich jedes Foto direkt in der Kachel einem anderen Kind zuordnen, als Gruppenfoto markieren, **deaktivieren** (für Eltern ausgeblendet, Datei und Bestellungen bleiben erhalten), wieder aktivieren oder endgültig löschen. Bereits bestellte Fotos sind mit „Bestellt ×n“ markiert und werden vor dem Deaktivieren/Löschen extra bestätigt.
 - **Fotos nachträglich ergänzen:** ebenfalls über **Aufträge → „Bearbeiten“**: oben „Fotos hinzufügen“ (Zuordnung automatisch nach Dateiname, zu einem gewählten Kind oder als Gruppenfoto) oder direkt beim Kind über **„+ Fotos“**. Der Auftrag bleibt dabei veröffentlicht – die Änderungen sind für die Eltern sofort sichtbar.
+- **E-Mail-Adresse nachträglich hinzufügen oder korrigieren (im Auftrag):** ebenfalls über **Aufträge → „Bearbeiten“**. Beim Kind steht neben „+ Fotos“ der Knopf **„+ E-Mail-Adresse“** – z. B. für einen zweiten Elternteil. Existiert die Adresse schon (etwa vom Geschwisterkind), wird sie übernommen und nur mit diesem Kind verknüpft; bei einem veröffentlichten Auftrag kann die Einladung sofort mitgeschickt werden. Neben jeder Adresse: **✎** korrigiert eine falsch geschriebene Adresse an Ort und Stelle (die Bestätigung wird dabei zurückgesetzt, die Eltern bestätigen die neue Adresse einmal neu – Einladung danach gezielt an diese Adresse senden), **×** entfernt die Verknüpfung mit diesem Kind (die Adresse selbst bleibt bestehen). Adressen, an die die letzte E-Mail nicht zugestellt werden konnte, sind rot mit **„Nicht zustellbar“** markiert (siehe 6.11).
 - **Eltern finden keine Fotos:** prüfen, ob (a) Adresse exakt stimmt, (b) Kind
   verknüpft, (c) Foto nicht deaktiviert, (d) Event „published“.
-- **Meldungen der Eltern:** Adminbereich → „Meldungen“ (Status pflegen).
+- **Meldungen der Eltern:** Adminbereich → „Meldungen“ (Status pflegen). Oben auf
+  der Seite lässt sich einstellen, dass bei **jeder neuen Meldung sofort eine
+  E-Mail** an dich geht (mit Anliegen, Nachricht und Absenderadresse; „Antworten“
+  im Postfach schreibt direkt an die Eltern). Die Zahl neben dem Menüpunkt
+  „Meldungen“ zählt offene Meldungen und offene Zustellprobleme.
 
 ## 6.4 Aufbewahrung (Standard 30 Tage)
 
@@ -241,6 +246,8 @@ docker compose ps                        # Status
 | Previews ohne Wasserzeichen | Im Backend-Image fehlten Schriftarten – das Wasserzeichen wird als Text gerendert und bleibt ohne Font unsichtbar. Im aktuellen Image sind `fontconfig`, `fonts-dejavu-core`/`fonts-liberation` **und die Schrift Comic Neue** (freie Schwester von Comic Sans MS, aus `backend/assets/fonts`) enthalten. Beim Start zeigt das Log `watermark : OK (fonts available)`; steht dort `BROKEN`, Image neu bauen/ziehen. Bereits ohne Wasserzeichen erzeugte Fotos neu hochladen (oder im Admin neu verarbeiten). |
 | Wasserzeichen-Schrift ändern | Die Website nutzt überall **Comic Sans MS**. Da diese Schrift proprietär ist und nicht mitgeliefert werden darf, rendert das Backend das Wasserzeichen mit der freien, sehr ähnlichen **Comic Neue** (`backend/assets/fonts`). Legst du eine lizenzierte `Comic Sans MS`-TTF in `backend/assets/fonts` und baust das Image neu, wird sie automatisch verwendet (sie steht in `IMG_WATERMARK_FONT_FAMILY` an erster Stelle). Die Fallbacks am Ende des Werts (`Liberation Sans`, `DejaVu Sans`, …) sollten stehen bleiben, damit das Wasserzeichen nie unsichtbar wird. |
 | Foto erscheint bei Eltern nicht | Checkliste 6.3 „Eltern finden keine Fotos“. |
+| E-Mail an eine Familie kommt nicht an (in Resend „Bounced“) | Adminbereich → **Meldungen → Nicht zustellbare E-Mails**: dort stehen Empfänger, Betreff und Begründung, die Adresse ist im Auftrag rot markiert. Adresse unter **Aufträge → „Bearbeiten“** beim Kind mit ✎ korrigieren und die Einladung erneut an diese Adresse senden. Voraussetzung ist der eingerichtete Resend-Webhook ([docs/04-email-smtp.md, 4.6](04-email-smtp.md)); ohne ihn steht nur in Resend, dass die E-Mail nicht ankam. |
+| Antworten der Eltern auf Einladungen/Bestätigungen verschwinden | Antworten gehen an die **Kontakt-E-Mail-Adresse** aus **Einstellungen** (Reply-To). Ist dort nichts eingetragen, landen sie beim `no-reply`-Absender. Adresse eintragen und die Weiterleitung bei Cloudflare einrichten ([docs/04-email-smtp.md, 4.7](04-email-smtp.md)). |
 | Stripe-Bestellung bleibt „Kauf gestartet“ | Webhook fehlt/falsch. Endpoint `…/webhook/stripe` und `STRIPE_WEBHOOK_SECRET` prüfen. Nach dem Wechsel Sandbox → Live muss der Webhook **im Live-Modus neu** angelegt werden (eigenes `whsec_…`) – siehe [docs/05-stripe.md, 5.6](05-stripe.md#56-von-der-sandbox-in-den-produktivmodus-wechseln-go-live). |
 | Zahlungen kommen nie auf dem Konto an | Es läuft noch der Sandbox-Schlüssel. `docker compose logs backend` zeigt dann `[server] stripe : TEST/Sandbox …`; erwartet wird `LIVE (CHF) – real payments, webhook configured`. Umstellung: [docs/05-stripe.md, 5.6](05-stripe.md#56-von-der-sandbox-in-den-produktivmodus-wechseln-go-live). |
 
@@ -290,6 +297,18 @@ erhalten. Aktueller Katalog:
 | Sticker-Bogen (16 Stück, 3×4 cm) | 11.- CHF pro Bogen | 11.- CHF | nein | nur Einzelfotos |
 | Magnete-Set (3 Stück, 5×5 cm) | 13.- CHF pro Set | 13.- CHF | nein | nur Einzelfotos |
 
+Dazu kommt die **Versandpauschale** (Standard **3.50 CHF**, änderbar unter
+**Einstellungen**): Sie fällt **einmal pro Bestellung** an, sobald mindestens
+ein gedrucktes Produkt (Druck, Sticker, Magnete) enthalten ist – unabhängig von
+der Anzahl. Rein digitale Bestellungen sind versandfrei. Die Pauschale wird
+schon in der Galerie bei jedem gedruckten Produkt genannt („+ 3.50 Versand pro
+Bestellung“), im Warenkorb als eigene Zeile (Zwischensumme / Versand per Post /
+Gesamt) ausgewiesen, auf der Stripe-Bezahlseite als Position „Versand per Post“
+aufgeführt und in der Bestellbestätigung, den Bestelldetails und im Impressum
+genannt. Jede Bestellung speichert Zwischensumme, Versandpauschale und
+Gesamtbetrag; Umsatzzahlen im Adminbereich enthalten das Porto (dem Auftrag mit
+den meisten Positionen der Bestellung zugerechnet).
+
 So funktioniert die Preislogik:
 
 - **Staffelpreis pro Foto und Produkt:** Das erste Stück einer Position (z. B.
@@ -317,6 +336,34 @@ und `PRODUCT_CATALOG_VERSION` um 1 erhöhen – beim nächsten Start wird der
 Katalog einmalig neu eingespielt. Alternativ einzelne Produkte per Admin-API
 (`GET/POST/PATCH /api/admin/products`) pflegen (Felder: `name`, `price_cents`,
 `additional_price_cents`, `kind`, `includes_digital`, `scope`, `active`).
+
+## 6.11 Einstellungen, Kontaktadresse und Zustellprobleme
+
+Der Menüpunkt **Einstellungen** bündelt, was früher nur in der `.env` stand:
+
+- **Kontakt-E-Mail-Adresse** (z. B. `photographic@alae.app`): steht im
+  Impressum und auf der Hilfe-Seite anstelle einer Telefonnummer und ist die
+  Antwortadresse aller E-Mails an Eltern. Damit E-Mails an diese Adresse in
+  einem Postfach ankommen, ist einmalig eine Weiterleitung bei Cloudflare nötig –
+  die Schritte stehen direkt auf der Seite und in
+  [docs/04-email-smtp.md, 4.7](04-email-smtp.md).
+- **Versandpauschale** für gedruckte Produkte (siehe 6.10).
+
+Die **Benachrichtigungen** (neue Meldung, Zustellproblem) werden unter
+**Meldungen** eingestellt – jeweils mit Ein-/Ausschalter und Empfängerliste
+(leer = alle Admin-Konten mit E-Mail-Adresse).
+
+**Nicht zustellbare E-Mails** (unter „Meldungen“): Ist der Resend-Webhook
+eingerichtet ([docs/04-email-smtp.md, 4.6](04-email-smtp.md)), meldet Resend
+jede E-Mail, die nicht zugestellt werden konnte (Bounce, Spam-Beschwerde,
+Fehlschlag). Die Liste zeigt Empfänger, Betreff, Zeitpunkt und Begründung; die
+betroffene Eltern-Adresse ist überall rot mit **„Nicht zustellbar“** markiert.
+Mit **„Erledigt“** wird ein Problem geschlossen (die Markierung verschwindet);
+eine korrigierte Adresse oder eine spätere erfolgreiche Zustellung an dieselbe
+Adresse hebt die Markierung ebenfalls auf. Ohne Webhook erfasst die App nur
+Fehler, die der Mailserver schon beim Versand meldet. „Alle protokollierten
+E-Mails“ zeigt auch die erfolgreich zugestellten; Einträge älter als 90 Tage
+werden automatisch aufgeräumt.
 
 ## 6.9 Sicherheits-Checkliste (vor Go-Live)
 

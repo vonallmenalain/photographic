@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, ApiError } from '../../api/client';
 import { Alert, TrustNote } from '../../components/common';
 import { firebaseEnabled } from '../../lib/firebase';
+import { useSiteInfo } from '../../lib/siteInfo';
 
 const TYPES = [
   { value: 'wrong_email', label: 'Meine E-Mail-Adresse ist falsch oder veraltet' },
@@ -23,6 +24,7 @@ export default function Help() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const site = useSiteInfo();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,6 +98,13 @@ export default function Help() {
           </form>
         )}
       </div>
+
+      {site?.contactEmail && (
+        <p className="soft" style={{ marginTop: 18 }}>
+          Lieber direkt per E-Mail? Schreiben Sie an{' '}
+          <a href={`mailto:${site.contactEmail}`}>{site.contactEmail}</a>.
+        </p>
+      )}
 
       <div style={{ marginTop: 18 }}>
         <TrustNote>

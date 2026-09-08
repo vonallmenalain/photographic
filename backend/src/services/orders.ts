@@ -13,6 +13,7 @@ import {
 import { newId, randomToken } from '../lib/ids';
 import { ApiError } from '../middleware/errorHandler';
 import { canEmailSeePhoto } from './access';
+import { getAppSettings } from './settings';
 import {
   lineTotalCents,
   productAllowedForPhoto,
@@ -56,7 +57,15 @@ interface OrderDoc {
   email_id: string;
   status: string;
   currency: string;
+  /** Gesamtbetrag inkl. Versandpauschale – das, was bezahlt wird. */
   total_cents: number;
+  /**
+   * Summe der Positionen ohne Versand und die Versandpauschale. Fehlen beide
+   * (Bestellungen von vor der Einführung der Pauschale), gilt: kein Versand,
+   * Zwischensumme = Gesamtbetrag.
+   */
+  subtotal_cents?: number;
+  shipping_fee_cents?: number;
   payment_provider?: string;
   payment_ref?: string;
   shipping_address?: ShippingAddress | null;
@@ -85,6 +94,33 @@ export const REAL_ORDER_STATUSES = ['pending', 'completed', 'cancelled'] as cons
 /** Whether an order status is a real purchase rather than an internal stage. */
 export function isRealOrder(status: string): boolean {
   return (REAL_ORDER_STATUSES as readonly string[]).includes(status);
+}
+
+/**
+ * Versandpauschale für eine Bestellung: fällt genau einmal an, sobald mindestens
+ * ein gedrucktes Produkt (Druck, Sticker, Magnete – alles, was per Post
+ * verschickt wird) enthalten ist; rein digitale Bestellungen sind versandfrei.
+ * Die Höhe pflegt der Admin unter „Einstellungen“ (Standard 3.50 CHF).
+ */
+export async function shippingFeeCentsFor(items: { product_type: ProductType }[]): Promise<number> {
+  if (!items.some((i) => i.product_type === 'print')) return 0;
+  const settings = await getAppSettings();
+  return Math.max(0, Math.round(settings.shipping_fee_cents));
+}
+
+/** Versandpauschale und Zwischensumme einer gespeicherten Bestellung (mit Fallback für alte Bestellungen). */
+export function orderAmounts(order: Pick<OrderDoc, 'total_cents' | 'subtotal_cents' | 'shipping_fee_cents'>): {
+  subtotal_cents: number;
+  shipping_fee_cents: number;
+  total_cents: number;
+} {
+  const total = Number(order.total_cents) || 0;
+  const shipping = Math.max(0, Number(order.shipping_fee_cents) || 0);
+  const subtotal =
+    typeof order.subtotal_cents === 'number' && Number.isFinite(order.subtotal_cents)
+      ? order.subtotal_cents
+      : Math.max(0, total - shipping);
+  return { subtotal_cents: subtotal, shipping_fee_cents: shipping, total_cents: total };
 }
 
 /** A shipping address is only usable when every field is filled in. */
@@ -226,9 +262,21 @@ async function itemsForOrder(orderId: string) {
   return runQuery<OrderItemDoc>(col(COL.orderItems).where('order_id', '==', orderId));
 }
 
-export async function getCart(
-  emailId: string,
-): Promise<{ id: string; items: CartLine[]; total_cents: number; currency: string }> {
+export interface CartSummary {
+  id: string;
+  items: CartLine[];
+  /** Summe der Positionen (ohne Versand). */
+  subtotal_cents: number;
+  /** Versandpauschale – 0 ohne gedrucktes Produkt. */
+  shipping_fee_cents: number;
+  /** Zu bezahlender Betrag = Zwischensumme + Versandpauschale. */
+  total_cents: number;
+  currency: string;
+  /** Ob mindestens ein Produkt per Post verschickt wird. */
+  has_print: boolean;
+}
+
+export async function getCart(emailId: string): Promise<CartSummary> {
   const cartId = await getOrCreateCart(emailId);
   const rawItems = await itemsForOrder(cartId);
 
@@ -256,9 +304,18 @@ export async function getCart(
     });
   }
 
-  const total = items.reduce((sum, i) => sum + i.line_total_cents, 0);
+  const subtotal = items.reduce((sum, i) => sum + i.line_total_cents, 0);
+  const shipping = await shippingFeeCentsFor(items);
   const order = await getById<OrderDoc>(COL.orders, cartId);
-  return { id: cartId, items, total_cents: total, currency: order?.currency ?? 'chf' };
+  return {
+    id: cartId,
+    items,
+    subtotal_cents: subtotal,
+    shipping_fee_cents: shipping,
+    total_cents: subtotal + shipping,
+    currency: order?.currency ?? 'chf',
+    has_print: items.some((i) => i.product_type === 'print'),
+  };
 }
 
 /**
@@ -509,8 +566,24 @@ export async function clearCart(emailId: string): Promise<void> {
 
 async function recalcTotal(orderId: string): Promise<void> {
   const items = await itemsForOrder(orderId);
-  const total = items.reduce((sum, i) => sum + itemTotalCents(i), 0);
-  await updateById(COL.orders, orderId, { total_cents: total, updated_at: nowIso() });
+  const subtotal = items.reduce((sum, i) => sum + itemTotalCents(i), 0);
+  // Für die Versandpauschale zählt die Produktart der Positionen (Momentaufnahme;
+  // ältere Zeilen ohne Momentaufnahme werden über das Produkt aufgelöst).
+  const resolved: { product_type: ProductType }[] = [];
+  for (const item of items) {
+    const product =
+      item.product_type === 'print' || item.product_type === 'digital'
+        ? null
+        : await loadProduct(item.product_id);
+    resolved.push({ product_type: resolveLine(item, product).type });
+  }
+  const shipping = await shippingFeeCentsFor(resolved);
+  await updateById(COL.orders, orderId, {
+    subtotal_cents: subtotal,
+    shipping_fee_cents: shipping,
+    total_cents: subtotal + shipping,
+    updated_at: nowIso(),
+  });
 }
 
 /**
@@ -553,6 +626,8 @@ export async function beginCheckout(
     email_id: emailId,
     status: 'checkout_started',
     currency: cart.currency,
+    subtotal_cents: cart.subtotal_cents,
+    shipping_fee_cents: cart.shipping_fee_cents,
     total_cents: cart.total_cents,
     shipping_address: address,
     created_at: now,
@@ -699,6 +774,8 @@ export interface OrderDetail {
   id: string;
   status: string;
   currency: string;
+  subtotal_cents: number;
+  shipping_fee_cents: number;
   total_cents: number;
   created_at: string;
   paid_at: string | null;
@@ -763,11 +840,14 @@ export async function getOrderForEmail(emailId: string, orderId: string): Promis
     });
   }
 
+  const amounts = orderAmounts(order);
   return {
     id: order.id,
     status: order.status,
     currency: order.currency,
-    total_cents: order.total_cents,
+    subtotal_cents: amounts.subtotal_cents,
+    shipping_fee_cents: amounts.shipping_fee_cents,
+    total_cents: amounts.total_cents,
     created_at: order.created_at,
     paid_at: order.paid_at ?? null,
     completed_at: completedAt(order),

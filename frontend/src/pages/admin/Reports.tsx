@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { Alert, Modal, Spinner, StatusBadge } from '../../components/common';
 import { formatDate } from '../../lib/format';
+import { NotificationSettingsCard } from './NotificationSettings';
+import EmailDeliveries from './EmailDeliveries';
 
 interface Report {
   id: string;
@@ -89,6 +91,8 @@ export default function Reports() {
       </p>
       {error && <Alert kind="error">{error}</Alert>}
 
+      <NotificationSettingsCard kind="report" />
+
       <div className="card mb">
         <div className="row" style={{ gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="field" style={{ marginBottom: 0, minWidth: 200 }}>
@@ -160,6 +164,8 @@ export default function Reports() {
           </table>
         )}
       </div>
+
+      <EmailDeliveries />
 
       {active && (
         <Modal title="Meldung" width={620} onClose={() => setActiveId(null)}>

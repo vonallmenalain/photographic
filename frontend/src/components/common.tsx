@@ -144,7 +144,51 @@ export function StatusBadge({ status }: { status: string }) {
     // reports
     open: { label: 'Offen', cls: 'amber' },
     resolved: { label: 'Gelöst', cls: 'green' },
+    // e-mail delivery (Zustellprotokoll)
+    sent: { label: 'Gesendet', cls: 'gray' },
+    delivered: { label: 'Zugestellt', cls: 'green' },
+    delayed: { label: 'Verzögert', cls: 'amber' },
+    bounced: { label: 'Unzustellbar', cls: 'red' },
+    complained: { label: 'Als Spam gemeldet', cls: 'red' },
+    failed: { label: 'Versand fehlgeschlagen', cls: 'red' },
   };
   const info = map[status] ?? { label: status, cls: 'gray' };
   return <span className={`badge ${info.cls}`}>{info.label}</span>;
+}
+
+/** Zustellproblem einer Eltern-Adresse, wie es die Admin-Endpunkte liefern. */
+export interface DeliveryProblemInfo {
+  status: string;
+  subject: string;
+  reason: string | null;
+  at: string;
+}
+
+/**
+ * Rotes „Nicht zustellbar“-Badge an einer E-Mail-Adresse, deren letzte E-Mail
+ * nicht ankam (vom Resend-Webhook bzw. beim SMTP-Versand gemeldet). Der
+ * Tooltip nennt Betreff, Zeitpunkt und die Begründung des Mail-Anbieters.
+ */
+export function DeliveryProblemBadge({ problem }: { problem: DeliveryProblemInfo | null | undefined }) {
+  if (!problem) return null;
+  const when = new Date(problem.at);
+  const whenText = isNaN(when.getTime())
+    ? ''
+    : when.toLocaleString('de-CH', { dateStyle: 'medium', timeStyle: 'short' });
+  const title = [
+    problem.status === 'complained'
+      ? 'Der Empfänger hat eine E-Mail als Spam gemeldet.'
+      : 'Die letzte E-Mail an diese Adresse konnte nicht zugestellt werden.',
+    problem.subject ? `Betreff: ${problem.subject}` : '',
+    whenText ? `Zeitpunkt: ${whenText}` : '',
+    problem.reason ? `Begründung: ${problem.reason}` : '',
+    'Adresse prüfen und ggf. korrigieren – Details unter „Meldungen“.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return (
+    <span className="badge red" title={title}>
+      ⚠ Nicht zustellbar
+    </span>
+  );
 }

@@ -64,8 +64,8 @@ function firstSelectable(products: Product[], state: PhotoState): string {
   return products.find((p) => !isBlocked(p, state))?.id ?? products[0]?.id ?? '';
 }
 
-/** Short facts shown beneath a product name (what is included, tiered price). */
-function productHints(p: Product): string[] {
+/** Short facts shown beneath a product name (what is included, tiered price, shipping). */
+function productHints(p: Product, shippingFeeCents: number): string[] {
   const hints: string[] = [];
   if (p.type === 'digital') hints.push('Download in voller Auflösung');
   if (p.includes_digital) hints.push('digitale Datei inbegriffen');
@@ -73,13 +73,21 @@ function productHints(p: Product): string[] {
   if (hasTieredPrice(p.price_cents, p.additional_price_cents)) {
     hints.push(`jedes weitere ${formatPrice(p.additional_price_cents ?? 0, p.currency)}`);
   }
-  if (p.type === 'print') hints.push('wird per Post versandt');
+  if (p.type === 'print') {
+    hints.push(
+      shippingFeeCents > 0
+        ? `per Post · + ${formatPrice(shippingFeeCents, p.currency)} Versand pro Bestellung`
+        : 'wird per Post versandt',
+    );
+  }
   return hints;
 }
 
 export default function Gallery() {
   const [groups, setGroups] = useState<PhotoGroup[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  // Versandpauschale für gedruckte Produkte (einmal pro Bestellung); 0 = keine.
+  const [shippingFeeCents, setShippingFeeCents] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   // Whether the sellable products could be loaded. When this fails (or no
@@ -118,8 +126,11 @@ export default function Gallery() {
       }
 
       try {
-        const prodRes = await api<{ products: Product[] }>('/api/parent/products');
+        const prodRes = await api<{ products: Product[]; shipping_fee_cents?: number }>(
+          '/api/parent/products',
+        );
         setProducts(prodRes.products);
+        setShippingFeeCents(Math.max(0, Number(prodRes.shipping_fee_cents) || 0));
         // A successful response with an empty list means nothing is on sale –
         // treat that the same as a failure so the notice is shown.
         setProductsFailed(prodRes.products.length === 0);
@@ -153,6 +164,8 @@ export default function Gallery() {
 
   const totalPhotos = groups.reduce((n, g) => n + g.photos.length, 0);
   const portraitOnlyProducts = products.filter((p) => p.scope === 'portrait');
+  const hasPrintProducts = products.some((p) => p.type === 'print');
+  const currency = products[0]?.currency ?? 'chf';
 
   return (
     <div>
@@ -174,6 +187,16 @@ export default function Gallery() {
           Kauf-Schaltflächen. Bitte versuchen Sie es später erneut oder{' '}
           <Link to="/hilfe">melden Sie sich bei uns</Link>.
         </Alert>
+      )}
+
+      {/* Versandpauschale schon vor der Auswahl sichtbar machen, damit der
+          Betrag im Warenkorb niemanden überrascht. */}
+      {totalPhotos > 0 && hasPrintProducts && shippingFeeCents > 0 && (
+        <p className="soft gallery-shipping-note">
+          📦 Für gedruckte Produkte (Abzüge, Sticker, Magnete) kommen einmalig{' '}
+          <strong>{formatPrice(shippingFeeCents, currency)} {currency.toUpperCase()}</strong> Versand pro
+          Bestellung dazu – egal wie viele Produkte Sie bestellen. Digitale Downloads sind versandfrei.
+        </p>
       )}
 
       {totalPhotos === 0 && !error && (
@@ -243,6 +266,7 @@ export default function Gallery() {
                     <PhotoControls
                       photo={p}
                       products={productsForPhoto(products, p.isClassPhoto)}
+                      shippingFeeCents={shippingFeeCents}
                       state={state}
                       onAdded={onAdded}
                     />
@@ -265,6 +289,7 @@ export default function Gallery() {
         <Lightbox
           photo={active}
           products={productsForPhoto(products, active.isClassPhoto)}
+          shippingFeeCents={shippingFeeCents}
           state={stateOf(active)}
           onAdded={onAdded}
           onClose={() => setActive(null)}
@@ -287,12 +312,15 @@ export default function Gallery() {
 function PhotoControls({
   photo,
   products,
+  shippingFeeCents,
   state,
   onAdded,
   large = false,
 }: {
   photo: Photo;
   products: Product[];
+  /** Versandpauschale je Bestellung mit gedruckten Produkten (0 = keine). */
+  shippingFeeCents: number;
   state: PhotoState;
   onAdded: (photoId: string, product: Product) => void;
   /** Larger mockup (used inside the enlarged preview). */
@@ -369,7 +397,7 @@ function PhotoControls({
           const checked = p.id === selectedId && !blocked;
           const hints = blocked
             ? [state.purchased ? 'bereits gekauft – siehe Bestellungen' : 'bereits im Warenkorb bzw. im Druck inbegriffen']
-            : productHints(p);
+            : productHints(p, shippingFeeCents);
           return (
             <button
               type="button"
@@ -460,6 +488,12 @@ function PhotoControls({
           <button type="button" className="btn block" onClick={add} disabled={busy}>
             {busy ? 'Wird hinzugefügt …' : `In den Warenkorb · ${formatPrice(total, currency)}`}
           </button>
+          {selected.type === 'print' && shippingFeeCents > 0 && (
+            <p className="buy-shipping-hint">
+              zzgl. {formatPrice(shippingFeeCents, currency)} Versand – einmal pro Bestellung, nicht pro
+              Produkt
+            </p>
+          )}
         </div>
       )}
 
@@ -477,12 +511,14 @@ function PhotoControls({
 function Lightbox({
   photo,
   products,
+  shippingFeeCents,
   state,
   onAdded,
   onClose,
 }: {
   photo: Photo;
   products: Product[];
+  shippingFeeCents: number;
   state: PhotoState;
   onAdded: (photoId: string, product: Product) => void;
   onClose: () => void;
@@ -510,7 +546,14 @@ function Lightbox({
           onContextMenu={(e) => e.preventDefault()}
         />
         <div className="lb-actions lb-actions-buy">
-          <PhotoControls photo={photo} products={products} state={state} onAdded={onAdded} large />
+          <PhotoControls
+            photo={photo}
+            products={products}
+            shippingFeeCents={shippingFeeCents}
+            state={state}
+            onAdded={onAdded}
+            large
+          />
         </div>
       </div>
     </div>
