@@ -25,9 +25,10 @@ export default function AdminLayout({
   children: ReactNode;
 }) {
   const location = useLocation();
-  // Offene Meldungen + offene Zustellprobleme als Zahl neben „Meldungen“. Wird
-  // bei jedem Seitenwechsel und alle paar Minuten aufgefrischt, damit z. B. eine
-  // neue Meldung oder ein Bounce auch während der Arbeit auffällt.
+  // Zwei Zahlen in der Seitenleiste: offene Meldungen neben „Meldungen“, offene
+  // Zustellprobleme neben „Einstellungen“ (dort werden sie bearbeitet). Wird bei
+  // jedem Seitenwechsel und alle paar Minuten aufgefrischt, damit eine neue
+  // Meldung oder ein Bounce auch während der Arbeit auffällt.
   const [attention, setAttention] = useState<Attention | null>(null);
 
   useEffect(() => {
@@ -48,10 +49,22 @@ export default function AdminLayout({
     };
   }, [location.pathname]);
 
-  const attentionCount = (attention?.openReports ?? 0) + (attention?.deliveryProblems ?? 0);
-  const attentionTitle = attention
-    ? `${attention.openReports} offene Meldung(en), ${attention.deliveryProblems} nicht zustellbare E-Mail(s)`
-    : undefined;
+  const badgeFor = (to: string): { count: number; title: string } | null => {
+    if (!attention) return null;
+    if (to === 'reports' && attention.openReports > 0) {
+      return {
+        count: attention.openReports,
+        title: `${attention.openReports} offene Meldung(en)`,
+      };
+    }
+    if (to === 'settings' && attention.deliveryProblems > 0) {
+      return {
+        count: attention.deliveryProblems,
+        title: `${attention.deliveryProblems} nicht zustellbare E-Mail(s)`,
+      };
+    }
+    return null;
+  };
 
   const logout = async () => {
     // Clears the httpOnly admin cookie on the server.
@@ -67,21 +80,24 @@ export default function AdminLayout({
     <div className="admin-shell">
       <aside className="admin-side">
         <div className="logo">🔒 Photographic</div>
-        {links.map((l) => (
-          <NavLink
-            key={l.to}
-            to={l.to}
-            className={({ isActive }) => (isActive ? 'active' : '')}
-            title={l.to === 'reports' ? attentionTitle : undefined}
-          >
-            {l.label}
-            {l.to === 'reports' && attentionCount > 0 && (
-              <span className="side-badge" aria-label={attentionTitle}>
-                {attentionCount > 99 ? '99+' : attentionCount}
-              </span>
-            )}
-          </NavLink>
-        ))}
+        {links.map((l) => {
+          const badge = badgeFor(l.to);
+          return (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              className={({ isActive }) => (isActive ? 'active' : '')}
+              title={badge?.title}
+            >
+              {l.label}
+              {badge && (
+                <span className="side-badge" aria-label={badge.title}>
+                  {badge.count > 99 ? '99+' : badge.count}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
         <div className="spacer" />
         <div className="side-user">Angemeldet als {username}</div>
         <NavLink to="account" className={({ isActive }) => (isActive ? 'active' : '')}>

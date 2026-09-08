@@ -4,6 +4,7 @@ import { normalizeEmail } from './validation';
 
 /**
  * Zustellprotokoll der ausgehenden E-Mails (Sammlung `email_deliveries`).
+ * Sichtbar im Adminbereich unter „Einstellungen → Nicht zustellbare E-Mails“.
  *
  * Ein SMTP-Server nimmt eine E-Mail entgegen und meldet Zustellprobleme erst
  * später – die App selbst erfährt davon nichts. Deshalb gibt es zwei Quellen:

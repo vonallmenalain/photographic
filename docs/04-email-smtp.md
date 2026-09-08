@@ -41,7 +41,8 @@ CONTACT_EMAIL=photographic@alae.app   # Startwert; im Adminbereich änderbar (4.
 
 - `SMTP_PORT=587` mit `SMTP_SECURE=false` (STARTTLS) ist der Normalfall.
 - `SMTP_PORT=465` erfordert `SMTP_SECURE=true`.
-- `MAIL_FROM` sollte zu deiner verifizierten Absenderdomain passen.
+- `MAIL_FROM` ist nur der **Startwert** des Absenders. Massgebend ist, was im
+  Adminbereich unter **Einstellungen → Absender der E-Mails** steht (siehe 4.9).
 - `CONTACT_EMAIL` ist nur der Startwert der Kontaktadresse. Massgebend ist,
   was im Adminbereich unter **Einstellungen** steht.
 
@@ -119,12 +120,52 @@ entfernen.
 > (ein blosser Neustart liest die `.env` nicht neu). Der Wert im Adminbereich hat
 > Vorrang, sobald einer gesetzt ist.
 
-Ob der Webhook läuft, steht im Adminbereich unter „Meldungen → Nicht zustellbare
-E-Mails“: dort werden der Status und der Zeitpunkt des letzten Ereignisses
-angezeigt. Nach der nächsten verschickten E-Mail muss ein Eintrag erscheinen
-(auch erfolgreiche Zustellungen werden protokolliert; die Ansicht „Alle
-protokollierten E-Mails“ zeigt sie). Im Server-Log erscheint beim Start
+Ob der Webhook läuft, steht im Adminbereich unter **Einstellungen → Nicht
+zustellbare E-Mails**: dort werden der Status und der Zeitpunkt des letzten
+Ereignisses angezeigt. Nach der nächsten verschickten E-Mail muss ein Eintrag
+erscheinen (auch erfolgreiche Zustellungen werden protokolliert; die Ansicht
+„Alle protokollierten E-Mails“ zeigt sie). Im Server-Log erscheint beim Start
 `mail status : Resend webhook configured (/webhook/resend)`.
+
+### Der Webhook funktioniert nicht – so findest du den Fehler
+
+**Zuerst: Die Adresse im Browser aufzurufen ist kein Test.** Der Endpunkt nimmt
+ausschliesslich `POST`-Anfragen entgegen, ein Browser schickt aber `GET`. Ein
+Aufruf von `https://api.alae.app/webhook/resend` im Browser liefert deshalb
+**immer** `{"error":"Nicht gefunden."}` – auch wenn der Webhook einwandfrei
+läuft. Das ist kein Fehler und kein brauchbarer Test.
+
+Geh stattdessen der Reihe nach vor:
+
+1. **Läuft der aktuelle Stand auf dem QNAP?** Rufe
+   `https://api.alae.app/api/parent/site` im Browser auf. Erscheint JSON mit
+   `contactEmail` und `shippingFeeCents`, ist der Code aktuell. Erscheint
+   `{"error":"Nicht gefunden."}`, läuft noch eine ältere Version – dann zuerst
+   das Image aktualisieren (siehe [docs/09-auto-deploy.md](09-auto-deploy.md)).
+2. **Ist ein Secret hinterlegt?** Adminbereich → **Einstellungen → Nicht
+   zustellbare E-Mails**. Steht dort „Der Resend-Webhook ist noch nicht
+   eingerichtet“, fehlt das Secret.
+3. **Ist es das richtige Secret?** Gebraucht wird das **Signing Secret des
+   Webhooks** (beginnt mit `whsec_`), **nicht** der API-Key für den Versand
+   (beginnt mit `re_`). Beide stehen an verschiedenen Stellen im
+   Resend-Dashboard; sie zu verwechseln ist der häufigste Fehler.
+4. **Was sagt Resend?** Im Resend-Dashboard unter **Webhooks** den Endpunkt
+   öffnen. Dort stehen die letzten Zustellversuche mit HTTP-Status:
+
+   | Status | Bedeutung |
+   |---|---|
+   | `200` | Alles in Ordnung, das Ereignis ist angekommen. |
+   | `400 Invalid signature` | Das hinterlegte Secret passt nicht zu diesem Webhook. Secret in Resend neu kopieren und im Adminbereich ersetzen. |
+   | `400 Resend webhook not configured` | Im Adminbereich ist (noch) kein Secret gespeichert. |
+   | `404` | Falsche Adresse, oder auf dem QNAP läuft noch eine alte Version. Adresse muss exakt `https://api.alae.app/webhook/resend` lauten. |
+   | Zeitüberschreitung | Die API ist von aussen nicht erreichbar. `https://api.alae.app/health` im Browser prüfen. |
+
+5. **Ereignisse ausgewählt?** Der Webhook muss mindestens `email.bounced`,
+   `email.complained` und `email.failed` senden. Ohne diese Ereignisse meldet
+   Resend zwar erfolgreich zugestellte E-Mails, aber keine Probleme.
+6. **Test auslösen:** Am einfachsten eine Einladung an eine bewusst falsche
+   Adresse auf einer echten Domain schicken (z. B.
+   `gibtesnicht@gmail.com`). Kurz darauf muss der Bounce in der Liste stehen.
 
 > Wichtig: Resend meldet die Ereignisse auch für E-Mails, die die App über
 > **SMTP** verschickt. Ein separater API-Key ist nicht nötig; die Signatur des
@@ -200,7 +241,7 @@ einfacher und ausreichend.
 
 ## 4.8 Benachrichtigungen an dich
 
-Zwei Benachrichtigungen lassen sich im Adminbereich unter **Meldungen**
+Zwei Benachrichtigungen lassen sich im Adminbereich unter **Einstellungen**
 ein- und ausschalten (jeweils mit eigener Empfängerliste; bleibt sie leer,
 gehen die E-Mails an alle Admin-Konten mit hinterlegter E-Mail-Adresse):
 
@@ -211,5 +252,43 @@ gehen die E-Mails an alle Admin-Konten mit hinterlegter E-Mail-Adresse):
 - **Zustellproblem**: Sobald der Resend-Webhook (4.6) eine nicht zustellbare
   E-Mail meldet, erhältst du eine E-Mail mit Empfänger, Betreff, Zeitpunkt und
   Begründung – genau eine je betroffener E-Mail.
+
+## 4.9 Absenderadresse („Von“)
+
+Was die Eltern im „Von“-Feld sehen, steht im Adminbereich unter
+**Einstellungen → Absender der E-Mails**: ein optionaler Anzeigename und die
+Absenderadresse. Der Wert gilt sofort, ohne Neustart; `MAIL_FROM` in der `.env`
+ist nur noch der Startwert.
+
+**Empfehlung: dieselbe Adresse wie die Kontaktadresse**, also z. B.
+`Photographic <photographic@alae.app>` statt `no-reply@alae.app`. Dann sehen die
+Eltern eine echte, antwortbare Adresse, und eine Antwort geht über die
+Cloudflare-Weiterleitung (4.7) direkt in dein Postfach. Ein separates Reply-To
+setzt die App in diesem Fall nicht mehr, weil das „Von“-Feld schon stimmt.
+
+Zwei Voraussetzungen:
+
+- **Die Domain muss bei Resend als Absender-Domain verifiziert sein.** Bleibst du
+  innerhalb der bereits verifizierten Domain (`alae.app`), ist nichts zu tun –
+  du darfst jede beliebige Adresse dieser Domain als Absender verwenden. Eine
+  neue Domain müsstest du in Resend unter **Domains** zuerst verifizieren.
+- **Nur ein SPF-Eintrag pro Domain.** Beim Aktivieren von Cloudflare Email
+  Routing (4.7) legt Cloudflare einen eigenen SPF-TXT-Eintrag an. Existiert
+  daneben noch der SPF-Eintrag von Resend, hat die Domain zwei davon – das ist
+  ungültig und kann die Zustellbarkeit verschlechtern. Prüfe in Cloudflare unter
+  **DNS → Einträge**, wie viele TXT-Einträge mit `v=spf1` beginnen. Sind es zwei,
+  fasse sie zu einem zusammen, z. B.:
+
+  ```
+  v=spf1 include:_spf.mx.cloudflare.net include:amazonses.com ~all
+  ```
+
+  Die genauen `include:`-Werte übernimmst du aus den beiden bestehenden
+  Einträgen; danach den überzähligen Eintrag löschen. DKIM-Einträge sind davon
+  nicht betroffen, davon darf es mehrere geben.
+
+> **Empfang und Versand derselben Adresse gleichzeitig?** Ja. Der Versand läuft
+> über Resend (SMTP, ausgehend), der Empfang über Cloudflare Email Routing
+> (MX, eingehend). Die beiden stören einander nicht.
 
 ➡️ Weiter mit **[5. Stripe (optional)](05-stripe.md)**.

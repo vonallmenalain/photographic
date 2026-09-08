@@ -8,6 +8,9 @@ import { normalizeEmail } from '../lib/validation';
  *
  *  - contact_email          öffentliche Kontaktadresse (Impressum, Hilfe-Seite
  *                           und Reply-To aller ausgehenden E-Mails)
+ *  - sender_name /
+ *    sender_email           Absender der ausgehenden E-Mails („Von“). Die Domain
+ *                           muss beim Mail-Anbieter verifiziert sein.
  *  - shipping_fee_cents     Versandpauschale je Bestellung mit gedruckten
  *                           Produkten (einmal pro Bestellung)
  *  - report_notify_enabled  neue Meldung aus „Hilfe & Kontakt“ per E-Mail melden
@@ -28,6 +31,8 @@ import { normalizeEmail } from '../lib/validation';
  */
 export interface AppSettings {
   contact_email: string;
+  sender_name: string;
+  sender_email: string;
   shipping_fee_cents: number;
   report_notify_enabled: boolean;
   report_notify_emails: string[];
@@ -62,9 +67,30 @@ export const APP_SETTINGS_ID = 'app';
 const CACHE_TTL_MS = 30_000;
 let cache: { value: AppSettings; at: number } | null = null;
 
+/**
+ * Zerlegt einen „Von“-Header wie `Foto-Galerie <no-reply@alae.app>` in Name und
+ * Adresse. Ohne spitze Klammern gilt der ganze Wert als Adresse.
+ */
+export function parseMailFrom(raw: string): { name: string; email: string } {
+  const match = raw.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  if (match) return { name: match[1].trim(), email: normalizeEmail(match[2]) };
+  return { name: '', email: normalizeEmail(raw) };
+}
+
+/** Entfernt Zeilenumbrüche und Klammern aus dem Anzeigenamen (Header-Injection). */
+function cleanSenderName(value: unknown): string {
+  return String(value ?? '')
+    .replace(/[\r\n<>"]/g, ' ')
+    .trim()
+    .slice(0, 100);
+}
+
 function defaults(): AppSettings {
+  const from = parseMailFrom(config.mail.from);
   return {
     contact_email: config.mail.contactEmailDefault ? normalizeEmail(config.mail.contactEmailDefault) : '',
+    sender_name: from.name,
+    sender_email: from.email,
     shipping_fee_cents: config.shop.shippingFeeCentsDefault,
     report_notify_enabled: true,
     report_notify_emails: [],
@@ -96,9 +122,17 @@ function fromDoc(doc: Record<string, unknown> | null): AppSettings {
   if (!doc) return d;
   const contact =
     typeof doc.contact_email === 'string' ? normalizeEmail(doc.contact_email) : d.contact_email;
+  // Beim Absender ist ein leer gespeicherter Wert kein gültiger Zustand – ohne
+  // Adresse könnte die App nichts verschicken. Dann gilt wieder die Umgebung.
+  const senderEmail =
+    typeof doc.sender_email === 'string' && doc.sender_email.trim()
+      ? normalizeEmail(doc.sender_email)
+      : d.sender_email;
   const fee = Number(doc.shipping_fee_cents);
   return {
     contact_email: contact,
+    sender_name: typeof doc.sender_name === 'string' ? cleanSenderName(doc.sender_name) : d.sender_name,
+    sender_email: senderEmail,
     shipping_fee_cents:
       Number.isFinite(fee) && fee >= 0 ? Math.round(fee) : d.shipping_fee_cents,
     report_notify_enabled:
@@ -142,6 +176,10 @@ export async function updateAppSettings(patch: Partial<AppSettings>): Promise<Ap
   const current = await getAppSettings();
   const next: AppSettings = { ...current, ...patch, updated_at: nowIso() };
   next.contact_email = next.contact_email ? normalizeEmail(next.contact_email) : '';
+  next.sender_name = cleanSenderName(next.sender_name);
+  next.sender_email = next.sender_email
+    ? normalizeEmail(next.sender_email)
+    : parseMailFrom(config.mail.from).email;
   next.shipping_fee_cents = Math.max(0, Math.round(Number(next.shipping_fee_cents) || 0));
   next.report_notify_emails = cleanEmailList(next.report_notify_emails);
   next.bounce_notify_emails = cleanEmailList(next.bounce_notify_emails);
@@ -159,6 +197,20 @@ export function resetSettingsCache(): void {
 /** Die öffentliche Kontaktadresse (leer, wenn keine konfiguriert ist). */
 export async function contactEmail(): Promise<string> {
   return (await getAppSettings()).contact_email;
+}
+
+/**
+ * Absender der ausgehenden E-Mails, in der Form, die nodemailer erwartet. Der
+ * Anzeigename ist optional; ohne ihn steht nur die Adresse im „Von“-Feld.
+ */
+export async function mailFrom(): Promise<{ name: string; address: string }> {
+  try {
+    const s = await getAppSettings();
+    return { name: s.sender_name, address: s.sender_email };
+  } catch {
+    const from = parseMailFrom(config.mail.from);
+    return { name: from.name, address: from.email };
+  }
 }
 
 /**

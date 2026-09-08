@@ -194,11 +194,11 @@ selbst keinen Auftrag; er wird aus den bestellten Fotos abgeleitet.
 - **E-Mail-Adresse nachträglich hinzufügen oder korrigieren (im Auftrag):** ebenfalls über **Aufträge → „Bearbeiten“**. Beim Kind steht neben „+ Fotos“ der Knopf **„+ E-Mail-Adresse“** – z. B. für einen zweiten Elternteil. Existiert die Adresse schon (etwa vom Geschwisterkind), wird sie übernommen und nur mit diesem Kind verknüpft; bei einem veröffentlichten Auftrag kann die Einladung sofort mitgeschickt werden. Neben jeder Adresse: **✎** korrigiert eine falsch geschriebene Adresse an Ort und Stelle (die Bestätigung wird dabei zurückgesetzt, die Eltern bestätigen die neue Adresse einmal neu – Einladung danach gezielt an diese Adresse senden), **×** entfernt die Verknüpfung mit diesem Kind (die Adresse selbst bleibt bestehen). Adressen, an die die letzte E-Mail nicht zugestellt werden konnte, sind rot mit **„Nicht zustellbar“** markiert (siehe 6.11).
 - **Eltern finden keine Fotos:** prüfen, ob (a) Adresse exakt stimmt, (b) Kind
   verknüpft, (c) Foto nicht deaktiviert, (d) Event „published“.
-- **Meldungen der Eltern:** Adminbereich → „Meldungen“ (Status pflegen). Oben auf
-  der Seite lässt sich einstellen, dass bei **jeder neuen Meldung sofort eine
-  E-Mail** an dich geht (mit Anliegen, Nachricht und Absenderadresse; „Antworten“
-  im Postfach schreibt direkt an die Eltern). Die Zahl neben dem Menüpunkt
-  „Meldungen“ zählt offene Meldungen und offene Zustellprobleme.
+- **Meldungen der Eltern:** Adminbereich → „Meldungen“ (Status pflegen). Unter
+  **Einstellungen** lässt sich einstellen, dass bei **jeder neuen Meldung sofort
+  eine E-Mail** an dich geht (mit Anliegen, Nachricht und Absenderadresse;
+  „Antworten“ im Postfach schreibt direkt an die Eltern). Die Zahl neben dem
+  Menüpunkt „Meldungen“ zählt die offenen Anliegen.
 
 ## 6.4 Aufbewahrung (Standard 30 Tage)
 
@@ -246,8 +246,9 @@ docker compose ps                        # Status
 | Previews ohne Wasserzeichen | Im Backend-Image fehlten Schriftarten – das Wasserzeichen wird als Text gerendert und bleibt ohne Font unsichtbar. Im aktuellen Image sind `fontconfig`, `fonts-dejavu-core`/`fonts-liberation` **und die Schrift Comic Neue** (freie Schwester von Comic Sans MS, aus `backend/assets/fonts`) enthalten. Beim Start zeigt das Log `watermark : OK (fonts available)`; steht dort `BROKEN`, Image neu bauen/ziehen. Bereits ohne Wasserzeichen erzeugte Fotos neu hochladen (oder im Admin neu verarbeiten). |
 | Wasserzeichen-Schrift ändern | Die Website nutzt überall **Comic Sans MS**. Da diese Schrift proprietär ist und nicht mitgeliefert werden darf, rendert das Backend das Wasserzeichen mit der freien, sehr ähnlichen **Comic Neue** (`backend/assets/fonts`). Legst du eine lizenzierte `Comic Sans MS`-TTF in `backend/assets/fonts` und baust das Image neu, wird sie automatisch verwendet (sie steht in `IMG_WATERMARK_FONT_FAMILY` an erster Stelle). Die Fallbacks am Ende des Werts (`Liberation Sans`, `DejaVu Sans`, …) sollten stehen bleiben, damit das Wasserzeichen nie unsichtbar wird. |
 | Foto erscheint bei Eltern nicht | Checkliste 6.3 „Eltern finden keine Fotos“. |
-| E-Mail an eine Familie kommt nicht an (in Resend „Bounced“) | Adminbereich → **Meldungen → Nicht zustellbare E-Mails**: dort stehen Empfänger, Betreff und Begründung, die Adresse ist im Auftrag rot markiert. Adresse unter **Aufträge → „Bearbeiten“** beim Kind mit ✎ korrigieren und die Einladung erneut an diese Adresse senden. Voraussetzung ist der eingerichtete Resend-Webhook ([docs/04-email-smtp.md, 4.6](04-email-smtp.md)); ohne ihn steht nur in Resend, dass die E-Mail nicht ankam. |
-| Antworten der Eltern auf Einladungen/Bestätigungen verschwinden | Antworten gehen an die **Kontakt-E-Mail-Adresse** aus **Einstellungen** (Reply-To). Ist dort nichts eingetragen, landen sie beim `no-reply`-Absender. Adresse eintragen und die Weiterleitung bei Cloudflare einrichten ([docs/04-email-smtp.md, 4.7](04-email-smtp.md)). |
+| E-Mail an eine Familie kommt nicht an (in Resend „Bounced“) | Adminbereich → **Einstellungen → Nicht zustellbare E-Mails**: dort stehen Empfänger, Betreff und Begründung, die Adresse ist im Auftrag rot markiert. Adresse unter **Aufträge → „Bearbeiten“** beim Kind mit ✎ korrigieren und die Einladung erneut an diese Adresse senden. Voraussetzung ist der eingerichtete Resend-Webhook ([docs/04-email-smtp.md, 4.6](04-email-smtp.md)); ohne ihn steht nur in Resend, dass die E-Mail nicht ankam. |
+| Antworten der Eltern auf Einladungen/Bestätigungen verschwinden | Antworten gehen an die **Kontakt-E-Mail-Adresse** aus **Einstellungen**. Ist dort nichts eingetragen, landen sie beim Absender. Adresse eintragen, als Absender übernehmen und die Weiterleitung bei Cloudflare einrichten ([docs/04-email-smtp.md, 4.7 und 4.9](04-email-smtp.md)). |
+| Aufruf von `…/webhook/resend` im Browser zeigt „Nicht gefunden“ | **Kein Fehler.** Der Endpunkt nimmt nur `POST` entgegen, ein Browser schickt `GET`. Zum Prüfen des Deployments stattdessen `https://api.alae.app/api/parent/site` aufrufen; zur Webhook-Fehlersuche siehe [docs/04-email-smtp.md, 4.6](04-email-smtp.md). |
 | Stripe-Bestellung bleibt „Kauf gestartet“ | Webhook fehlt/falsch. Endpoint `…/webhook/stripe` und `STRIPE_WEBHOOK_SECRET` prüfen. Nach dem Wechsel Sandbox → Live muss der Webhook **im Live-Modus neu** angelegt werden (eigenes `whsec_…`) – siehe [docs/05-stripe.md, 5.6](05-stripe.md#56-von-der-sandbox-in-den-produktivmodus-wechseln-go-live). |
 | Zahlungen kommen nie auf dem Konto an | Es läuft noch der Sandbox-Schlüssel. `docker compose logs backend` zeigt dann `[server] stripe : TEST/Sandbox …`; erwartet wird `LIVE (CHF) – real payments, webhook configured`. Umstellung: [docs/05-stripe.md, 5.6](05-stripe.md#56-von-der-sandbox-in-den-produktivmodus-wechseln-go-live). |
 
@@ -339,21 +340,30 @@ Katalog einmalig neu eingespielt. Alternativ einzelne Produkte per Admin-API
 
 ## 6.11 Einstellungen, Kontaktadresse und Zustellprobleme
 
-Der Menüpunkt **Einstellungen** bündelt, was früher nur in der `.env` stand:
+Der Menüpunkt **Einstellungen** bündelt alles Konfigurierbare, was früher nur in
+der `.env` stand. Unter **Meldungen** stehen dadurch nur noch die Anliegen der
+Eltern.
 
 - **Kontakt-E-Mail-Adresse** (z. B. `photographic@alae.app`): steht im
   Impressum und auf der Hilfe-Seite anstelle einer Telefonnummer und ist die
-  Antwortadresse aller E-Mails an Eltern. Damit E-Mails an diese Adresse in
+  Adresse, an die Antworten der Eltern gehen. Damit E-Mails an diese Adresse in
   einem Postfach ankommen, ist einmalig eine Weiterleitung bei Cloudflare nötig –
   die Schritte stehen direkt auf der Seite und in
   [docs/04-email-smtp.md, 4.7](04-email-smtp.md).
+- **Absender der E-Mails**: Anzeigename und Absenderadresse für alles, was die
+  App verschickt. Trägst du dieselbe Adresse ein wie als Kontaktadresse, sehen
+  die Eltern keinen `no-reply`-Absender mehr und eine Antwort landet direkt in
+  deinem Postfach. Voraussetzungen und SPF-Hinweis:
+  [docs/04-email-smtp.md, 4.9](04-email-smtp.md).
 - **Versandpauschale** für gedruckte Produkte (siehe 6.10).
+- **Benachrichtigungen** (neue Meldung, Zustellproblem) – jeweils mit
+  Ein-/Ausschalter und Empfängerliste (leer = alle Admin-Konten mit
+  E-Mail-Adresse).
 
-Die **Benachrichtigungen** (neue Meldung, Zustellproblem) werden unter
-**Meldungen** eingestellt – jeweils mit Ein-/Ausschalter und Empfängerliste
-(leer = alle Admin-Konten mit E-Mail-Adresse).
+In der Seitenleiste zeigt die Zahl neben **Meldungen** die offenen Anliegen der
+Eltern, die Zahl neben **Einstellungen** die offenen Zustellprobleme.
 
-**Nicht zustellbare E-Mails** (unter „Meldungen“): Dort wird auch der
+**Nicht zustellbare E-Mails** (unter „Einstellungen“): Dort wird auch der
 **Resend-Webhook eingerichtet** – Webhook-Adresse zum Kopieren und Feld für das
 Signing Secret. Das gilt sofort, ohne Zugriff auf die Server-Konsole und ohne
 Neustart. Ist der Webhook eingerichtet

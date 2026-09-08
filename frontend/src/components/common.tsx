@@ -182,7 +182,7 @@ export function DeliveryProblemBadge({ problem }: { problem: DeliveryProblemInfo
     problem.subject ? `Betreff: ${problem.subject}` : '',
     whenText ? `Zeitpunkt: ${whenText}` : '',
     problem.reason ? `Begründung: ${problem.reason}` : '',
-    'Adresse prüfen und ggf. korrigieren – Details unter „Meldungen“.',
+    'Adresse prüfen und ggf. korrigieren – Details unter „Einstellungen“.',
   ]
     .filter(Boolean)
     .join('\n');

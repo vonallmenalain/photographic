@@ -4,6 +4,10 @@ import { Alert } from '../../components/common';
 
 export interface AppSettings {
   contact_email: string;
+  /** Anzeigename im „Von“-Feld der ausgehenden E-Mails (optional). */
+  sender_name: string;
+  /** Absenderadresse der ausgehenden E-Mails. */
+  sender_email: string;
   shipping_fee_cents: number;
   report_notify_enabled: boolean;
   report_notify_emails: string[];
@@ -19,7 +23,7 @@ export interface AppSettings {
 export interface SettingsResponse {
   settings: AppSettings;
   adminEmails: string[];
-  defaults: { contact_email: string; shipping_fee_cents: number };
+  defaults: { contact_email: string; shipping_fee_cents: number; mail_from: string };
   currency: string;
   mailFrom: string;
   devLogOnly: boolean;
@@ -29,7 +33,7 @@ const COPY = {
   report: {
     title: 'Benachrichtigung bei neuer Meldung',
     intro:
-      'Wenn Eltern unter „Hilfe & Kontakt“ etwas erfassen, erscheint es hier unter „Meldungen“. Zusätzlich kann bei jeder neuen Meldung sofort eine E-Mail an dich gehen – mit Anliegen, Nachricht und Absenderadresse. Antwortest du auf diese E-Mail, geht die Antwort direkt an die Eltern.',
+      'Wenn Eltern unter „Hilfe & Kontakt“ etwas erfassen, erscheint es im Adminbereich unter „Meldungen“. Zusätzlich kann bei jeder neuen Meldung sofort eine E-Mail an dich gehen – mit Anliegen, Nachricht und Absenderadresse. Antwortest du auf diese E-Mail, geht die Antwort direkt an die Eltern.',
     checkbox: 'Bei jeder neuen Meldung eine E-Mail senden',
     enabledKey: 'report_notify_enabled' as const,
     emailsKey: 'report_notify_emails' as const,
