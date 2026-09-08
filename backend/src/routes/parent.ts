@@ -35,9 +35,41 @@ import {
 import type { ShippingAddress } from '../services/orders';
 import { productView, type ProductDoc } from '../services/products';
 import { createCheckoutSession } from '../services/payments';
-import { sendOrderConfirmation } from '../lib/email';
+import { sendOrderConfirmation, sendReportNotificationEmail } from '../lib/email';
+import { getAppSettings } from '../services/settings';
+import { notificationRecipients } from '../services/mailDelivery';
 
 const router = Router();
+
+// Anzeigenamen der Meldungs-Typen (gleich wie im Adminbereich) – für die
+// Benachrichtigungs-E-Mail an die Admins.
+const REPORT_TYPE_LABELS: Record<string, string> = {
+  wrong_photo: 'Falsches Foto',
+  missing_photo: 'Fehlendes Foto',
+  wrong_email: 'Falsche E-Mail',
+  link_problem: 'Link-/Code-Problem',
+  purchase_problem: 'Kauf-Problem',
+  allow_additional_email: 'Weitere E-Mail-Adresse freigeben',
+  other: 'Sonstiges',
+};
+
+/**
+ * Öffentliche Angaben der Website, die Impressum und Hilfe-Seite anzeigen: die
+ * im Adminbereich gepflegte Kontaktadresse und die Versandpauschale. Bewusst
+ * ohne Login – das Impressum muss für alle erreichbar sein.
+ */
+router.get(
+  '/site',
+  asyncHandler(async (_req, res) => {
+    const settings = await getAppSettings();
+    res.json({
+      contactEmail: settings.contact_email,
+      shippingFeeCents: settings.shipping_fee_cents,
+      currency: config.stripe.currency,
+      retentionDays: config.retentionDaysDefault,
+    });
+  }),
+);
 
 // Delivery address for orders that include a print product. Every field is
 // required so the printed photos can actually be shipped.
@@ -73,6 +105,7 @@ const NEUTRAL_MESSAGE =
 router.get(
   '/products',
   asyncHandler(async (_req, res) => {
+    const settings = await getAppSettings();
     const products = (await runQuery<ProductDoc>(col(COL.products)))
       .map(productView)
       .filter((p) => p.active)
@@ -90,7 +123,9 @@ router.get(
         scope: p.scope,
         currency: p.currency,
       }));
-    res.json({ products });
+    // Versandpauschale gleich mitliefern, damit die Galerie schon bei der
+    // Produktauswahl darauf hinweisen kann.
+    res.json({ products, shipping_fee_cents: settings.shipping_fee_cents });
   }),
 );
 
@@ -275,6 +310,9 @@ router.get(
     const cart = await getCart(req.parent!.emailId);
     res.json({
       cart: {
+        subtotal_cents: cart.subtotal_cents,
+        shipping_fee_cents: cart.shipping_fee_cents,
+        has_print: cart.has_print,
         total_cents: cart.total_cents,
         currency: cart.currency,
         items: cart.items.map((i) => ({
@@ -359,6 +397,10 @@ router.post(
       amountCents: i.line_total_cents,
       qty: 1,
     }));
+    // Die Versandpauschale erscheint auf der Bezahlseite als eigene Position.
+    if (cart.shipping_fee_cents > 0) {
+      lines.push({ name: 'Versand per Post', amountCents: cart.shipping_fee_cents, qty: 1 });
+    }
     const { orderId } = await beginCheckout(
       req.parent!.emailId,
       shippingAddress ? toShippingAddress(shippingAddress) : undefined,
@@ -412,6 +454,8 @@ router.get(
         id: order.id,
         status: order.status,
         currency: order.currency,
+        subtotal_cents: order.subtotal_cents,
+        shipping_fee_cents: order.shipping_fee_cents,
         total_cents: order.total_cents,
         created_at: order.created_at,
         paid_at: order.paid_at,
@@ -462,15 +506,34 @@ router.post(
       }),
       req.body,
     );
+    const createdAt = nowIso();
+    const fromEmail = email ?? req.parent?.email ?? '';
     await setById(COL.reports, newId('rep'), {
       email_id: req.parent?.emailId ?? null,
-      email_text: email ?? req.parent?.email ?? '',
+      email_text: fromEmail,
       type,
       message,
       status: 'open',
-      created_at: nowIso(),
+      created_at: createdAt,
     });
+    // Antwort sofort schicken; die Benachrichtigung an die Admins läuft
+    // unabhängig davon und darf die Meldung nie scheitern lassen.
     res.json({ message: 'Danke, Ihre Meldung ist bei uns eingegangen. Wir melden uns bei Ihnen.' });
+    try {
+      const recipients = await notificationRecipients('report');
+      if (recipients.length > 0) {
+        await sendReportNotificationEmail(recipients, {
+          typeLabel: REPORT_TYPE_LABELS[type] ?? type,
+          message,
+          fromEmail,
+          createdAt,
+          adminLink: `${config.publicAppUrl}/admin/reports`,
+        });
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[report] notification e-mail failed', err);
+    }
   }),
 );
 
@@ -490,12 +553,17 @@ function formatMoney(cents: number, currency: string): string {
 }
 
 async function sendConfirmationEmail(email: string, order: NonNullable<Awaited<ReturnType<typeof getOrderForEmail>>>) {
-  const summary = order.items
-    .map((i) => {
-      const extra = i.includes_digital ? ' (inkl. digitaler Datei)' : '';
-      return `• ${i.qty}× ${i.product_name}${extra} – ${formatMoney(i.line_total_cents, order.currency)}`;
-    })
-    .join('\n');
+  const lines = order.items.map((i) => {
+    const extra = i.includes_digital ? ' (inkl. digitaler Datei)' : '';
+    return `• ${i.qty}× ${i.product_name}${extra} – ${formatMoney(i.line_total_cents, order.currency)}`;
+  });
+  // Versandpauschale und Gesamtbetrag ausweisen, damit die Bestätigung mit der
+  // Bezahlseite übereinstimmt.
+  if (order.shipping_fee_cents > 0) {
+    lines.push(`• Versand per Post – ${formatMoney(order.shipping_fee_cents, order.currency)}`);
+  }
+  lines.push('', `Gesamt: ${formatMoney(order.total_cents, order.currency)} ${order.currency.toUpperCase()}`);
+  const summary = lines.join('\n');
   const link = `${config.publicAppUrl}/bestellung/${order.id}`;
   const hasPrint = order.items.some((i) => i.product_type === 'print');
   try {

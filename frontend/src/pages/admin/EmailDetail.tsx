@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import { Alert, Spinner, StatusBadge } from '../../components/common';
+import { Alert, DeliveryProblemBadge, Spinner, StatusBadge, type DeliveryProblemInfo } from '../../components/common';
 import { formatPrice, formatDate } from '../../lib/format';
 
 interface EmailObj {
@@ -11,6 +11,8 @@ interface EmailObj {
   status: string;
   note: string;
   verified_at: string | null;
+  /** Letzte E-Mail an diese Adresse kam nicht an (Resend-Webhook / SMTP-Fehler). */
+  delivery_problem?: DeliveryProblemInfo | null;
 }
 interface LinkedChild {
   id: string;
@@ -80,11 +82,33 @@ export default function EmailDetail() {
 
   const patch = async (body: Record<string, unknown>) => {
     setMsg('');
+    setError('');
     try {
-      await api(`/api/admin/emails/${id}`, { method: 'PATCH', admin: true, body });
+      const res = await api<{ ok: boolean; addressChanged?: boolean }>(`/api/admin/emails/${id}`, {
+        method: 'PATCH',
+        admin: true,
+        body,
+      });
+      if (res.addressChanged) {
+        setMsg(
+          'Adresse geändert. Die Bestätigung wurde zurückgesetzt – die Eltern müssen die neue Adresse einmal bestätigen (z. B. über die Einladung).',
+        );
+      }
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Aktualisierung fehlgeschlagen.');
+    }
+  };
+
+  const clearDeliveryProblem = async () => {
+    setMsg('');
+    setError('');
+    try {
+      await api(`/api/admin/emails/${id}/clear-delivery-problem`, { method: 'POST', admin: true });
+      setMsg('Zustellproblem als erledigt markiert.');
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Aktion fehlgeschlagen.');
     }
   };
 
@@ -135,10 +159,26 @@ export default function EmailDetail() {
       </p>
       <div className="row between">
         <h1 style={{ marginBottom: 4 }}>{email.email}</h1>
-        <StatusBadge status={email.status === 'verified' ? 'verified' : 'not_verified'} />
+        <span className="row" style={{ gap: 8 }}>
+          <StatusBadge status={email.status === 'verified' ? 'verified' : 'not_verified'} />
+          <DeliveryProblemBadge problem={email.delivery_problem} />
+        </span>
       </div>
       {error && <Alert kind="error">{error}</Alert>}
       {msg && <Alert kind="success">{msg}</Alert>}
+      {email.delivery_problem && (
+        <Alert kind="error">
+          <strong>Die letzte E-Mail an diese Adresse konnte nicht zugestellt werden</strong>
+          {email.delivery_problem.subject ? ` („${email.delivery_problem.subject}“` : ' ('}
+          {email.delivery_problem.at ? `, ${formatDate(email.delivery_problem.at)})` : ')'}.
+          {email.delivery_problem.reason ? ` Begründung: ${email.delivery_problem.reason}` : ''}{' '}
+          Prüfe die Schreibweise und korrigiere die Adresse unten – oder markiere das Problem als
+          erledigt, wenn die Adresse stimmt.{' '}
+          <button type="button" className="btn ghost small" onClick={clearDeliveryProblem}>
+            Als erledigt markieren
+          </button>
+        </Alert>
+      )}
 
       <div className="card mb">
         <h2>Einstellungen</h2>
@@ -156,6 +196,10 @@ export default function EmailDetail() {
         <div className="field">
           <label>E-Mail-Adresse korrigieren</label>
           <EmailEditor current={email.email} onSave={(v) => patch({ email: v })} />
+          <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
+            Bei einer geänderten Adresse wird die Bestätigung zurückgesetzt; die Eltern bestätigen die
+            neue Adresse dann einmal neu.
+          </p>
         </div>
         <div className="field mt">
           <label>Name (intern)</label>

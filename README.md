@@ -82,8 +82,11 @@ optional SMTP/Stripe), ist Schritt für Schritt in [`docs/`](docs/) beschrieben.
 | Warenkorb & Kauf | Produkte (Druck 13×18 / 20×30 mit inbegriffener digitaler Datei, „Nur digital“, Sticker-Bogen, Magnete-Set) mit Staffelpreis „jedes weitere +X.-“, Warenkorb, Checkout (Stripe-ready oder manuell), Bestellstatus – Details in [`docs/06-betrieb.md`](docs/06-betrieb.md) (Abschnitt 6.10) |
 | Nach dem Kauf | Bestellübersicht, Download-Links, Bestätigungs-E-Mail |
 | Aufbewahrung 30 Tage | `expires_at` je Event (Standard 30 Tage), nach Ablauf nicht mehr sichtbar |
-| Meldefunktion | Eltern-Formular → Admin „Meldungen“ |
-| Adminbereich | Aufträge (inkl. „Bearbeiten“: Fotos jederzeit hinzufügen, umhängen, deaktivieren, löschen)/Zuordnung/E-Mails (je Auftrag)/Auswertung/Bestellungen (eine Kachel je Auftrag bzw. Schule, mit Suche, Auftragsfilter, Sortierung und endgültigem Löschen einzelner Bestellungen – siehe [`docs/06-betrieb.md`](docs/06-betrieb.md), Abschnitt 6.2a)/Meldungen/Produkte |
+| Meldefunktion | Eltern-Formular → Admin „Meldungen“, auf Wunsch sofort per E-Mail an den Admin (Antwort geht direkt an die Eltern) |
+| Zustellkontrolle | Resend-Webhook meldet nicht zustellbare E-Mails → Admin „Meldungen → Nicht zustellbare E-Mails“, rote Markierung der Adresse im Auftrag, optional E-Mail an den Admin ([`docs/04-email-smtp.md`](docs/04-email-smtp.md), 4.6) |
+| Kontaktadresse | Im Adminbereich konfigurierbare E-Mail-Adresse für Impressum/Hilfe, zugleich Antwortadresse aller E-Mails; Weiterleitung ins Postfach über Cloudflare Email Routing ([`docs/04-email-smtp.md`](docs/04-email-smtp.md), 4.7) |
+| Versandpauschale | 3.50 CHF (einstellbar) einmal pro Bestellung mit gedruckten Produkten – schon bei der Produktauswahl, im Warenkorb und auf der Bezahlseite ausgewiesen |
+| Adminbereich | Aufträge (inkl. „Bearbeiten“: Fotos jederzeit hinzufügen, umhängen, deaktivieren, löschen; E-Mail-Adressen pro Kind hinzufügen, korrigieren, entfernen)/Zuordnung/E-Mails (je Auftrag)/Auswertung/Bestellungen (eine Kachel je Auftrag bzw. Schule, mit Suche, Auftragsfilter, Sortierung und endgültigem Löschen einzelner Bestellungen – siehe [`docs/06-betrieb.md`](docs/06-betrieb.md), Abschnitt 6.2a)/Meldungen/Einstellungen/Produkte |
 | Massen-Import | E-Mails + Kinder + Verknüpfungen per Copy-&-Paste oder CSV/Excel (tolerante Spaltenerkennung); **mehrere Eltern-Adressen pro Kind** (Komma-getrennt in einer Spalte oder über mehrere E-Mail-Spalten) |
 | Auto-Zuordnung | Fotos werden beim Upload automatisch dem Kind im Dateinamen zugeordnet – schon der Vorname samt Nummer (z. B. `Elin 1.jpg`) genügt; mehrdeutige Treffer bleiben unzugeordnet |
 | Statuswerte | Fotos, E-Mails, Bestellungen, Events – wie im Konzept benannt |

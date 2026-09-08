@@ -1796,3 +1796,48 @@ input.input-error,
 .event-edit-actions { display: flex; gap: 4px; }
 .event-edit-actions .btn { flex: 1 1 auto; padding: 5px 6px; font-size: 0.74rem; }
 .event-edit-empty { color: var(--text-muted); font-size: 0.82rem; margin: 0; }
+
+/* ==========================================================================
+   Zähler in der Admin-Seitenleiste („Meldungen (3)“): offene Meldungen plus
+   offene Zustellprobleme.
+   ========================================================================== */
+.admin-side .side-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px; margin-left: 8px;
+  border-radius: 999px; background: #e5484d; color: #fff;
+  font-size: 0.72rem; font-weight: 700; line-height: 1;
+  vertical-align: middle;
+}
+
+/* „Auftrag bearbeiten“: E-Mail-Adressen je Kind – Korrigieren/Entfernen
+   direkt neben der Adresse sowie das Inline-Formular „+ E-Mail-Adresse“. */
+.event-edit-email-actions { display: inline-flex; gap: 2px; margin-left: 2px; }
+.event-edit-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border-radius: 6px;
+  border: 1px solid transparent; background: transparent;
+  color: var(--text-muted); font-size: 0.95rem; line-height: 1; cursor: pointer;
+}
+.event-edit-icon-btn:hover { background: var(--surface-2); color: var(--primary); border-color: var(--border); }
+.event-edit-icon-btn.danger:hover { color: var(--danger); background: #fdeaea; }
+.event-edit-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.event-edit-email-edit input { width: 260px; max-width: 100%; padding: 5px 8px; font-size: 0.85rem; }
+.event-edit-email-form {
+  margin: 0 0 12px; padding: 12px 14px;
+  border: 1px dashed var(--border); border-radius: 10px; background: var(--surface-2);
+}
+
+/* Warenkorb / Bestellung: Zwischensumme, Versandpauschale, Gesamt */
+.cart-summary { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.cart-summary-row + .cart-summary-row { margin-top: 6px; }
+.cart-summary-total { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.cart-summary-note { font-size: 0.8rem; }
+
+/* Galerie: Hinweis auf die Versandpauschale */
+.gallery-shipping-note {
+  margin: -4px 0 18px; padding: 10px 14px;
+  background: var(--surface-2); border-radius: var(--radius-sm); font-size: 0.9rem;
+}
+.buy-shipping-hint {
+  margin: 6px 0 0; font-size: 0.78rem; color: var(--text-muted); text-align: center; line-height: 1.4;
+}

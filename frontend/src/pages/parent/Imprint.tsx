@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { formatPrice } from '../../lib/format';
+import { useSiteInfo } from '../../lib/siteInfo';
 
 /**
  * Impressum mit den Pflichtangaben zum Betreiber sowie den Eckpunkten von
@@ -7,8 +9,15 @@ import { Link } from 'react-router-dom';
  * Firmenname und Rechtsform, vollständige Geschäftsadresse, mindestens eine
  * Kontaktmöglichkeit, Preise in CHF und – bei physischen Produkten – die
  * Schweiz als Lieferziel.
+ *
+ * Die Kontakt-E-Mail-Adresse und die Versandpauschale kommen aus den
+ * Einstellungen des Adminbereichs (öffentlicher Endpunkt /api/parent/site).
  */
 export default function Imprint() {
+  const site = useSiteInfo();
+  const contactEmail = site?.contactEmail ?? '';
+  const shippingFee = site?.shippingFeeCents ?? 0;
+  const currency = (site?.currency ?? 'chf').toUpperCase();
   return (
     <div className="narrow" style={{ margin: '0 auto' }}>
       <h1>Impressum</h1>
@@ -26,8 +35,12 @@ export default function Imprint() {
           Schweiz
         </p>
         <p>
-          Telefon: <a href="tel:+41344228634">034 422 86 34</a>
-          <br />
+          {contactEmail ? (
+            <>
+              E-Mail: <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+              <br />
+            </>
+          ) : null}
           Kontaktformular: <Link to="/hilfe">Hilfe &amp; Kontakt</Link>
         </p>
         <p>
@@ -72,6 +85,18 @@ export default function Imprint() {
         <p>
           <strong>Gedruckte Produkte</strong> werden nach der Bestellung produziert und per Post an
           die angegebene Lieferadresse versandt. Wir liefern in die <strong>Schweiz</strong>.
+          {shippingFee > 0 ? (
+            <>
+              {' '}
+              Für den Versand wird pro Bestellung eine Pauschale von{' '}
+              <strong>
+                {formatPrice(shippingFee, currency)} {currency}
+              </strong>{' '}
+              verrechnet – einmalig, unabhängig von der Anzahl der gedruckten Produkte. Sie wird bereits
+              bei der Produktauswahl, im Warenkorb und auf der Bezahlseite ausgewiesen. Digitale
+              Downloads sind versandfrei.
+            </>
+          ) : null}
         </p>
         <p>
           Die Fotos stehen während 30 Tagen zur Verfügung und werden danach archiviert. Eine
@@ -87,8 +112,14 @@ export default function Imprint() {
         <p>
           Sollte etwas nicht stimmen – ein beschädigter oder fehlerhafter Druck, eine falsche
           Zuordnung, ein Problem beim Download –, melden Sie sich bitte über{' '}
-          <Link to="/hilfe">Hilfe &amp; Kontakt</Link> oder telefonisch. Wir suchen in jedem Fall
-          eine faire Lösung und ersetzen fehlerhafte Drucke.
+          <Link to="/hilfe">Hilfe &amp; Kontakt</Link>
+          {contactEmail ? (
+            <>
+              {' '}
+              oder per E-Mail an <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+            </>
+          ) : null}
+          . Wir suchen in jedem Fall eine faire Lösung und ersetzen fehlerhafte Drucke.
         </p>
 
         <h2>Urheberrecht</h2>

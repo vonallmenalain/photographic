@@ -19,6 +19,8 @@ interface Order {
   status: string;
   currency: string;
   total_cents: number;
+  subtotal_cents?: number;
+  shipping_fee_cents?: number;
   created_at: string;
   payment_provider: string | null;
   payment_ref: string | null;
@@ -170,6 +172,18 @@ export default function AdminOrderDetail() {
             ))}
           </tbody>
         </table>
+        {(order.shipping_fee_cents ?? 0) > 0 && (
+          <>
+            <div className="row between mt">
+              <span className="soft">Zwischensumme</span>
+              <span>{formatPrice(order.subtotal_cents ?? order.total_cents - (order.shipping_fee_cents ?? 0), order.currency)}</span>
+            </div>
+            <div className="row between" style={{ marginTop: 6 }}>
+              <span className="soft">Versand per Post</span>
+              <span>{formatPrice(order.shipping_fee_cents ?? 0, order.currency)}</span>
+            </div>
+          </>
+        )}
         <div className="row between mt">
           <span className="soft">Gesamt</span>
           <strong>{formatPrice(order.total_cents, order.currency)}</strong>

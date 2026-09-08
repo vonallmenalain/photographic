@@ -59,11 +59,61 @@ import {
   REAL_ORDER_STATUSES,
   isRealOrder,
   itemTotalCents,
+  orderAmounts,
   resolveLine,
   type OrderItemDoc,
 } from '../services/orders';
+import { cleanEmailList, getAppSettings, updateAppSettings } from '../services/settings';
+import {
+  acknowledgeDelivery,
+  allAdminEmails,
+  countOpenProblems,
+  deliveryOverview,
+  listDeliveries,
+} from '../services/mailDelivery';
+import { clearParentDeliveryProblem, type DeliveryProblemMarker } from '../lib/mailLog';
 
 const router = Router();
+
+/** Kompakte Form des Zustellproblem-Markers einer Eltern-Adresse für die Anzeige. */
+function deliveryProblemView(marker: DeliveryProblemMarker | null | undefined) {
+  if (!marker) return null;
+  return {
+    status: marker.status,
+    subject: marker.subject ?? '',
+    reason: marker.reason ?? null,
+    at: marker.at,
+  };
+}
+
+/**
+ * Ordnet die Versandpauschale jeder bestätigten Bestellung einem Auftrag zu:
+ * dem Auftrag, aus dem die meisten Positionen der Bestellung stammen. So
+ * enthalten Umsatzzahlen je Auftrag auch das Porto, das die Eltern bezahlt haben.
+ */
+function shippingByEvent(
+  orders: { id: string; status: string; shipping_fee_cents?: number }[],
+  eventCountsByOrder: Map<string, Map<string, number>>,
+  countsForRevenue: (status: string) => boolean,
+): Map<string, { eventId: string; cents: number }> {
+  const out = new Map<string, { eventId: string; cents: number }>();
+  for (const order of orders) {
+    const fee = Math.max(0, Number(order.shipping_fee_cents) || 0);
+    if (fee === 0 || !countsForRevenue(order.status)) continue;
+    const counts = eventCountsByOrder.get(order.id);
+    if (!counts || counts.size === 0) continue;
+    let best: string | null = null;
+    let bestCount = -1;
+    for (const [eventId, count] of counts) {
+      if (count > bestCount) {
+        best = eventId;
+        bestCount = count;
+      }
+    }
+    if (best) out.set(order.id, { eventId: best, cents: fee });
+  }
+  return out;
+}
 
 const PHOTO_STATUSES = ['uploaded', 'processed', 'assigned', 'disabled'] as const;
 // Simplified order life cycle. `cart`/`checkout_started` remain internal states
@@ -487,6 +537,95 @@ router.post(
 // All routes below require admin.
 router.use(requireAdmin);
 
+// --- Zähler für die Seitenleiste ------------------------------------------
+// Offene Meldungen der Eltern und offene Zustellprobleme – beides erscheint
+// als Zahl neben „Meldungen“, damit nichts unbemerkt liegen bleibt.
+router.get(
+  '/attention',
+  asyncHandler(async (_req, res) => {
+    const [openReports, deliveryProblems] = await Promise.all([
+      countQuery(col(COL.reports).where('status', '==', 'open')),
+      countOpenProblems(),
+    ]);
+    res.json({ openReports, deliveryProblems });
+  }),
+);
+
+// --- Einstellungen (Kontaktadresse, Versandpauschale, Benachrichtigungen) ----
+router.get(
+  '/settings',
+  asyncHandler(async (_req, res) => {
+    const settings = await getAppSettings();
+    res.json({
+      settings,
+      adminEmails: await allAdminEmails(),
+      defaults: {
+        contact_email: config.mail.contactEmailDefault,
+        shipping_fee_cents: config.shop.shippingFeeCentsDefault,
+      },
+      currency: config.stripe.currency,
+      mailFrom: config.mail.from,
+      devLogOnly: config.mail.devLogOnly,
+    });
+  }),
+);
+
+router.put(
+  '/settings',
+  asyncHandler(async (req, res) => {
+    const data = parse(
+      z.object({
+        contact_email: z.union([emailSchema, z.literal('')]).optional(),
+        shipping_fee_cents: z.number().int().min(0).max(100_000).optional(),
+        report_notify_enabled: z.boolean().optional(),
+        report_notify_emails: z.union([z.array(z.string()), z.string()]).optional(),
+        bounce_notify_enabled: z.boolean().optional(),
+        bounce_notify_emails: z.union([z.array(z.string()), z.string()]).optional(),
+      }),
+      req.body ?? {},
+    );
+    const patch: Record<string, unknown> = {};
+    if (data.contact_email !== undefined) patch.contact_email = data.contact_email;
+    if (data.shipping_fee_cents !== undefined) patch.shipping_fee_cents = data.shipping_fee_cents;
+    if (data.report_notify_enabled !== undefined) patch.report_notify_enabled = data.report_notify_enabled;
+    if (data.report_notify_emails !== undefined) {
+      patch.report_notify_emails = cleanEmailList(data.report_notify_emails);
+    }
+    if (data.bounce_notify_enabled !== undefined) patch.bounce_notify_enabled = data.bounce_notify_enabled;
+    if (data.bounce_notify_emails !== undefined) {
+      patch.bounce_notify_emails = cleanEmailList(data.bounce_notify_emails);
+    }
+    const settings = await updateAppSettings(patch);
+    await audit('settings.update', JSON.stringify(patch));
+    res.json({ settings, adminEmails: await allAdminEmails() });
+  }),
+);
+
+// --- Zustellprotokoll (Resend-Webhook / SMTP-Fehler) -----------------------
+router.get(
+  '/email-deliveries',
+  asyncHandler(async (req, res) => {
+    const problemsOnly = String(req.query.problems ?? '') === '1';
+    const [deliveries, overview] = await Promise.all([
+      listDeliveries({ problemsOnly, limit: 200 }),
+      deliveryOverview(),
+    ]);
+    res.json({ deliveries, overview });
+  }),
+);
+
+router.patch(
+  '/email-deliveries/:id',
+  asyncHandler(async (req, res) => {
+    const { acknowledged } = parse(z.object({ acknowledged: z.literal(true) }), req.body ?? {});
+    void acknowledged;
+    const ok = await acknowledgeDelivery(req.params.id);
+    if (!ok) throw new ApiError(404, 'Eintrag nicht gefunden.');
+    await audit('email.delivery.acknowledge', req.params.id);
+    res.json({ ok: true });
+  }),
+);
+
 // --- Dashboard -----------------------------------------------------------
 router.get(
   '/stats',
@@ -522,7 +661,7 @@ async function eventRevenueTotals(): Promise<{
   orderCount: Map<string, number>;
 }> {
   const [orders, orderItems] = await Promise.all([
-    runQuery<{ id: string; status: string }>(col(COL.orders)),
+    runQuery<{ id: string; status: string; shipping_fee_cents?: number }>(col(COL.orders)),
     runQuery<{
       order_id: string;
       photo_id: string;
@@ -545,6 +684,7 @@ async function eventRevenueTotals(): Promise<{
 
   const revenue = new Map<string, number>();
   const orderSets = new Map<string, Set<string>>();
+  const eventCountsByOrder = new Map<string, Map<string, number>>();
   for (const item of relevantItems) {
     const eventId = photoEvent.get(item.photo_id)?.event_id;
     if (!eventId) continue;
@@ -556,6 +696,13 @@ async function eventRevenueTotals(): Promise<{
       orderSets.set(eventId, set);
     }
     set.add(item.order_id);
+    const counts = eventCountsByOrder.get(item.order_id) ?? new Map<string, number>();
+    counts.set(eventId, (counts.get(eventId) ?? 0) + 1);
+    eventCountsByOrder.set(item.order_id, counts);
+  }
+  // Versandpauschale zählt zum Umsatz des Hauptauftrags der Bestellung.
+  for (const { eventId, cents } of shippingByEvent(orders, eventCountsByOrder, countsForRevenue).values()) {
+    revenue.set(eventId, (revenue.get(eventId) ?? 0) + cents);
   }
   const orderCount = new Map<string, number>();
   for (const [eventId, set] of orderSets) orderCount.set(eventId, set.size);
@@ -866,13 +1013,21 @@ router.get(
     const event = await getById(COL.events, req.params.id);
     if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
     const ids = await eventEmailIds(req.params.id);
-    const emails = await getManyById<{ email: string; name?: string; status: string }>(
-      COL.parentEmails,
-      Array.from(ids),
-    );
+    const emails = await getManyById<{
+      email: string;
+      name?: string;
+      status: string;
+      delivery_problem?: DeliveryProblemMarker | null;
+    }>(COL.parentEmails, Array.from(ids));
     const recipients = Array.from(emails.values())
       .filter((e) => e.status !== 'disabled' && e.email)
-      .map((e) => ({ id: e.id, email: e.email, name: e.name ?? '', status: e.status }))
+      .map((e) => ({
+        id: e.id,
+        email: e.email,
+        name: e.name ?? '',
+        status: e.status,
+        deliveryProblem: deliveryProblemView(e.delivery_problem),
+      }))
       .sort((a, b) => a.email.localeCompare(b.email));
     res.json({
       recipientCount: recipients.length,
@@ -928,6 +1083,9 @@ router.post(
     );
     const sent = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.length - sent;
+    // Adressen, die der Mailserver schon beim Versand abgelehnt hat – damit der
+    // Admin sofort sieht, wo er nachbessern muss (Details im Zustellprotokoll).
+    const failedEmails = recipients.filter((_, i) => results[i]?.status === 'rejected').map((r) => r.email);
 
     // Merke pro Adresse, dass (und wann) die Einladung erfolgreich rausging, damit
     // das Versand-Popup beim nächsten Öffnen anzeigen kann, wer sie schon erhalten
@@ -967,6 +1125,7 @@ router.post(
     res.json({
       sent,
       failed,
+      failedEmails,
       total: recipients.length,
       sentToSelf,
       devLogOnly: config.mail.devLogOnly,
@@ -1054,10 +1213,12 @@ router.get(
       emailDirectPhotos.set(l.email_id, (emailDirectPhotos.get(l.email_id) ?? 0) + 1);
     }
 
-    const emailDocs = await getManyById<{ email: string; name?: string; status: string }>(
-      COL.parentEmails,
-      Array.from(neededEmailIds),
-    );
+    const emailDocs = await getManyById<{
+      email: string;
+      name?: string;
+      status: string;
+      delivery_problem?: DeliveryProblemMarker | null;
+    }>(COL.parentEmails, Array.from(neededEmailIds));
     const emails = Array.from(emailDocs.values())
       .filter((e) => e.email)
       .map((e) => ({
@@ -1065,6 +1226,7 @@ router.get(
         email: e.email,
         name: e.name ?? '',
         status: e.status,
+        delivery_problem: deliveryProblemView(e.delivery_problem),
         childNames: Array.from(emailChildNames.get(e.id) ?? []).sort((a, b) =>
           a.localeCompare(b),
         ),
@@ -1119,7 +1281,13 @@ router.get(
         emails: Array.from(childEmailIds.get(c.id) ?? [])
           .map((id) => emailById.get(id))
           .filter((e): e is NonNullable<typeof e> => Boolean(e))
-          .map((e) => ({ id: e.id, email: e.email, name: e.name, status: e.status }))
+          .map((e) => ({
+            id: e.id,
+            email: e.email,
+            name: e.name,
+            status: e.status,
+            delivery_problem: e.delivery_problem,
+          }))
           .sort((a, b) => a.email.localeCompare(b.email)),
         photos: (photosByChild.get(c.id) ?? []).sort(sortPhotos).map(toPhotoView),
       }));
@@ -1181,6 +1349,85 @@ router.delete(
   asyncHandler(async (req, res) => {
     await deleteChildCascade(req.params.id);
     res.json({ ok: true });
+  }),
+);
+
+// E-Mail-Adresse direkt einem Kind zuordnen („Auftrag bearbeiten“ → „+ E-Mail-
+// Adresse“): z. B. ein nachträglich erfasster zweiter Elternteil. Existiert die
+// Adresse bereits, wird sie wiederverwendet (und nur die Verknüpfung ergänzt);
+// sonst wird sie neu angelegt. Optional geht sofort die Einladung raus.
+router.post(
+  '/children/:id/emails',
+  asyncHandler(async (req, res) => {
+    const { email, name, sendInvitation } = parse(
+      z.object({
+        email: emailSchema,
+        name: z.string().max(200).default(''),
+        sendInvitation: z.boolean().default(false),
+      }),
+      req.body,
+    );
+    const child = await getById<{ event_id: string; name: string }>(COL.children, req.params.id);
+    if (!child) throw new ApiError(404, 'Kind nicht gefunden.');
+
+    const normalized = normalizeEmail(email);
+    const existing = await firstOf<{ name?: string; status: string }>(
+      col(COL.parentEmails).where('email', '==', normalized),
+    );
+    let emailId: string;
+    let created = false;
+    if (existing) {
+      emailId = existing.id;
+      if (name && !existing.name) {
+        await updateById(COL.parentEmails, emailId, { name, updated_at: nowIso() });
+      }
+    } else {
+      emailId = newId('eml');
+      await setById(COL.parentEmails, emailId, {
+        email: normalized,
+        name: name || '',
+        status: 'not_verified',
+        verified_at: null,
+        note: '',
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      });
+      created = true;
+    }
+
+    const linkDocId = linkId(emailId, req.params.id);
+    const linked = !(await getById(COL.emailChildren, linkDocId));
+    if (linked) {
+      await setById(COL.emailChildren, linkDocId, {
+        email_id: emailId,
+        child_id: req.params.id,
+        created_at: nowIso(),
+      });
+    }
+
+    // Einladung nur, wenn der Auftrag bereits veröffentlicht ist – vorher gäbe
+    // es für die Eltern noch nichts zu sehen.
+    let invited = false;
+    if (sendInvitation) {
+      const event = await getById<{ status: string }>(COL.events, child.event_id);
+      if (event?.status === 'published') {
+        try {
+          await sendGalleryReadyEmail(normalized, config.publicAppUrl, {
+            retentionDays: config.retentionDaysDefault,
+          });
+          await recordInvitationsSent(child.event_id, [emailId]);
+          invited = true;
+        } catch {
+          invited = false;
+        }
+      }
+    }
+
+    await audit(
+      'child.email.add',
+      `${req.params.id} <- ${emailId} (${normalized})${created ? ', created' : ''}${linked ? ', linked' : ''}${invited ? ', invited' : ''}`,
+    );
+    res.json({ id: emailId, email: normalized, created, linked, invited });
   }),
 );
 
@@ -1714,22 +1961,51 @@ router.patch(
       }),
       req.body,
     );
-    const existing = await getById(COL.parentEmails, req.params.id);
+    const existing = await getById<{ email: string; status: string }>(COL.parentEmails, req.params.id);
     if (!existing) throw new ApiError(404, 'E-Mail-Adresse nicht gefunden.');
     if (data.email) {
       const clash = await firstOf(col(COL.parentEmails).where('email', '==', normalizeEmail(data.email)));
       if (clash && clash.id !== req.params.id) {
-        throw new ApiError(409, 'Diese E-Mail-Adresse existiert bereits.');
+        throw new ApiError(
+          409,
+          'Diese E-Mail-Adresse existiert bereits. Füge sie stattdessen über „+ E-Mail-Adresse“ hinzu und entferne die falsche Adresse.',
+        );
       }
     }
     const map: Record<string, unknown> = {};
+    const addressChanged = !!data.email && normalizeEmail(data.email) !== existing.email;
     if (data.email) map.email = normalizeEmail(data.email);
     if (data.name !== undefined) map.name = data.name;
     if (data.note !== undefined) map.note = data.note;
+    if (addressChanged) {
+      // Eine andere Adresse ist eine andere Identität: Die Bestätigung gilt
+      // nicht mehr, offene Sitzungen und Codes der alten Adresse werden
+      // beendet, und ein Zustellproblem der alten Schreibweise ist hinfällig.
+      map.status = 'not_verified';
+      map.verified_at = null;
+      map.delivery_problem = null;
+      await Promise.all([
+        deleteWhere(col(COL.parentSessions).where('email_id', '==', req.params.id)),
+        deleteWhere(col(COL.verificationTokens).where('email_id', '==', req.params.id)),
+      ]);
+    }
     if (Object.keys(map).length) {
       await updateById(COL.parentEmails, req.params.id, { ...map, updated_at: nowIso() });
-      await audit('email.update', `${req.params.id}: ${JSON.stringify(data)}`);
+      await audit('email.update', `${req.params.id}: ${JSON.stringify(data)}${addressChanged ? ' (verification reset)' : ''}`);
     }
+    res.json({ ok: true, addressChanged });
+  }),
+);
+
+// Zustellproblem einer Adresse von Hand als erledigt markieren (z. B. wenn die
+// Adresse geprüft wurde und stimmt).
+router.post(
+  '/emails/:id/clear-delivery-problem',
+  asyncHandler(async (req, res) => {
+    const existing = await getById(COL.parentEmails, req.params.id);
+    if (!existing) throw new ApiError(404, 'E-Mail-Adresse nicht gefunden.');
+    await clearParentDeliveryProblem(req.params.id);
+    await audit('email.delivery.clear', req.params.id);
     res.json({ ok: true });
   }),
 );
@@ -1957,9 +2233,15 @@ router.get(
   '/orders',
   asyncHandler(async (_req, res) => {
     const [allOrders, products, events, allItems] = await Promise.all([
-      runQuery<{ status: string; total_cents: number; currency: string; created_at: string; email_id: string }>(
-        col(COL.orders),
-      ),
+      runQuery<{
+        status: string;
+        total_cents: number;
+        subtotal_cents?: number;
+        shipping_fee_cents?: number;
+        currency: string;
+        created_at: string;
+        email_id: string;
+      }>(col(COL.orders)),
       runQuery<ProductDoc>(col(COL.products)),
       runQuery<{ name: string }>(col(COL.events)),
       runQuery<OrderItemDoc>(col(COL.orderItems)),
@@ -2050,10 +2332,13 @@ router.get(
         .filter(Boolean);
       const orderChildNames = [...childNames].sort((a, b) => a.localeCompare(b));
 
+      const amounts = orderAmounts(o);
       return {
         id: o.id,
         status: o.status,
-        total_cents: o.total_cents,
+        total_cents: amounts.total_cents,
+        subtotal_cents: amounts.subtotal_cents,
+        shipping_fee_cents: amounts.shipping_fee_cents,
         currency: o.currency,
         created_at: o.created_at,
         email,
@@ -2099,10 +2384,17 @@ router.get(
 router.get(
   '/orders/:id',
   asyncHandler(async (req, res) => {
-    const orderDoc = await getById<Record<string, unknown> & { email_id: string }>(COL.orders, req.params.id);
+    const orderDoc = await getById<
+      Record<string, unknown> & {
+        email_id: string;
+        total_cents: number;
+        subtotal_cents?: number;
+        shipping_fee_cents?: number;
+      }
+    >(COL.orders, req.params.id);
     if (!orderDoc) throw new ApiError(404, 'Bestellung nicht gefunden.');
     const parentEmail = await getById<{ email: string }>(COL.parentEmails, orderDoc.email_id);
-    const order = { ...orderDoc, email: parentEmail?.email ?? '' };
+    const order = { ...orderDoc, ...orderAmounts(orderDoc), email: parentEmail?.email ?? '' };
 
     const rawItems = await runQuery<OrderItemDoc>(
       col(COL.orderItems).where('order_id', '==', req.params.id),
@@ -2307,9 +2599,15 @@ async function buildAnalytics(filterEventId?: string) {
         runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
         runQuery<{ id: string; event_id: string }>(col(COL.photos)),
         runQuery<{ id: string; email: string; name?: string; status: string }>(col(COL.parentEmails)),
-        runQuery<{ id: string; email_id: string; status: string; total_cents: number; currency: string; created_at: string }>(
-          col(COL.orders),
-        ),
+        runQuery<{
+          id: string;
+          email_id: string;
+          status: string;
+          total_cents: number;
+          shipping_fee_cents?: number;
+          currency: string;
+          created_at: string;
+        }>(col(COL.orders)),
         runQuery<{
           order_id: string;
           photo_id: string;
@@ -2351,15 +2649,11 @@ async function buildAnalytics(filterEventId?: string) {
     const eventOrders = new Map<string, Set<string>>();
     const eventBuyers = new Map<string, Map<string, BuyerAgg>>();
     const eventDaily = new Map<string, Map<string, number>>();
+    const eventCountsByOrder = new Map<string, Map<string, number>>();
 
-    for (const item of orderItems) {
-      const order = orderById.get(item.order_id);
-      if (!order || !countsForRevenue(order.status)) continue;
-      const eventId = photoEvent.get(item.photo_id);
-      if (!eventId) continue;
-      // Line totals honour the tiered prices (first unit vs. further units).
-      const amount = itemTotalCents(item);
-
+    // Betrag einem Auftrag (und dem Käufer sowie dem Tag) zurechnen – für
+    // Bestellpositionen ebenso wie für die Versandpauschale der Bestellung.
+    const addRevenue = (eventId: string, order: (typeof orders)[number], amount: number) => {
       eventRevenue.set(eventId, (eventRevenue.get(eventId) ?? 0) + amount);
 
       let oset = eventOrders.get(eventId);
@@ -2391,6 +2685,24 @@ async function buildAnalytics(filterEventId?: string) {
         }
         daily.set(key, (daily.get(key) ?? 0) + amount);
       }
+    };
+
+    for (const item of orderItems) {
+      const order = orderById.get(item.order_id);
+      if (!order || !countsForRevenue(order.status)) continue;
+      const eventId = photoEvent.get(item.photo_id);
+      if (!eventId) continue;
+      // Line totals honour the tiered prices (first unit vs. further units).
+      addRevenue(eventId, order, itemTotalCents(item));
+      const counts = eventCountsByOrder.get(order.id) ?? new Map<string, number>();
+      counts.set(eventId, (counts.get(eventId) ?? 0) + 1);
+      eventCountsByOrder.set(order.id, counts);
+    }
+
+    // Versandpauschale: zählt zum Umsatz des Hauptauftrags der Bestellung.
+    for (const [orderId, { eventId, cents }] of shippingByEvent(orders, eventCountsByOrder, countsForRevenue)) {
+      const order = orderById.get(orderId);
+      if (order) addRevenue(eventId, order, cents);
     }
 
     const remindersByEvent = new Map<string, { id: string; sent_at: string; note: string }[]>();
@@ -2601,10 +2913,12 @@ router.get(
         neededIds.add(l.email_id);
       }
     }
-    const emailDocs = await getManyById<{ email: string; name?: string; status: string }>(
-      COL.parentEmails,
-      Array.from(neededIds),
-    );
+    const emailDocs = await getManyById<{
+      email: string;
+      name?: string;
+      status: string;
+      delivery_problem?: DeliveryProblemMarker | null;
+    }>(COL.parentEmails, Array.from(neededIds));
 
     const toView = (id: string) => {
       const e = emailDocs.get(id);
@@ -2617,6 +2931,7 @@ router.get(
         verified: e.status === 'verified',
         hasOrdered: ordered.has(e.id),
         invitedAt: invitedAt.get(e.id) ?? null,
+        deliveryProblem: deliveryProblemView(e.delivery_problem),
       };
     };
 
@@ -2703,6 +3018,7 @@ router.post(
     );
     const sent = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.length - sent;
+    const failedEmails = recipients.filter((_, i) => results[i]?.status === 'rejected').map((r) => r.email);
 
     let sentToSelf = false;
     if (selfEmail) {
@@ -2730,6 +3046,7 @@ router.post(
     res.json({
       sent,
       failed,
+      failedEmails,
       total: recipients.length,
       sentToSelf,
       devLogOnly: config.mail.devLogOnly,

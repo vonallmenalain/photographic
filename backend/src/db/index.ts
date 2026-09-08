@@ -42,8 +42,15 @@ export const COL = {
   // Versand-Popup sichtbar ist, an welche Adressen die Einladung bereits ging.
   eventInvitations: 'event_invitations',
   // Kleine Schlüssel/Wert-Sammlung für app-weite Einstellungen und Migrations-
-  // Marker (z. B. die Version des eingespielten Produktkatalogs).
+  // Marker (z. B. die Version des eingespielten Produktkatalogs). Die im
+  // Adminbereich gepflegten Einstellungen liegen im Dokument `settings/app`
+  // (siehe services/settings.ts).
   settings: 'settings',
+  // Zustellprotokoll der ausgehenden E-Mails: ein Dokument je E-Mail mit dem
+  // letzten bekannten Zustellstatus (vom Resend-Webhook gemeldet bzw. bei einem
+  // SMTP-Fehler direkt beim Versand festgehalten). Grundlage für die Anzeige
+  // „Nicht zustellbare E-Mails“ unter „Meldungen“.
+  emailDeliveries: 'email_deliveries',
   auditLog: 'audit_log',
 } as const;
 

@@ -7,6 +7,8 @@ import { config } from './config';
 import { migrate } from './db/migrate';
 import { archiveExpiredEvents } from './services/events';
 import { sweepAbandonedCheckouts } from './services/orders';
+import { pruneOldDeliveries } from './services/mailDelivery';
+import { getAppSettings } from './services/settings';
 import { checkWatermarkRendering } from './lib/images';
 import { describeStripe, stripeWarnings } from './lib/stripeStatus';
 import { errorHandler, notFound } from './middleware/errorHandler';
@@ -85,10 +87,20 @@ async function main() {
       // eslint-disable-next-line no-console
       console.error('[orders] abandoned-checkout sweep failed', err);
     });
+  // Alte Einträge des E-Mail-Zustellprotokolls (älter als 90 Tage) entfernen;
+  // offene Zustellprobleme bleiben erhalten.
+  const runDeliveryPrune = () =>
+    pruneOldDeliveries().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('[mail] delivery log prune failed', err);
+    });
   await runArchiveSweep();
   await runCheckoutSweep();
+  await runDeliveryPrune();
   setInterval(runArchiveSweep, 6 * 60 * 60 * 1000).unref();
   setInterval(runCheckoutSweep, 6 * 60 * 60 * 1000).unref();
+  setInterval(runDeliveryPrune, 24 * 60 * 60 * 1000).unref();
+  const settings = await getAppSettings();
 
   const watermarkOk = await checkWatermarkRendering();
 
@@ -103,6 +115,11 @@ async function main() {
     console.log(`[server] parent auth : ${config.firebase.parentAuthEnabled ? 'Firebase + code fallback' : 'code only'}`);
     console.log(`[server] stripe      : ${describeStripe()}`);
     console.log(`[server] mail        : ${config.mail.devLogOnly ? 'DEV LOG ONLY' : config.mail.host}`);
+    console.log(`[server] contact     : ${settings.contact_email || 'NOT SET (Adminbereich → Einstellungen)'}`);
+    console.log(
+      `[server] mail status : ${config.resend.webhookSecret ? 'Resend webhook configured (/webhook/resend)' : 'no RESEND_WEBHOOK_SECRET – delivery problems only visible in Resend'}`,
+    );
+    console.log(`[server] shipping    : ${(settings.shipping_fee_cents / 100).toFixed(2)} ${config.stripe.currency.toUpperCase()} per order with printed products`);
     console.log(`[server] watermark   : ${watermarkOk ? 'OK (fonts available)' : 'BROKEN — no fonts, previews NOT watermarked!'}`);
     // When parents can ONLY log in via the SMTP code flow but no SMTP server is
     // configured, verification codes are merely printed to this log and parents

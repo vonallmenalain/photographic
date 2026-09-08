@@ -31,6 +31,8 @@ interface Order {
   id: string;
   status: string;
   currency: string;
+  subtotal_cents?: number;
+  shipping_fee_cents?: number;
   total_cents: number;
   created_at: string;
   paid_at: string | null;
@@ -234,11 +236,30 @@ export default function OrderDetail() {
             );
           })}
         </div>
-        <div className="row between" style={{ marginTop: 16 }}>
-          <span className="soft">Gesamt</span>
-          <strong style={{ fontSize: '1.2rem' }}>
-            {formatPrice(order.total_cents, order.currency)}
-          </strong>
+        <div className="cart-summary">
+          {(order.shipping_fee_cents ?? 0) > 0 && (
+            <>
+              <div className="row between cart-summary-row">
+                <span className="soft">Zwischensumme</span>
+                <span>
+                  {formatPrice(
+                    order.subtotal_cents ?? order.total_cents - (order.shipping_fee_cents ?? 0),
+                    order.currency,
+                  )}
+                </span>
+              </div>
+              <div className="row between cart-summary-row">
+                <span className="soft">Versand per Post</span>
+                <span>{formatPrice(order.shipping_fee_cents ?? 0, order.currency)}</span>
+              </div>
+            </>
+          )}
+          <div className="row between cart-summary-row cart-summary-total">
+            <span className="soft">Gesamt</span>
+            <strong style={{ fontSize: '1.2rem' }}>
+              {formatPrice(order.total_cents, order.currency)}
+            </strong>
+          </div>
         </div>
       </div>
 
