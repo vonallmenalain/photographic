@@ -9,6 +9,10 @@ export interface AppSettings {
   report_notify_emails: string[];
   bounce_notify_enabled: boolean;
   bounce_notify_emails: string[];
+  /** Ob ein Resend-Signing-Secret hinterlegt ist (der Wert selbst wird nie ausgeliefert). */
+  resend_webhook_secret_set: boolean;
+  /** Woher es stammt: aus dem Adminbereich, aus der .env oder gar nicht gesetzt. */
+  resend_webhook_secret_source: 'settings' | 'env' | 'none';
   updated_at: string | null;
 }
 

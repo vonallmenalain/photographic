@@ -353,8 +353,11 @@ Die **Benachrichtigungen** (neue Meldung, Zustellproblem) werden unter
 **Meldungen** eingestellt – jeweils mit Ein-/Ausschalter und Empfängerliste
 (leer = alle Admin-Konten mit E-Mail-Adresse).
 
-**Nicht zustellbare E-Mails** (unter „Meldungen“): Ist der Resend-Webhook
-eingerichtet ([docs/04-email-smtp.md, 4.6](04-email-smtp.md)), meldet Resend
+**Nicht zustellbare E-Mails** (unter „Meldungen“): Dort wird auch der
+**Resend-Webhook eingerichtet** – Webhook-Adresse zum Kopieren und Feld für das
+Signing Secret. Das gilt sofort, ohne Zugriff auf die Server-Konsole und ohne
+Neustart. Ist der Webhook eingerichtet
+([docs/04-email-smtp.md, 4.6](04-email-smtp.md)), meldet Resend
 jede E-Mail, die nicht zugestellt werden konnte (Bounce, Spam-Beschwerde,
 Fehlschlag). Die Liste zeigt Empfänger, Betreff, Zeitpunkt und Begründung; die
 betroffene Eltern-Adresse ist überall rot mit **„Nicht zustellbar“** markiert.

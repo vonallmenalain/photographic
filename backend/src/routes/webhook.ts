@@ -6,6 +6,7 @@ import { COL, getById } from '../db';
 import { sendConfirmationEmail } from './parent';
 import { verifySvixSignature } from '../lib/resendWebhook';
 import { recordResendEvent } from '../services/mailDelivery';
+import { resendWebhookSecret } from '../services/settings';
 
 const router = Router();
 
@@ -58,7 +59,10 @@ router.post('/stripe', raw({ type: 'application/json' }), async (req, res) => {
  * Einrichtung: docs/04-email-smtp.md, Abschnitt 4.6.
  */
 router.post('/resend', raw({ type: () => true }), async (req, res) => {
-  if (!config.resend.webhookSecret) {
+  // Das Secret kommt bevorzugt aus den Einstellungen des Adminbereichs, sonst
+  // aus der Umgebung – so lässt sich der Webhook ohne Neustart einrichten.
+  const secret = await resendWebhookSecret();
+  if (!secret) {
     res.status(400).send('Resend webhook not configured');
     return;
   }
@@ -68,7 +72,7 @@ router.post('/resend', raw({ type: () => true }), async (req, res) => {
     return Array.isArray(value) ? value[0] : value;
   };
   const valid = verifySvixSignature(
-    config.resend.webhookSecret,
+    secret,
     {
       id: header('svix-id'),
       timestamp: header('svix-timestamp'),

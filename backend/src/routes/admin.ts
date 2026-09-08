@@ -63,7 +63,13 @@ import {
   resolveLine,
   type OrderItemDoc,
 } from '../services/orders';
-import { cleanEmailList, getAppSettings, updateAppSettings } from '../services/settings';
+import {
+  cleanEmailList,
+  getAppSettings,
+  looksLikeWebhookSecret,
+  settingsView,
+  updateAppSettings,
+} from '../services/settings';
 import {
   acknowledgeDelivery,
   allAdminEmails,
@@ -557,7 +563,8 @@ router.get(
   asyncHandler(async (_req, res) => {
     const settings = await getAppSettings();
     res.json({
-      settings,
+      // Ohne das Webhook-Secret – es wird nie zurückgeliefert, nur ersetzt.
+      settings: settingsView(settings),
       adminEmails: await allAdminEmails(),
       defaults: {
         contact_email: config.mail.contactEmailDefault,
@@ -581,6 +588,8 @@ router.put(
         report_notify_emails: z.union([z.array(z.string()), z.string()]).optional(),
         bounce_notify_enabled: z.boolean().optional(),
         bounce_notify_emails: z.union([z.array(z.string()), z.string()]).optional(),
+        // Signing Secret des Resend-Webhooks; Leerstring entfernt es wieder.
+        resend_webhook_secret: z.string().trim().max(200).optional(),
       }),
       req.body ?? {},
     );
@@ -595,9 +604,24 @@ router.put(
     if (data.bounce_notify_emails !== undefined) {
       patch.bounce_notify_emails = cleanEmailList(data.bounce_notify_emails);
     }
+    if (data.resend_webhook_secret !== undefined) {
+      const secret = data.resend_webhook_secret.trim();
+      if (secret && !looksLikeWebhookSecret(secret)) {
+        throw new ApiError(
+          400,
+          'Das sieht nicht nach einem Resend-Signing-Secret aus. Erwartet wird der Wert aus dem Resend-Webhook, der mit „whsec_“ beginnt.',
+        );
+      }
+      patch.resend_webhook_secret = secret;
+    }
     const settings = await updateAppSettings(patch);
-    await audit('settings.update', JSON.stringify(patch));
-    res.json({ settings, adminEmails: await allAdminEmails() });
+    // Das Secret gehört nicht ins Audit-Log – nur, dass es gesetzt/entfernt wurde.
+    const auditPatch = { ...patch };
+    if ('resend_webhook_secret' in auditPatch) {
+      auditPatch.resend_webhook_secret = patch.resend_webhook_secret ? '<gesetzt>' : '<entfernt>';
+    }
+    await audit('settings.update', JSON.stringify(auditPatch));
+    res.json({ settings: settingsView(settings), adminEmails: await allAdminEmails() });
   }),
 );
 

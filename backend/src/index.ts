@@ -117,7 +117,11 @@ async function main() {
     console.log(`[server] mail        : ${config.mail.devLogOnly ? 'DEV LOG ONLY' : config.mail.host}`);
     console.log(`[server] contact     : ${settings.contact_email || 'NOT SET (Adminbereich → Einstellungen)'}`);
     console.log(
-      `[server] mail status : ${config.resend.webhookSecret ? 'Resend webhook configured (/webhook/resend)' : 'no RESEND_WEBHOOK_SECRET – delivery problems only visible in Resend'}`,
+      `[server] mail status : ${
+        settings.resend_webhook_secret
+          ? 'Resend webhook configured (/webhook/resend)'
+          : 'no Resend webhook secret – set it under Adminbereich → Meldungen'
+      }`,
     );
     console.log(`[server] shipping    : ${(settings.shipping_fee_cents / 100).toFixed(2)} ${config.stripe.currency.toUpperCase()} per order with printed products`);
     console.log(`[server] watermark   : ${watermarkOk ? 'OK (fonts available)' : 'BROKEN — no fonts, previews NOT watermarked!'}`);
