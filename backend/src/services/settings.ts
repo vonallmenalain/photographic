@@ -14,6 +14,12 @@ import { normalizeEmail } from '../lib/validation';
  *  - report_notify_emails   Empfänger dafür (leer = alle Admin-Konten mit E-Mail)
  *  - bounce_notify_enabled  nicht zustellbare E-Mails per E-Mail melden
  *  - bounce_notify_emails   Empfänger dafür (leer = alle Admin-Konten mit E-Mail)
+ *  - resend_webhook_secret  Signing Secret des Resend-Webhooks. Bewusst hier und
+ *                           nicht nur in der .env: So lässt sich der Webhook im
+ *                           Adminbereich einrichten, ohne den Container neu zu
+ *                           erstellen (eine .env wird nur beim Anlegen des
+ *                           Containers gelesen). Wird nie an die Oberfläche
+ *                           zurückgegeben – siehe `settingsView`.
  *
  * Fehlende Felder fallen auf die Startwerte aus der Umgebung zurück, damit ein
  * bestehendes System ohne dieses Dokument unverändert weiterläuft. Das Dokument
@@ -27,7 +33,28 @@ export interface AppSettings {
   report_notify_emails: string[];
   bounce_notify_enabled: boolean;
   bounce_notify_emails: string[];
+  resend_webhook_secret: string;
   updated_at: string | null;
+}
+
+/**
+ * Fassung für die Oberfläche: ohne das Webhook-Secret, dafür mit der Angabe, ob
+ * (und woher) eines hinterlegt ist. Ein einmal gespeichertes Secret wird nie
+ * wieder ausgeliefert – es lässt sich nur ersetzen oder entfernen.
+ */
+export interface AppSettingsView extends Omit<AppSettings, 'resend_webhook_secret'> {
+  resend_webhook_secret_set: boolean;
+  resend_webhook_secret_source: 'settings' | 'env' | 'none';
+}
+
+export function settingsView(settings: AppSettings): AppSettingsView {
+  const { resend_webhook_secret: secret, ...rest } = settings;
+  const fromEnv = config.resend.webhookSecret;
+  return {
+    ...rest,
+    resend_webhook_secret_set: !!secret,
+    resend_webhook_secret_source: !secret ? 'none' : secret === fromEnv ? 'env' : 'settings',
+  };
 }
 
 export const APP_SETTINGS_ID = 'app';
@@ -43,6 +70,7 @@ function defaults(): AppSettings {
     report_notify_emails: [],
     bounce_notify_enabled: true,
     bounce_notify_emails: [],
+    resend_webhook_secret: config.resend.webhookSecret,
     updated_at: null,
   };
 }
@@ -83,6 +111,12 @@ function fromDoc(doc: Record<string, unknown> | null): AppSettings {
         ? doc.bounce_notify_enabled
         : d.bounce_notify_enabled,
     bounce_notify_emails: cleanEmailList(doc.bounce_notify_emails),
+    // Fehlt das Feld, gilt der Startwert aus der Umgebung; ein ausdrücklich
+    // gespeicherter Leerstring bedeutet dagegen „entfernt“.
+    resend_webhook_secret:
+      typeof doc.resend_webhook_secret === 'string'
+        ? doc.resend_webhook_secret.trim()
+        : d.resend_webhook_secret,
     updated_at: typeof doc.updated_at === 'string' ? doc.updated_at : null,
   };
 }
@@ -111,6 +145,7 @@ export async function updateAppSettings(patch: Partial<AppSettings>): Promise<Ap
   next.shipping_fee_cents = Math.max(0, Math.round(Number(next.shipping_fee_cents) || 0));
   next.report_notify_emails = cleanEmailList(next.report_notify_emails);
   next.bounce_notify_emails = cleanEmailList(next.bounce_notify_emails);
+  next.resend_webhook_secret = String(next.resend_webhook_secret ?? '').trim();
   await setById(COL.settings, APP_SETTINGS_ID, { ...next });
   cache = { value: next, at: Date.now() };
   return next;
@@ -124,4 +159,24 @@ export function resetSettingsCache(): void {
 /** Die öffentliche Kontaktadresse (leer, wenn keine konfiguriert ist). */
 export async function contactEmail(): Promise<string> {
   return (await getAppSettings()).contact_email;
+}
+
+/**
+ * Signing Secret des Resend-Webhooks: bevorzugt der im Adminbereich hinterlegte
+ * Wert, sonst der Startwert aus der Umgebung. Leer = Webhook nicht eingerichtet.
+ */
+export async function resendWebhookSecret(): Promise<string> {
+  try {
+    return (await getAppSettings()).resend_webhook_secret;
+  } catch {
+    return config.resend.webhookSecret;
+  }
+}
+
+/**
+ * Grobe Formatprüfung für ein Svix/Resend-Signing-Secret (`whsec_<base64>`).
+ * Fängt Tippfehler und mitkopierte Leerzeichen ab, ohne zu streng zu sein.
+ */
+export function looksLikeWebhookSecret(value: string): boolean {
+  return /^(whsec_)?[A-Za-z0-9+/_=-]{16,}$/.test(value.trim());
 }

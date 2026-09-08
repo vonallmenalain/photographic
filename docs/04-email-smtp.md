@@ -105,19 +105,26 @@ Versand** meldet (z. B. eine syntaktisch unmögliche Adresse). Einrichtung:
    `email.bounced`, `email.complained`, `email.failed`
    (Öffnungen/Klicks werden nicht ausgewertet).
 4. Webhook speichern → das **Signing Secret** (`whsec_...`) kopieren.
+5. Im Adminbereich unter **Meldungen → Nicht zustellbare E-Mails → Resend-Webhook
+   einrichten** das Secret einfügen und speichern.
 
-In `.env`:
+**Kein Neustart, kein Zugriff auf die Server-Konsole nötig:** Das Secret liegt in
+den App-Einstellungen (Firestore) und gilt sofort nach dem Speichern. Die genaue
+Webhook-Adresse steht dort zum Kopieren bereit. Aus Sicherheitsgründen wird ein
+gespeichertes Secret nie wieder angezeigt – es lässt sich nur ersetzen oder
+entfernen.
 
-```ini
-RESEND_WEBHOOK_SECRET=whsec_xxx
-```
+> **Alternative für den Erststart:** Wer ohnehin an der `.env` ist, kann dort
+> `RESEND_WEBHOOK_SECRET=whsec_xxx` setzen und den Container neu **erstellen**
+> (ein blosser Neustart liest die `.env` nicht neu). Der Wert im Adminbereich hat
+> Vorrang, sobald einer gesetzt ist.
 
-Backend neu starten (`docker compose up -d backend`). Das Log zeigt danach
-`mail status : Resend webhook configured (/webhook/resend)`. Im Adminbereich
-steht unter „Meldungen → Nicht zustellbare E-Mails“, wann das letzte Ereignis
-empfangen wurde – nach der nächsten verschickten E-Mail muss dort ein Eintrag
-erscheinen (auch erfolgreiche Zustellungen werden protokolliert; die Ansicht
-„Alle protokollierten E-Mails“ zeigt sie).
+Ob der Webhook läuft, steht im Adminbereich unter „Meldungen → Nicht zustellbare
+E-Mails“: dort werden der Status und der Zeitpunkt des letzten Ereignisses
+angezeigt. Nach der nächsten verschickten E-Mail muss ein Eintrag erscheinen
+(auch erfolgreiche Zustellungen werden protokolliert; die Ansicht „Alle
+protokollierten E-Mails“ zeigt sie). Im Server-Log erscheint beim Start
+`mail status : Resend webhook configured (/webhook/resend)`.
 
 > Wichtig: Resend meldet die Ereignisse auch für E-Mails, die die App über
 > **SMTP** verschickt. Ein separater API-Key ist nicht nötig; die Signatur des

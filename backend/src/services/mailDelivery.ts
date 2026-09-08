@@ -9,7 +9,7 @@ import {
   type DeliveryStatus,
 } from '../lib/mailLog';
 import { sendDeliveryProblemEmail } from '../lib/email';
-import { getAppSettings } from './settings';
+import { getAppSettings, resendWebhookSecret } from './settings';
 
 /**
  * Verarbeitung der Resend-Webhook-Ereignisse und alles, was der Adminbereich
@@ -235,7 +235,7 @@ export async function deliveryOverview(): Promise<DeliveryOverview> {
     countOpenProblems(),
   ]);
   return {
-    webhookConfigured: !!config.resend.webhookSecret,
+    webhookConfigured: !!(await resendWebhookSecret()),
     webhookPath: '/webhook/resend',
     lastEventAt: state?.last_event_at ?? null,
     lastEventType: state?.last_event_type ?? null,
