@@ -365,11 +365,8 @@ Eltern.
 In der Seitenleiste zeigt die Zahl neben **Meldungen** die offenen Anliegen der
 Eltern, die Zahl neben **Einstellungen** die offenen Zustellprobleme.
 
-**Nicht zustellbare E-Mails** (unter „Einstellungen“): Dort wird auch der
-**Resend-Webhook eingerichtet** – Webhook-Adresse zum Kopieren und Feld für das
-Signing Secret. Das gilt sofort, ohne Zugriff auf die Server-Konsole und ohne
-Neustart. Ist der Webhook eingerichtet
-([docs/04-email-smtp.md, 4.6](04-email-smtp.md)), meldet Resend
+**Nicht zustellbare E-Mails** (unter „Einstellungen“): Ist der Resend-Webhook
+eingerichtet ([docs/04-email-smtp.md, 4.6](04-email-smtp.md)), meldet Resend
 jede E-Mail, die nicht zugestellt werden konnte (Bounce, Spam-Beschwerde,
 Fehlschlag). Die Liste zeigt Empfänger, Betreff, Zeitpunkt und Begründung; die
 betroffene Eltern-Adresse ist überall rot mit **„Nicht zustellbar“** markiert.
@@ -379,6 +376,42 @@ Adresse hebt die Markierung ebenfalls auf. Ohne Webhook erfasst die App nur
 Fehler, die der Mailserver schon beim Versand meldet. „Alle protokollierten
 E-Mails“ zeigt auch die erfolgreich zugestellten; Einträge älter als 90 Tage
 werden automatisch aufgeräumt.
+
+### Was hier bewusst *nicht* mehr steht: die Einrichtung des Resend-Webhooks
+
+Früher gab es an dieser Stelle die Kachel **„Resend-Webhook einrichten“** mit
+der Webhook-Adresse und einem Feld für das Signing Secret, inklusive
+Schaltfläche **„Secret entfernen“**. Sie ist entfernt: Der Webhook wird einmalig
+eingerichtet und danach nie wieder angefasst – ein versehentlicher Klick auf
+„Secret entfernen“ hätte dagegen die ganze Zustellkontrolle stillgelegt, ohne
+dass es jemandem aufgefallen wäre. Das ist eine Entwickler-Aufgabe, keine
+Admin-Aufgabe.
+
+Geblieben ist an dieser Stelle die **Statusanzeige**: „Resend-Webhook ist
+eingerichtet (… Ereignisse empfangen, zuletzt …)“ bzw. „Der Resend-Webhook ist
+nicht eingerichtet“. Damit fällt ein Ausfall weiterhin auf.
+
+**Wenn dort etwas schiefgeht** (Statuszeile rot, Resend meldet
+`400 Invalid signature`, Secret muss ersetzt oder der Webhook neu aufgesetzt
+werden): Das Vorgehen steht in
+[docs/04-email-smtp.md, 4.6](04-email-smtp.md), Abschnitt „Signing Secret
+hinterlegen, ersetzen oder entfernen“. Kurzfassung – das Secret liegt weiterhin
+in den App-Einstellungen (Firestore `settings/app`, Feld
+`resend_webhook_secret`) und lässt sich ohne Neustart setzen:
+
+1. Admin-Token holen: `POST /api/admin/login` mit Benutzername und Passwort.
+2. Secret setzen: `PUT /api/admin/settings` mit
+   `{"resend_webhook_secret":"whsec_…"}` und dem Token als
+   `Authorization: Bearer …`. Leerstring entfernt es wieder.
+3. Kontrolle: Statuszeile im Adminbereich unter **Einstellungen → Nicht
+   zustellbare E-Mails**, danach eine Test-E-Mail verschicken – es muss ein
+   Eintrag in „Alle protokollierten E-Mails“ erscheinen.
+
+Alternativ über die Firebase-Konsole (Dokument `settings/app` direkt bearbeiten)
+oder über `RESEND_WEBHOOK_SECRET` in der `.env` samt Neuerstellen des
+Containers. Achtung: Ein leer gespeichertes `resend_webhook_secret` bedeutet
+„entfernt“ und übersteuert die `.env` – dann hilft nur ein neues Secret oder das
+Löschen des Feldes. Die fertigen `curl`-Befehle stehen in 4.6.
 
 ## 6.12 Klassenerfassung & Einverständniserklärung
 

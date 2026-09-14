@@ -18,9 +18,10 @@ function parseFrancs(value: string): number | null {
 /**
  * Alle Einstellungen der App an einem Ort: Kontaktadresse, Absenderadresse der
  * ausgehenden E-Mails, Versandpauschale, die beiden Benachrichtigungen (neue
- * Meldung, Zustellprobleme) sowie die Einrichtung des Resend-Webhooks samt
- * Liste der nicht zustellbaren E-Mails. Unter „Meldungen“ stehen dadurch nur
- * noch die Anliegen der Eltern.
+ * Meldung, Zustellprobleme) sowie die Liste der nicht zustellbaren E-Mails.
+ * Unter „Meldungen“ stehen dadurch nur noch die Anliegen der Eltern. Die
+ * Einrichtung des Resend-Webhooks gehört bewusst nicht hierher (einmalige
+ * Entwickler-Aufgabe, siehe docs/04-email-smtp.md, Abschnitt 4.6).
  */
 export default function AdminSettings() {
   const [data, setData] = useState<SettingsResponse | null>(null);
@@ -103,9 +104,8 @@ export default function AdminSettings() {
     <div>
       <h1>Einstellungen</h1>
       <p className="soft">
-        Kontakt- und Absenderadresse, Versandpauschale, Benachrichtigungen und die Einrichtung des
-        Resend-Webhooks. Die Anliegen der Eltern stehen unter{' '}
-        <Link to="/admin/reports">Meldungen</Link>.
+        Kontakt- und Absenderadresse, Versandpauschale, Benachrichtigungen und nicht zustellbare
+        E-Mails. Die Anliegen der Eltern stehen unter <Link to="/admin/reports">Meldungen</Link>.
       </p>
 
       {error && <Alert kind="error">{error}</Alert>}
