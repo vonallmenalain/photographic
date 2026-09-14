@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, API_BASE, ApiError } from '../../api/client';
+import { api, ApiError } from '../../api/client';
 import { Alert, StatusBadge } from '../../components/common';
 import { formatDate } from '../../lib/format';
-import { NotificationSettingsCard, type SettingsResponse } from './NotificationSettings';
+import { NotificationSettingsCard } from './NotificationSettings';
 
 interface Delivery {
   id: string;
@@ -36,152 +36,15 @@ interface Overview {
  * direkt beim Versand). Standardmässig nur die offenen Probleme; auf Wunsch
  * alle protokollierten E-Mails. Jedes Problem lässt sich als erledigt
  * markieren, sobald die Adresse geprüft bzw. korrigiert ist.
+ *
+ * Bewusst *nicht* hier: die Einrichtung des Resend-Webhooks (Webhook-Adresse
+ * und Signing Secret). Sie wird einmalig vorgenommen und ist eine reine
+ * Entwickler-Aufgabe – im Adminbereich könnte ein versehentliches „Secret
+ * entfernen“ die Zustellkontrolle stilllegen. Das Backend kann das Secret
+ * weiterhin über `PUT /api/admin/settings` entgegennehmen; das Vorgehen dafür
+ * steht in docs/04-email-smtp.md, Abschnitt 4.6. Der Status (eingerichtet oder
+ * nicht) bleibt unten sichtbar, damit ein Ausfall auffällt.
  */
-/**
- * Einrichtung des Resend-Webhooks direkt im Adminbereich: Zieladresse zum
- * Kopieren und das Signing Secret. Das Secret liegt bewusst hier und nicht nur
- * in der `.env` – so lässt sich der Webhook ohne Zugriff auf die Konsole des
- * Servers einrichten (eine `.env` wird nur beim Anlegen des Containers gelesen).
- * Ein gespeichertes Secret wird nie wieder angezeigt, nur ersetzt oder entfernt.
- */
-function WebhookSecretCard({ webhookUrl, onSaved }: { webhookUrl: string; onSaved: () => void }) {
-  const [data, setData] = useState<SettingsResponse | null>(null);
-  const [secret, setSecret] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [copied, setCopied] = useState(false);
-
-  const loadSettings = () =>
-    api<SettingsResponse>('/api/admin/settings', { admin: true })
-      .then(setData)
-      .catch((err) =>
-        setError(err instanceof ApiError ? err.message : 'Einstellungen konnten nicht geladen werden.'),
-      )
-      .finally(() => setLoading(false));
-
-  useEffect(() => {
-    void loadSettings();
-  }, []);
-
-  const save = async (value: string) => {
-    setError('');
-    setSuccess('');
-    setBusy(true);
-    try {
-      const res = await api<{ settings: SettingsResponse['settings'] }>('/api/admin/settings', {
-        method: 'PUT',
-        admin: true,
-        body: { resend_webhook_secret: value },
-      });
-      setData((d) => (d ? { ...d, settings: res.settings } : d));
-      setSecret('');
-      setSuccess(
-        value
-          ? 'Signing Secret gespeichert. Es gilt sofort – ein Neustart des Servers ist nicht nötig. Schicke jetzt eine Test-E-Mail; danach muss unten ein Eintrag erscheinen.'
-          : 'Signing Secret entfernt. Der Webhook wird nicht mehr angenommen.',
-      );
-      onSaved();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Speichern fehlgeschlagen.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const copyUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(webhookUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* Zwischenablage nicht verfügbar – die Adresse steht ja daneben */
-    }
-  };
-
-  const isSet = !!data?.settings.resend_webhook_secret_set;
-  const source = data?.settings.resend_webhook_secret_source ?? 'none';
-
-  return (
-    <div className="card mb">
-      <h3 style={{ marginTop: 0, marginBottom: 6 }}>Resend-Webhook einrichten</h3>
-      <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
-        Damit Resend Zustellprobleme hierher melden kann, braucht es einen Webhook. Lege ihn im
-        Resend-Dashboard unter <strong>Webhooks → Add Webhook</strong> mit der Adresse unten und den
-        Ereignissen „email.sent“, „email.delivered“, „email.delivery_delayed“, „email.bounced“,
-        „email.complained“ und „email.failed“ an. Das dort angezeigte <strong>Signing Secret</strong>{' '}
-        trägst du hier ein.
-      </p>
-
-      {error && <Alert kind="error">{error}</Alert>}
-      {success && <Alert kind="success">{success}</Alert>}
-
-      <div className="field">
-        <label>Adresse für den Webhook (in Resend eintragen)</label>
-        <div className="row" style={{ gap: 8 }}>
-          <input value={webhookUrl} readOnly onFocus={(e) => e.currentTarget.select()} style={{ flex: 1 }} />
-          <button type="button" className="btn secondary small" onClick={() => void copyUrl()}>
-            {copied ? 'Kopiert' : 'Kopieren'}
-          </button>
-        </div>
-      </div>
-
-      {loading ? (
-        <p className="muted">Wird geladen …</p>
-      ) : (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (secret.trim()) void save(secret.trim());
-          }}
-        >
-          <div className="field" style={{ marginBottom: 10 }}>
-            <label htmlFor="resend-secret">
-              Signing Secret {isSet ? '(neues Secret ersetzt das bestehende)' : ''}
-            </label>
-            <input
-              id="resend-secret"
-              type="password"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              placeholder={isSet ? '•••••••• (hinterlegt)' : 'whsec_…'}
-              autoComplete="off"
-              disabled={busy}
-            />
-            <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
-              {isSet
-                ? source === 'env'
-                  ? 'Aktuell wird das Secret aus der .env des Servers verwendet. Trägst du hier eines ein, gilt ab sofort dieses – die .env wird dann nicht mehr gebraucht.'
-                  : 'Ein Secret ist hinterlegt. Aus Sicherheitsgründen wird es nicht angezeigt; du kannst es nur ersetzen oder entfernen.'
-                : 'Noch kein Secret hinterlegt. Es gilt sofort nach dem Speichern – der Server muss dafür nicht neu gestartet werden.'}
-            </p>
-          </div>
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn small" disabled={busy || !secret.trim()}>
-              {busy ? 'Speichern …' : 'Secret speichern'}
-            </button>
-            {isSet && source === 'settings' && (
-              <button
-                type="button"
-                className="btn ghost small"
-                disabled={busy}
-                onClick={() => {
-                  if (confirm('Signing Secret entfernen? Resend kann danach keine Zustellprobleme mehr melden.')) {
-                    void save('');
-                  }
-                }}
-              >
-                Secret entfernen
-              </button>
-            )}
-          </div>
-        </form>
-      )}
-    </div>
-  );
-}
-
 export default function EmailDeliveries() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -256,15 +119,14 @@ export default function EmailDeliveries() {
             </>
           ) : (
             <>
-              Der Resend-Webhook ist noch nicht eingerichtet – Zustellprobleme werden zurzeit nur
-              erfasst, wenn der Mailserver eine E-Mail schon beim Versand ablehnt. Lege ihn in Resend
-              unter „Webhooks“ an und trage das Signing Secret unten ein.
+              Der Resend-Webhook ist nicht eingerichtet – Zustellprobleme werden zurzeit nur
+              erfasst, wenn der Mailserver eine E-Mail schon beim Versand ablehnt. Die Einrichtung
+              erfolgt einmalig technisch und nicht hier im Adminbereich; das Vorgehen steht in{' '}
+              <code>docs/04-email-smtp.md</code>, Abschnitt 4.6.
             </>
           )}
         </div>
       )}
-
-      {overview && <WebhookSecretCard webhookUrl={`${API_BASE}${overview.webhookPath}`} onSaved={() => void load()} />}
 
       <NotificationSettingsCard kind="bounce" />
 

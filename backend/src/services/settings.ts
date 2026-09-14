@@ -18,11 +18,13 @@ import { normalizeEmail } from '../lib/validation';
  *  - bounce_notify_enabled  nicht zustellbare E-Mails per E-Mail melden
  *  - bounce_notify_emails   Empfänger dafür (leer = alle Admin-Konten mit E-Mail)
  *  - resend_webhook_secret  Signing Secret des Resend-Webhooks. Bewusst hier und
- *                           nicht nur in der .env: So lässt sich der Webhook im
- *                           Adminbereich einrichten, ohne den Container neu zu
- *                           erstellen (eine .env wird nur beim Anlegen des
- *                           Containers gelesen). Wird nie an die Oberfläche
- *                           zurückgegeben – siehe `settingsView`.
+ *                           nicht nur in der .env: So lässt es sich setzen, ohne
+ *                           den Container neu zu erstellen (eine .env wird nur
+ *                           beim Anlegen des Containers gelesen). Gesetzt wird es
+ *                           per `PUT /api/admin/settings` von Hand – im
+ *                           Adminbereich gibt es dafür bewusst keine Bedienung
+ *                           (docs/04-email-smtp.md, 4.6). Wird nie an die
+ *                           Oberfläche zurückgegeben – siehe `settingsView`.
  *
  * Fehlende Felder fallen auf die Startwerte aus der Umgebung zurück, damit ein
  * bestehendes System ohne dieses Dokument unverändert weiterläuft. Das Dokument
@@ -45,7 +47,8 @@ export interface AppSettings {
 /**
  * Fassung für die Oberfläche: ohne das Webhook-Secret, dafür mit der Angabe, ob
  * (und woher) eines hinterlegt ist. Ein einmal gespeichertes Secret wird nie
- * wieder ausgeliefert – es lässt sich nur ersetzen oder entfernen.
+ * wieder ausgeliefert – es lässt sich nur ersetzen oder entfernen. Der
+ * Adminbereich zeigt daraus nur noch den Status „Webhook eingerichtet“ an.
  */
 export interface AppSettingsView extends Omit<AppSettings, 'resend_webhook_secret'> {
   resend_webhook_secret_set: boolean;

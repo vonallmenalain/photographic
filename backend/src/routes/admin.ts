@@ -592,6 +592,10 @@ router.put(
         bounce_notify_enabled: z.boolean().optional(),
         bounce_notify_emails: z.union([z.array(z.string()), z.string()]).optional(),
         // Signing Secret des Resend-Webhooks; Leerstring entfernt es wieder.
+        // Absichtlich ohne Bedienung im Adminbereich: Die Einrichtung ist eine
+        // einmalige Entwickler-Aufgabe (docs/04-email-smtp.md, 4.6) und wird
+        // direkt über diesen Endpunkt gesetzt, damit niemand das Secret
+        // versehentlich per Klick entfernt.
         resend_webhook_secret: z.string().trim().max(200).optional(),
       }),
       req.body ?? {},
