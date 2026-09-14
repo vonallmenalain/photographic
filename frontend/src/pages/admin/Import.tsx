@@ -5,6 +5,7 @@ import { Alert, Modal, Spinner, StatusBadge } from '../../components/common';
 import { parseFile, parseDelimited } from '../../lib/tabular';
 import { PhotoManager, type ManagedChild, type ManagedPhoto } from './PhotoManager';
 import EventEmails from './EventEmails';
+import AdminRegistrationCreate from './AdminRegistrationCreate';
 
 // ---------------------------------------------------------------------------
 // "Aufträge erfassen" – guided wizard that takes a new order from raw data to a
@@ -25,6 +26,8 @@ interface WizardEvent {
   status: string;
   expires_at: string | null;
   photos_confirmed_at?: string | null;
+  /** Gesetzt, wenn der Auftrag über die Klassenerfassung entstanden ist. */
+  registration?: { open: boolean } | null;
 }
 
 const STEP_LABELS = [
@@ -234,6 +237,11 @@ export default function AuftraegeErfassen() {
           <strong>Auftrag:</strong>
           <Link to={`/admin/events/${event.id}`}>{event.name}</Link>
           <StatusBadge status={event.status} />
+          {event.registration && (
+            <Link to={`/admin/events/${event.id}/erfassung`} className="muted" style={{ fontSize: '0.85rem' }}>
+              Klassenerfassung &amp; Einverständnisse
+            </Link>
+          )}
           <span className="spacer" style={{ flex: 1 }} />
           <button className="btn ghost small" type="button" onClick={startOver}>
             Weiteren Auftrag erfassen
@@ -667,6 +675,8 @@ function Step1Data({
 
   // "Manuelle Eingabe": fields are typed in directly instead of pasting/uploading.
   const [manualOpen, setManualOpen] = useState(false);
+  // „Klasse erfassen lassen“: Lehrperson und Eltern erfassen die Klasse online.
+  const [registrationOpen, setRegistrationOpen] = useState(false);
 
   useEffect(() => {
     api<{ events: EventRow[] }>('/api/admin/events', { admin: true })
@@ -932,10 +942,24 @@ function Step1Data({
           <button
             className={`btn ${manualOpen ? '' : 'secondary'}`}
             type="button"
-            onClick={() => setManualOpen((v) => !v)}
+            onClick={() => {
+              setRegistrationOpen(false);
+              setManualOpen((v) => !v);
+            }}
             title="Felder selbst eintragen – ohne Datei oder Tabelle"
           >
             Manuelle Eingabe
+          </button>
+          <button
+            className={`btn ${registrationOpen ? '' : 'secondary'}`}
+            type="button"
+            onClick={() => {
+              setManualOpen(false);
+              setRegistrationOpen((v) => !v);
+            }}
+            title="Lehrperson und Eltern erfassen die Klasse online, inkl. Einverständniserklärung"
+          >
+            Klasse erfassen lassen
           </button>
           <input
             ref={fileRef}
@@ -946,6 +970,8 @@ function Step1Data({
           />
         </div>
       </div>
+
+      {registrationOpen && <AdminRegistrationCreate onCancel={() => setRegistrationOpen(false)} />}
 
       {manualOpen && (
         <ManualEntryForm

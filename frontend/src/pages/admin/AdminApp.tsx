@@ -6,6 +6,7 @@ import AdminLogin from './AdminLogin';
 import AdminLayout from './AdminLayout';
 import Events from './Events';
 import EventDetail from './EventDetail';
+import AdminRegistration from './AdminRegistration';
 import EmailDetail from './EmailDetail';
 import Import from './Import';
 import AdminOrders from './AdminOrders';
@@ -45,6 +46,7 @@ function AuthGatedAdmin() {
         <Route index element={<Navigate to="events" replace />} />
         <Route path="events" element={<Events />} />
         <Route path="events/:id" element={<EventDetail />} />
+        <Route path="events/:id/erfassung" element={<AdminRegistration />} />
         {/* "Auswertung" is merged into the Auftrag detail view; keep redirects
             so old links land on the Aufträge overview. */}
         <Route path="analytics" element={<Navigate to="/admin/events" replace />} />

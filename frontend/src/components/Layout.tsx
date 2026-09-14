@@ -4,7 +4,7 @@ import { useParentAuth } from '../context/ParentAuth';
 import { useCart } from '../context/Cart';
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { verified } = useParentAuth();
+  const { verified, teacherClasses, openConsents } = useParentAuth();
   return (
     <div className="parent-theme">
       {/* Decorative whitewashed wood wall behind everything (see index.css). */}
@@ -17,6 +17,16 @@ export function Layout({ children }: { children: ReactNode }) {
           <nav className="nav-actions">
             {verified ? (
               <>
+                {teacherClasses.length > 0 && (
+                  <Link to="/klasse" className="nav-link">
+                    Meine Klassen
+                  </Link>
+                )}
+                {openConsents > 0 && (
+                  <Link to="/einverstaendnis" className="nav-link" title="Einverständnis zur Schulfotografie abgeben">
+                    Einverständnis ({openConsents})
+                  </Link>
+                )}
                 <Link to="/galerie" className="nav-link">
                   Bestellen
                 </Link>
@@ -63,7 +73,7 @@ function CartButton() {
 }
 
 function ProfileMenu() {
-  const { email, logout } = useParentAuth();
+  const { email, logout, teacherClasses } = useParentAuth();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -126,6 +136,30 @@ function ProfileMenu() {
             </span>
             <span>Bestellungen</span>
           </Link>
+          <Link
+            to="/einverstaendnis"
+            role="menuitem"
+            className="profile-dropdown-item"
+            onClick={() => setOpen(false)}
+          >
+            <span className="profile-dropdown-icon" aria-hidden="true">
+              ✅
+            </span>
+            <span>Einverständnis</span>
+          </Link>
+          {teacherClasses.length > 0 && (
+            <Link
+              to="/klasse"
+              role="menuitem"
+              className="profile-dropdown-item"
+              onClick={() => setOpen(false)}
+            >
+              <span className="profile-dropdown-icon" aria-hidden="true">
+                🏫
+              </span>
+              <span>Meine Klassen</span>
+            </Link>
+          )}
           <button
             type="button"
             role="menuitem"

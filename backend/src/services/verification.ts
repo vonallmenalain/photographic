@@ -26,6 +26,86 @@ interface EmailRow {
   status: string;
 }
 
+/**
+ * Zweck eines Bestätigungslinks. `login` ist die normale Anmeldung (Code +
+ * Link, kurz gültig). Die übrigen Zwecke gehören zur Klassenerfassung und sind
+ * länger gültig:
+ *  - teacher   persönlicher Link der Lehrperson zur Klassenseite
+ *  - invite    Einladung an Eltern zum Einverständnis (Lehrperson/Fotograf hat
+ *              die Adresse erfasst) bzw. Erinnerung daran
+ *  - register  Selbstregistrierung der Eltern über den Klassenlink; trägt die
+ *              eingegebenen Angaben (Kind, Name) bis zur Bestätigung mit
+ * Ein Klick bestätigt in jedem Fall die E-Mail-Adresse, startet eine Sitzung
+ * und leitet auf die hinterlegte Zielseite (`next`) weiter.
+ */
+export type TokenPurpose = 'login' | 'teacher' | 'invite' | 'register';
+
+export interface RegistrationPayload {
+  event_id: string;
+  child_name: string;
+  parent_name: string;
+}
+
+export interface IssueLinkOptions {
+  purpose: Exclude<TokenPurpose, 'login'>;
+  /** Zielseite in der App nach erfolgreicher Bestätigung, z. B. „/klasse/evt_…“. */
+  next: string;
+  ttlMs: number;
+  registration?: RegistrationPayload | null;
+}
+
+/**
+ * Erstellt einen reinen Link-Token (ohne Code) für die Klassenerfassung und
+ * gibt die vollständige URL zurück. Die Adresse muss als parent_emails-Dokument
+ * existieren.
+ */
+export async function issueLinkToken(emailId: string, opts: IssueLinkOptions): Promise<string> {
+  const linkToken = randomToken(32);
+  await setById(COL.verificationTokens, newId('vt'), {
+    email_id: emailId,
+    // Kein Code – der Token ist nur über den Link einlösbar.
+    code_hash: '',
+    link_token: linkToken,
+    attempts: 0,
+    consumed_at: null,
+    expires_at: new Date(Date.now() + opts.ttlMs).toISOString(),
+    created_at: nowIso(),
+    purpose: opts.purpose,
+    next: opts.next,
+    registration: opts.registration ?? null,
+  });
+  return `${config.publicAppUrl}/verifizieren?token=${linkToken}`;
+}
+
+/**
+ * Macht alle noch offenen Links eines Zwecks für diese Adresse ungültig, z. B.
+ * bevor ein neuer Lehrpersonen-Link verschickt wird oder wenn der Fotograf die
+ * Lehrperson wechselt. Mit `next` nur die Links auf diese Zielseite.
+ */
+export async function revokeLinkTokens(
+  emailId: string,
+  purpose: TokenPurpose,
+  next?: string,
+): Promise<number> {
+  const open = await runQuery<VTokenDoc>(
+    col(COL.verificationTokens).where('email_id', '==', emailId).where('consumed_at', '==', null),
+  );
+  const targets = open.filter(
+    (t) => tokenPurpose(t) === purpose && (next === undefined || t.next === next),
+  );
+  await Promise.all(
+    targets.map((t) => updateById(COL.verificationTokens, t.id, { consumed_at: nowIso() })),
+  );
+  return targets.length;
+}
+
+/** Zweck eines Token-Dokuments; Token aus früheren Versionen sind Anmeldungen. */
+function tokenPurpose(t: { purpose?: string | null }): TokenPurpose {
+  const p = t.purpose;
+  if (p === 'teacher' || p === 'invite' || p === 'register') return p;
+  return 'login';
+}
+
 export async function findEmail(email: string): Promise<EmailRow | undefined> {
   const row = await firstOf<{ email: string; status: string }>(
     col(COL.parentEmails).where('email', '==', normalizeEmail(email)),
@@ -50,11 +130,17 @@ export async function requestVerification(rawEmail: string): Promise<void> {
   const codeHash = bcrypt.hashSync(code, 10);
   const expiresAt = new Date(Date.now() + config.verification.codeTtlMinutes * 60_000).toISOString();
 
-  // Invalidate older unconsumed tokens for this e-mail.
-  const open = await runQuery(
+  // Invalidate older unconsumed LOGIN tokens for this e-mail. Links der
+  // Klassenerfassung (Lehrperson, Einladung, Registrierung) bleiben gültig –
+  // sonst würde eine zwischenzeitliche normale Anmeldung sie zerstören.
+  const open = await runQuery<VTokenDoc>(
     col(COL.verificationTokens).where('email_id', '==', row.id).where('consumed_at', '==', null),
   );
-  await Promise.all(open.map((t) => updateById(COL.verificationTokens, t.id, { consumed_at: nowIso() })));
+  await Promise.all(
+    open
+      .filter((t) => tokenPurpose(t) === 'login')
+      .map((t) => updateById(COL.verificationTokens, t.id, { consumed_at: nowIso() })),
+  );
 
   await setById(COL.verificationTokens, newId('vt'), {
     email_id: row.id,
@@ -91,6 +177,11 @@ interface VerifyResult {
   ok: boolean;
   emailId?: string;
   email?: string;
+  /** Zielseite nach der Bestätigung (nur bei Links der Klassenerfassung). */
+  next?: string | null;
+  purpose?: TokenPurpose;
+  /** Angaben einer Selbstregistrierung über den Klassenlink. */
+  registration?: RegistrationPayload | null;
 }
 
 async function consumeToken(emailId: string, tokenId: string): Promise<void> {
@@ -110,6 +201,9 @@ interface VTokenDoc {
   consumed_at: string | null;
   expires_at: string;
   created_at: string;
+  purpose?: TokenPurpose | null;
+  next?: string | null;
+  registration?: RegistrationPayload | null;
 }
 
 export async function verifyByCode(rawEmail: string, code: string): Promise<VerifyResult> {
@@ -119,7 +213,9 @@ export async function verifyByCode(rawEmail: string, code: string): Promise<Veri
   const open = await runQuery<VTokenDoc>(
     col(COL.verificationTokens).where('email_id', '==', row.id).where('consumed_at', '==', null),
   );
+  // Nur echte Anmelde-Codes: Links der Klassenerfassung haben keinen Code.
   const token = open
+    .filter((t) => tokenPurpose(t) === 'login' && !!t.code_hash)
     .filter((t) => new Date(t.expires_at).getTime() > Date.now())
     .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   if (!token) return { ok: false };
@@ -144,7 +240,14 @@ export async function verifyByLink(linkToken: string): Promise<VerifyResult> {
   if (!emailRow || emailRow.status === 'disabled') return { ok: false };
 
   await consumeToken(token.email_id, token.id);
-  return { ok: true, emailId: token.email_id, email: emailRow.email };
+  return {
+    ok: true,
+    emailId: token.email_id,
+    email: emailRow.email,
+    next: token.next ?? null,
+    purpose: tokenPurpose(token),
+    registration: token.registration ?? null,
+  };
 }
 
 /**

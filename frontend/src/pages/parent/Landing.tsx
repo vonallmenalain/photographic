@@ -6,16 +6,18 @@ import { Alert, TrustNote } from '../../components/common';
 import { firebaseEnabled, sendParentSignInLink } from '../../lib/firebase';
 
 export default function Landing() {
-  const { verified, loading } = useParentAuth();
+  const { verified, loading, next } = useParentAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
+  // Angemeldete Personen landen auf ihrer Zielseite: offenes Einverständnis,
+  // Klassenseite der Lehrperson oder die Fotos.
   useEffect(() => {
-    if (!loading && verified) navigate('/galerie', { replace: true });
-  }, [verified, loading, navigate]);
+    if (!loading && verified) navigate(next || '/galerie', { replace: true });
+  }, [verified, loading, next, navigate]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

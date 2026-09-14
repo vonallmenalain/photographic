@@ -491,3 +491,276 @@ ${info.parentEmailId ? 'Die Adresse ist als Eltern-Adresse erfasst und im Adminb
 Zustellprobleme im Adminbereich öffnen: ${info.adminLink}`;
   await sendMail({ to, subject, html, text });
 }
+
+// ---------------------------------------------------------------------------
+// Klassenerfassung & Einverständniserklärung
+// ---------------------------------------------------------------------------
+
+/** Eckdaten einer Klasse für die Mails der Klassenerfassung (Daten bereits formatiert). */
+export interface ClassMailInfo {
+  className: string;
+  school: string;
+  /** Formatierter Fototermin, leer wenn unbekannt. */
+  shootingDate: string;
+  /** Formatierte Rückmeldefrist, leer wenn keine gesetzt. */
+  deadline: string;
+}
+
+/** Kleine Tabelle mit Klasse, Schule, Fototermin und Frist (HTML + Text). */
+function classFacts(info: ClassMailInfo): { html: string; text: string } {
+  const rows: [string, string][] = [['Klasse', info.className]];
+  if (info.school) rows.push(['Schule', info.school]);
+  if (info.shootingDate) rows.push(['Fototermin', info.shootingDate]);
+  if (info.deadline) rows.push(['Rückmeldung bis', info.deadline]);
+  const html = `<table style="font-size:14px;line-height:1.6;border-collapse:collapse;margin:12px 0;">${rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:2px 12px 2px 0;color:#7b8794;">${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`,
+    )
+    .join('')}</table>`;
+  const text = rows.map(([k, v]) => `${k}: ${v}`).join('\n');
+  return { html, text };
+}
+
+const button = (href: string, label: string) =>
+  `<p style="text-align:center;margin:24px 0;">
+     <a href="${href}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:600;font-size:15px;">${escapeHtml(label)}</a>
+   </p>
+   <p style="font-size:13px;color:#7b8794;line-height:1.6;word-break:break-all;">Falls der Button nicht funktioniert: <br />${href}</p>`;
+
+export interface TeacherLinkMailInfo extends ClassMailInfo {
+  teacherName: string;
+  link: string;
+  teacherEntersEmails: boolean;
+  parentLinkEnabled: boolean;
+  consentRequired: boolean;
+}
+
+/**
+ * Persönlicher Link der Lehrperson zur Klassenseite. Erklärt in wenigen
+ * Punkten, was dort zu tun ist – abhängig davon, was der Fotograf beim Anlegen
+ * der Klasse gewählt hat.
+ */
+export async function sendTeacherLinkEmail(to: string, info: TeacherLinkMailInfo) {
+  const subject = `Klassenerfassung für die Schulfotografie: ${info.className}`;
+  const facts = classFacts(info);
+  const footer = await contactFooter();
+  const greeting = info.teacherName ? `Guten Tag ${escapeHtml(info.teacherName)}` : 'Guten Tag';
+  const todosHtml: string[] = [
+    'Die Namen der Kinder eintragen (Vor- und Nachname), ein Name pro Zeile.',
+  ];
+  const todosText: string[] = [...todosHtml];
+  if (info.parentLinkEnabled) {
+    const t =
+      'Den Klassenlink oder QR-Code an die Eltern weitergeben, z. B. über Ihren üblichen Kommunikationskanal. Die Eltern tragen ihre E-Mail-Adresse und ihr Kind selbst ein.';
+    todosHtml.push(t);
+    todosText.push(t);
+  }
+  if (info.teacherEntersEmails) {
+    const t =
+      'Die E-Mail-Adressen der Eltern erfassen (Kind und Adresse). Die Eltern erhalten dann automatisch eine Einladung.';
+    todosHtml.push(t);
+    todosText.push(t);
+  }
+  if (info.consentRequired) {
+    const t =
+      'Auf der Klassenseite sehen Sie jederzeit, welche Eltern das Einverständnis bereits abgegeben haben, und können mit einem Klick an alle Ausstehenden erinnern.';
+    todosHtml.push(t);
+    todosText.push(t);
+  }
+  const html = wrap(
+    'Klassenerfassung für die Schulfotografie',
+    `<p style="font-size:15px;line-height:1.6;">${greeting}</p>
+     <p style="font-size:15px;line-height:1.6;">Für die Schulfotografie wird die Klassenliste online erfasst. Über Ihren persönlichen Link gelangen Sie zur Klassenseite:</p>
+     ${facts.html}
+     ${button(info.link, 'Klassenseite öffnen')}
+     <div style="background:#f0f4f8;border-radius:12px;padding:16px 18px;margin-top:18px;">
+       <p style="font-size:14px;line-height:1.6;margin:0 0 8px;"><strong>Was auf der Klassenseite zu tun ist</strong></p>
+       <ul style="font-size:14px;line-height:1.6;padding-left:20px;margin:0;">
+         ${todosHtml.map((t) => `<li>${escapeHtml(t)}</li>`).join('')}
+       </ul>
+     </div>
+     <p style="font-size:13px;color:#7b8794;line-height:1.6;margin-top:16px;">Der Link ist persönlich und einmalig gültig. Später melden Sie sich einfach auf ${escapeHtml(config.publicAppUrl)} mit dieser E-Mail-Adresse an, Sie gelangen dann automatisch zu Ihrer Klasse. Bitte geben Sie den Link nicht weiter.</p>`,
+    560,
+    footer.html,
+  );
+  const text = `${info.teacherName ? `Guten Tag ${info.teacherName}` : 'Guten Tag'}
+
+Für die Schulfotografie wird die Klassenliste online erfasst. Über Ihren persönlichen Link gelangen Sie zur Klassenseite:
+
+${info.link}
+
+${facts.text}
+
+Was auf der Klassenseite zu tun ist:
+${todosText.map((t) => `- ${t}`).join('\n')}
+
+Der Link ist persönlich und einmalig gültig. Später melden Sie sich einfach auf ${config.publicAppUrl} mit dieser E-Mail-Adresse an. Bitte geben Sie den Link nicht weiter.${footer.text}`;
+  await sendMail({ to, subject, html, text });
+}
+
+export interface ConsentInviteMailInfo extends ClassMailInfo {
+  childNames: string[];
+  link: string;
+  reminder: boolean;
+  consentRequired: boolean;
+}
+
+/**
+ * Einladung an Eltern, deren Adresse die Lehrperson oder der Fotograf erfasst
+ * hat: ein Klick bestätigt die Adresse und öffnet das Einverständnis-Formular.
+ * Mit `reminder` als Erinnerung formuliert.
+ */
+export async function sendConsentInviteEmail(to: string, info: ConsentInviteMailInfo) {
+  const kids = info.childNames.join(', ') || 'Ihr Kind';
+  const subject = info.consentRequired
+    ? info.reminder
+      ? `Erinnerung: Einverständnis für die Schulfotografie (${kids})`
+      : `Einverständnis für die Schulfotografie: ${info.className}`
+    : `Schulfotografie ${info.className}: Bitte E-Mail-Adresse bestätigen`;
+  const facts = classFacts(info);
+  const footer = await contactFooter();
+  const intro = info.consentRequired
+    ? info.reminder
+      ? `Für <strong>${escapeHtml(kids)}</strong> liegt uns noch keine Antwort zur Schulfotografie vor. Bitte teilen Sie uns mit einem Klick mit, ob und wie Ihr Kind fotografiert werden darf.`
+      : `Die Klasse wird fotografiert. Für <strong>${escapeHtml(kids)}</strong> bitten wir Sie um Ihr Einverständnis: Mit einem Klick bestätigen Sie Ihre E-Mail-Adresse und gelangen direkt zum Formular. Dort wählen Sie, ob und wie Ihr Kind fotografiert werden darf.`
+    : `Die Klasse wird fotografiert. Damit Sie die Fotos von <strong>${escapeHtml(kids)}</strong> später ansehen und bestellen können, bestätigen Sie bitte mit einem Klick Ihre E-Mail-Adresse.`;
+  const introText = intro.replace(/<[^>]+>/g, '');
+  const deadlineHtml = info.deadline
+    ? `<p style="font-size:15px;line-height:1.6;">Bitte antworten Sie bis zum <strong>${escapeHtml(info.deadline)}</strong>.</p>`
+    : '';
+  const deadlineText = info.deadline ? `\n\nBitte antworten Sie bis zum ${info.deadline}.` : '';
+  const buttonLabel = info.consentRequired ? 'Einverständnis abgeben' : 'E-Mail-Adresse bestätigen';
+  const html = wrap(
+    info.consentRequired ? 'Einverständnis für die Schulfotografie' : 'Schulfotografie: E-Mail-Adresse bestätigen',
+    `<p style="font-size:15px;line-height:1.6;">Guten Tag</p>
+     <p style="font-size:15px;line-height:1.6;">${intro}</p>
+     ${facts.html}
+     ${deadlineHtml}
+     ${button(info.link, buttonLabel)}
+     <p style="font-size:13px;color:#7b8794;line-height:1.6;">Der Link ist einmalig gültig. Später können Sie sich jederzeit auf ${escapeHtml(config.publicAppUrl)} mit dieser E-Mail-Adresse anmelden und Ihre Antwort ansehen oder ändern. Bitte geben Sie den Link nicht weiter.</p>`,
+    560,
+    footer.html,
+  );
+  const text = `Guten Tag
+
+${introText}
+
+${facts.text}${deadlineText}
+
+${buttonLabel}: ${info.link}
+
+Der Link ist einmalig gültig. Später können Sie sich jederzeit auf ${config.publicAppUrl} mit dieser E-Mail-Adresse anmelden und Ihre Antwort ansehen oder ändern.${footer.text}`;
+  await sendMail({ to, subject, html, text });
+}
+
+export interface RegistrationVerifyMailInfo extends ClassMailInfo {
+  childName: string;
+  link: string;
+  consentRequired: boolean;
+}
+
+/**
+ * Bestätigungs-Mail nach der Selbstregistrierung über den Klassenlink: Erst der
+ * Klick trägt das Kind wirklich in die Klassenliste ein.
+ */
+export async function sendRegistrationVerifyEmail(to: string, info: RegistrationVerifyMailInfo) {
+  const subject = `Bitte bestätigen: ${info.childName} für die Schulfotografie ${info.className}`;
+  const facts = classFacts(info);
+  const footer = await contactFooter();
+  const after = info.consentRequired
+    ? ' Danach gelangen Sie direkt zum Einverständnis-Formular.'
+    : ' Danach ist Ihr Kind in der Klassenliste eingetragen.';
+  const html = wrap(
+    'E-Mail-Adresse bestätigen',
+    `<p style="font-size:15px;line-height:1.6;">Guten Tag</p>
+     <p style="font-size:15px;line-height:1.6;">Sie haben <strong>${escapeHtml(info.childName)}</strong> für die Schulfotografie eingetragen. Bitte bestätigen Sie Ihre E-Mail-Adresse mit einem Klick.${after}</p>
+     ${facts.html}
+     ${button(info.link, 'E-Mail-Adresse bestätigen')}
+     <p style="font-size:13px;color:#7b8794;line-height:1.6;">Der Link ist 48 Stunden gültig. Falls Sie das nicht waren, können Sie diese E-Mail ignorieren; ohne Bestätigung wird nichts eingetragen.</p>`,
+    520,
+    footer.html,
+  );
+  const text = `Guten Tag
+
+Sie haben ${info.childName} für die Schulfotografie eingetragen. Bitte bestätigen Sie Ihre E-Mail-Adresse mit einem Klick.${after}
+
+${facts.text}
+
+E-Mail-Adresse bestätigen: ${info.link}
+
+Der Link ist 48 Stunden gültig. Falls Sie das nicht waren, können Sie diese E-Mail ignorieren; ohne Bestätigung wird nichts eingetragen.${footer.text}`;
+  await sendMail({ to, subject, html, text });
+}
+
+export interface ConsentConfirmationMailInfo extends ClassMailInfo {
+  childName: string;
+  decisionLabel: string;
+  link: string;
+}
+
+/** Bestätigung der abgegebenen Entscheidung, als Beleg für die Eltern. */
+export async function sendConsentConfirmationEmail(to: string, info: ConsentConfirmationMailInfo) {
+  const subject = `Ihre Antwort zur Schulfotografie: ${info.childName}`;
+  const facts = classFacts(info);
+  const footer = await contactFooter();
+  const html = wrap(
+    'Vielen Dank für Ihre Antwort',
+    `<p style="font-size:15px;line-height:1.6;">Guten Tag</p>
+     <p style="font-size:15px;line-height:1.6;">Ihre Antwort für <strong>${escapeHtml(info.childName)}</strong> haben wir gespeichert:</p>
+     <p style="font-size:15px;line-height:1.6;background:#f0f4f8;border-radius:12px;padding:14px 16px;font-weight:600;">${escapeHtml(info.decisionLabel)}</p>
+     ${facts.html}
+     <p style="font-size:14px;line-height:1.6;">Sie können Ihre Antwort bis zum Fototermin ändern. Melden Sie sich dazu einfach mit dieser E-Mail-Adresse an.</p>
+     ${button(info.link, 'Antwort ansehen')}`,
+    520,
+    footer.html,
+  );
+  const text = `Guten Tag
+
+Ihre Antwort für ${info.childName} haben wir gespeichert:
+
+${info.decisionLabel}
+
+${facts.text}
+
+Sie können Ihre Antwort bis zum Fototermin ändern. Melden Sie sich dazu einfach mit dieser E-Mail-Adresse an: ${info.link}${footer.text}`;
+  await sendMail({ to, subject, html, text });
+}
+
+export interface RegistrationCompletedMailInfo {
+  className: string;
+  school: string;
+  teacherName: string;
+  teacherEmail: string;
+  children: number;
+  answered: number;
+  pending: number;
+  declined: number;
+  adminLink: string;
+}
+
+/** Info an die Admins: Die Lehrperson hat die Erfassung als abgeschlossen gemeldet. */
+export async function sendRegistrationCompletedEmail(to: string[], info: RegistrationCompletedMailInfo) {
+  const subject = `Klassenerfassung abgeschlossen: ${info.className}`;
+  const who = info.teacherName ? `${info.teacherName} (${info.teacherEmail})` : info.teacherEmail;
+  const html = wrap(
+    'Klassenerfassung abgeschlossen',
+    `<p style="font-size:15px;line-height:1.6;">Die Lehrperson ${escapeHtml(who)} hat die Erfassung der Klasse <strong>${escapeHtml(info.className)}</strong>${info.school ? ` (${escapeHtml(info.school)})` : ''} als abgeschlossen gemeldet.</p>
+     <table style="font-size:14px;line-height:1.6;border-collapse:collapse;">
+       <tr><td style="padding:2px 12px 2px 0;color:#7b8794;">Kinder</td><td>${info.children}</td></tr>
+       <tr><td style="padding:2px 12px 2px 0;color:#7b8794;">Antworten</td><td>${info.answered}</td></tr>
+       <tr><td style="padding:2px 12px 2px 0;color:#7b8794;">Ausstehend</td><td>${info.pending}</td></tr>
+       <tr><td style="padding:2px 12px 2px 0;color:#7b8794;">Nein</td><td>${info.declined}</td></tr>
+     </table>
+     ${button(info.adminLink, 'Erfassung im Adminbereich öffnen')}`,
+  );
+  const text = `Die Lehrperson ${who} hat die Erfassung der Klasse ${info.className}${info.school ? ` (${info.school})` : ''} als abgeschlossen gemeldet.
+
+Kinder:     ${info.children}
+Antworten:  ${info.answered}
+Ausstehend: ${info.pending}
+Nein:       ${info.declined}
+
+Erfassung im Adminbereich öffnen: ${info.adminLink}`;
+  await sendMail({ to, subject, html, text, ...(info.teacherEmail ? { replyTo: info.teacherEmail } : {}) });
+}

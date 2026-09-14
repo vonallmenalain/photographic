@@ -2,13 +2,17 @@ import { COL, col, runQuery, updateById, nowIso } from '../db';
 import { config } from '../config';
 
 /**
- * The simplified event lifecycle. Only three states are exposed to the admin:
+ * The simplified event lifecycle. Four states are exposed to the admin:
+ *  - collecting ("Erfassung")     : Klassenerfassung durch Lehrperson/Eltern
+ *                                   läuft (Kinder, E-Mail-Adressen,
+ *                                   Einverständnisse); nicht sichtbar für Eltern
+ *                                   in der Galerie, keine Bestellfrist
  *  - draft      ("Entwurf")       : default, not visible to parents
  *  - published  ("Veröffentlicht"): visible to assigned parents while not expired
  *  - archived   ("Archiviert")    : set automatically once the retention window
  *                                   (expires_at) has passed; no longer visible
  */
-export const EVENT_STATUSES = ['draft', 'published', 'archived'] as const;
+export const EVENT_STATUSES = ['collecting', 'draft', 'published', 'archived'] as const;
 export type EventStatus = (typeof EVENT_STATUSES)[number];
 
 /** Map statuses from earlier versions onto the simplified set. */
@@ -58,7 +62,9 @@ export async function archiveExpiredEvents(): Promise<number> {
     events.map(async (ev) => {
       let next: string = LEGACY_STATUS_MAP[ev.status] ?? ev.status;
       const expired = ev.expires_at ? new Date(ev.expires_at).getTime() <= now : false;
-      if (next !== 'archived' && expired) next = 'archived';
+      // Eine laufende Klassenerfassung hat noch keine Bestellfrist; ein altes
+      // Enddatum darf sie nicht vorzeitig archivieren.
+      if (next !== 'archived' && next !== 'collecting' && expired) next = 'archived';
       if (next !== ev.status) {
         await updateById(COL.events, ev.id, { status: next, updated_at: nowIso() });
         changed += 1;

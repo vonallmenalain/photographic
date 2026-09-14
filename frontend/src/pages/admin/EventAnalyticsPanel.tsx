@@ -34,6 +34,10 @@ export interface EventAnalytics {
   created_at: string;
   expires_at: string | null;
   invited_at: string | null;
+  /** Automatische Erinnerung an Eltern ohne Bestellung, X Tage vor der Bestellfrist. */
+  auto_order_reminder?: boolean;
+  auto_order_reminder_days?: number;
+  auto_order_reminder_sent_at?: string | null;
   revenue_cents: number;
   order_count: number;
   email_total: number;
@@ -395,6 +399,83 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
           }}
         />
       )}
+
+      <AutoOrderReminder event={event} onReload={onReload} />
+    </div>
+  );
+}
+
+/**
+ * Automatische Erinnerung an alle Eltern des Auftrags, die noch nichts bestellt
+ * haben – einmalig, X Tage vor Ablauf der Bestellfrist. Standardmässig aus.
+ */
+function AutoOrderReminder({ event, onReload }: { event: EventAnalytics; onReload: () => void }) {
+  const [enabled, setEnabled] = useState(event.auto_order_reminder === true);
+  const [days, setDays] = useState(String(event.auto_order_reminder_days ?? 7));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setEnabled(event.auto_order_reminder === true);
+    setDays(String(event.auto_order_reminder_days ?? 7));
+  }, [event.auto_order_reminder, event.auto_order_reminder_days]);
+
+  const save = async (nextEnabled: boolean, nextDays: string) => {
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/api/admin/events/${event.id}`, {
+        method: 'PATCH',
+        admin: true,
+        body: {
+          auto_order_reminder: nextEnabled,
+          auto_order_reminder_days: Math.max(1, Math.min(60, parseInt(nextDays, 10) || 7)),
+        },
+      });
+      onReload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Einstellung konnte nicht gespeichert werden.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+      <div className="row" style={{ alignItems: 'center', gap: 8 }}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '0.9rem' }}>
+          <input
+            type="checkbox"
+            checked={enabled}
+            disabled={busy}
+            style={{ width: 'auto' }}
+            onChange={(e) => {
+              setEnabled(e.target.checked);
+              void save(e.target.checked, days);
+            }}
+          />
+          Automatische Erinnerung an Eltern ohne Bestellung
+        </label>
+        <input
+          type="number"
+          min={1}
+          max={60}
+          value={days}
+          disabled={!enabled || busy}
+          onChange={(e) => setDays(e.target.value)}
+          onBlur={() => enabled && void save(enabled, days)}
+          style={{ width: 70 }}
+        />
+        <span className="muted" style={{ fontSize: '0.85rem' }}>
+          Tage vor „Bestellbar bis“, einmalig
+          {event.auto_order_reminder_sent_at
+            ? ` · verschickt am ${formatDateShort(event.auto_order_reminder_sent_at)}`
+            : event.auto_order_reminder
+              ? ' · noch nicht verschickt'
+              : ''}
+        </span>
+      </div>
+      {error && <Alert kind="error">{error}</Alert>}
     </div>
   );
 }

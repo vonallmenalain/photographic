@@ -40,6 +40,16 @@ export default function Privacy() {
           <li>die Ihnen zugeordneten Fotos</li>
           <li>Ihre Bestellungen</li>
         </ul>
+        <h2>Klassenerfassung und Einverständnis</h2>
+        <p>
+          Wird eine Klasse vor dem Fototermin online erfasst, speichern wir den Namen des Kindes,
+          die E-Mail-Adresse der Eltern, die abgegebene Antwort zur Fotografie sowie Zeitpunkt und
+          Wortlaut des Textes, dem zugestimmt wurde. Eltern sehen ausschliesslich ihre eigenen
+          Kinder und ihre eigene Antwort, nie die Klassenliste. Die Lehrperson sieht die Namen der
+          Kinder und ob eine Antwort vorliegt; E-Mail-Adressen sieht sie nur, wenn sie diese selbst
+          erfasst hat. Der Klassenlink führt nur zu einem Eintragungsformular und zeigt keine
+          Angaben anderer Familien. Diese Daten werden zusammen mit dem Auftrag gelöscht.
+        </p>
         <h2>Aufbewahrung der Fotos</h2>
         <p>
           Ihre Fotos stehen Ihnen während 30 Tagen zur Verfügung. Danach werden sie automatisch

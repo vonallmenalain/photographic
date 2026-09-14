@@ -124,6 +124,19 @@ Schritt erklärt:
 6. **Secrets**: `JWT_SECRET`, `FILE_TOKEN_SECRET`, Admin-Passwort-Hash setzen
    → [01-qnap.md](01-qnap.md)
 
+## Klassenerfassung & Einverständnis (Erweiterung)
+
+- Klassen lassen sich **vor dem Fototermin** online erfassen: Der Fotograf legt
+  die Klasse an und entscheidet, ob die Eltern über einen **Klassenlink/QR-Code**
+  kommen, ob die **Lehrperson E-Mail-Adressen erfasst** und ob ein
+  **Einverständnis** abgefragt wird (alles / nur Klassenfoto / nur Einzelfotos /
+  nein). Die Erfassung ist ein Auftrag im Status „Erfassung“ und wird mit einem
+  Klick übernommen.
+- Sicherheitsmodell wie im restlichen Konzept: eine Identität (bestätigte
+  E-Mail), abgeleitete Rollen, Eltern sehen nur sich, einmalige Links, keine
+  Rückschlüsse für Aussenstehende, nachweisbare Entscheidungen.
+  Details: [docs/10-klassenerfassung.md](10-klassenerfassung.md).
+
 ## Mögliche spätere Ausbaustufen (optional)
 - Automatischer Cron-Job zum Archivieren/Löschen abgelaufener Events.
 - Weitere Produktarten/Preisstaffeln/Pakete im Admin-UI (Backend unterstützt es bereits).

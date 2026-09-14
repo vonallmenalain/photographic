@@ -1841,3 +1841,54 @@ input.input-error,
 .buy-shipping-hint {
   margin: 6px 0 0; font-size: 0.78rem; color: var(--text-muted); text-align: center; line-height: 1.4;
 }
+
+/* ── Klassenerfassung (Eltern, Lehrperson, Adminbereich) ─────────────────── */
+.stat-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 16px; }
+.consent-text { line-height: 1.6; }
+.consent-options { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 14px; }
+.consent-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  line-height: 1.45;
+}
+.consent-option input { width: auto; margin: 4px 0 0; }
+.consent-option.selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.consent-child { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
+.roster-table td, .roster-table th { vertical-align: top; }
+.roster-table .badge + .badge { margin-left: 4px; }
+.qr-box { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+.qr-box > div:first-child svg { width: 180px; height: 180px; background: #fff; border: 1px solid var(--border); padding: 6px; }
+.link-box {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  word-break: break-all;
+  background: var(--surface-2);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+}
+/* Druckblöcke (Elternbrief, Liste für den Fototermin) sind am Bildschirm
+   unsichtbar. Beim Drucken über den jeweiligen Button setzt printSection() ein
+   Attribut am <body>, das genau einen Block freischaltet und den Rest der Seite
+   ausblendet. Ein normales Ctrl+P druckt die Seite wie gewohnt. */
+.print-only { display: none; }
+@media print {
+  body[data-print] * { visibility: hidden; }
+  body[data-print='letter'] .print-letter,
+  body[data-print='letter'] .print-letter *,
+  body[data-print='roster'] .print-roster,
+  body[data-print='roster'] .print-roster * { visibility: visible; }
+  body[data-print='letter'] .print-letter,
+  body[data-print='roster'] .print-roster {
+    display: block; position: absolute; left: 0; top: 0; width: 100%;
+    padding: 24px; background: #fff; color: #000;
+  }
+  .print-only svg { width: 200px; height: 200px; }
+  .parent-bg, .appbar, .footer, .admin-side { display: none !important; }
+}

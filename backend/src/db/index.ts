@@ -52,6 +52,13 @@ export const COL = {
   // „Nicht zustellbare E-Mails“ unter „Meldungen“.
   emailDeliveries: 'email_deliveries',
   auditLog: 'audit_log',
+  // Einverständniserklärungen der Eltern zur Klassenerfassung: ein Dokument je
+  // abgegebener Entscheidung (unveränderlich; eine neue Entscheidung ersetzt die
+  // alte über `superseded`), siehe services/consent.ts.
+  consents: 'consents',
+  // Wortlaut der Einverständnis-Texte je Version (Dokument-ID = Hash), damit
+  // nachvollziehbar bleibt, welchem Text die Eltern zugestimmt haben.
+  consentTexts: 'consent_texts',
 } as const;
 
 export type Doc<T> = T & { id: string };

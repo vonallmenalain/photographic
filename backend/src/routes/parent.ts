@@ -4,7 +4,13 @@ import { COL, col, getById, runQuery, setById, nowIso } from '../db';
 import { config } from '../config';
 import { asyncHandler, ApiError } from '../middleware/errorHandler';
 import { attachParent, requireParent, PARENT_COOKIE } from '../middleware/parentAuth';
-import { verificationLimiter, codeCheckLimiter, reportLimiter } from '../middleware/rateLimit';
+import {
+  verificationLimiter,
+  codeCheckLimiter,
+  reportLimiter,
+  registrationLimiter,
+  consentLimiter,
+} from '../middleware/rateLimit';
 import { clearAuthCookie } from '../lib/cookies';
 import { emailSchema, parse } from '../lib/validation';
 import { signFileToken } from '../lib/auth';
@@ -38,6 +44,19 @@ import { createCheckoutSession } from '../services/payments';
 import { sendOrderConfirmation, sendReportNotificationEmail } from '../lib/email';
 import { getAppSettings } from '../services/settings';
 import { notificationRecipients } from '../services/mailDelivery';
+import {
+  findEventByParentToken,
+  startSelfRegistration,
+  materializeRegistration,
+  consentRequestsForEmail,
+  pendingConsentCountForEmail,
+  recordConsent,
+  addOwnChild,
+  addSecondParent,
+  registrationOpen,
+  teacherEventsForEmail,
+} from '../services/registration';
+import { CONSENT_DECISIONS, CONSENT_LABELS, formatDateDe } from '../services/consent';
 
 const router = Router();
 
@@ -91,6 +110,27 @@ function toShippingAddress(input: z.infer<typeof shippingAddressSchema>): Shippi
     zip: input.zip,
     city: input.city,
   };
+}
+
+/**
+ * Zusatzangaben zur Sitzung für die Navigation im Elternbereich: Klassen, für
+ * die diese Adresse Lehrperson ist, offene Einverständnis-Anfragen und die
+ * daraus abgeleitete Zielseite nach der Anmeldung.
+ */
+async function sessionExtras(emailId: string, email: string) {
+  const [teacherEvents, openConsents] = await Promise.all([
+    teacherEventsForEmail(email),
+    pendingConsentCountForEmail(emailId),
+  ]);
+  const teacherClasses = teacherEvents.map((ev) => ({
+    id: ev.id,
+    name: ev.name,
+    status: ev.status,
+    open: registrationOpen(ev),
+  }));
+  const next =
+    openConsents > 0 ? '/einverstaendnis' : teacherClasses.some((c) => c.open) ? '/klasse' : '/galerie';
+  return { teacherClasses, openConsents, next };
 }
 
 // Neutral message that never reveals whether an address exists.
@@ -153,7 +193,8 @@ router.post(
       throw new ApiError(400, 'Der Code ist ungültig oder abgelaufen.');
     }
     await startSession(res, result.emailId, req.headers['user-agent'] ?? '');
-    res.json({ verified: true, email: result.email });
+    const extras = await sessionExtras(result.emailId, result.email ?? email);
+    res.json({ verified: true, email: result.email, next: extras.next });
   }),
 );
 
@@ -166,8 +207,14 @@ router.post(
     if (!result.ok || !result.emailId) {
       throw new ApiError(400, 'Dieser Bestätigungslink ist ungültig oder abgelaufen.');
     }
+    // Selbstregistrierung über den Klassenlink: Erst der bestätigte Klick trägt
+    // das Kind in die Klassenliste ein.
+    if (result.registration) {
+      await materializeRegistration(result.emailId, result.registration);
+    }
     await startSession(res, result.emailId, req.headers['user-agent'] ?? '');
-    res.json({ verified: true, email: result.email });
+    const extras = await sessionExtras(result.emailId, result.email ?? '');
+    res.json({ verified: true, email: result.email, next: result.next || extras.next });
   }),
 );
 
@@ -185,7 +232,8 @@ router.post(
       throw new ApiError(400, 'Die Anmeldung konnte nicht bestätigt werden.');
     }
     await startSession(res, result.emailId, req.headers['user-agent'] ?? '');
-    res.json({ verified: true, email: result.email });
+    const extras = await sessionExtras(result.emailId, result.email ?? '');
+    res.json({ verified: true, email: result.email, next: extras.next });
   }),
 );
 
@@ -197,7 +245,164 @@ router.get(
       res.json({ verified: false });
       return;
     }
-    res.json({ verified: true, email: req.parent.email });
+    const extras = await sessionExtras(req.parent.emailId, req.parent.email);
+    res.json({ verified: true, email: req.parent.email, ...extras });
+  }),
+);
+
+// --- Klassenerfassung: Klassenlink (Selbstregistrierung) -----------------
+// Öffentlich, aber nur mit dem geheimen Klassenlink erreichbar. Die Seite
+// verrät nichts über bereits eingetragene Kinder oder Adressen.
+router.get(
+  '/registration/:token',
+  registrationLimiter,
+  asyncHandler(async (req, res) => {
+    const ev = await findEventByParentToken(String(req.params.token ?? ''));
+    if (!ev) throw new ApiError(404, 'Dieser Link ist ungültig oder nicht mehr aktiv.');
+    const reg = ev.registration!;
+    const settings = await getAppSettings();
+    res.json({
+      className: ev.name,
+      school: reg.school,
+      shootingDate: formatDateDe(reg.shooting_date),
+      deadline: formatDateDe(reg.deadline),
+      consentRequired: reg.consent_required,
+      // Ob die Lehrperson die E-Mail-Adressen der Eltern sieht (nur wenn sie
+      // diese selbst erfasst) – für den Hinweis auf der Klassenlink-Seite.
+      teacherSeesEmails: reg.teacher_enters_emails,
+      open: registrationOpen(ev),
+      contactEmail: settings.contact_email,
+    });
+  }),
+);
+
+router.post(
+  '/registration/:token',
+  registrationLimiter,
+  attachParent,
+  asyncHandler(async (req, res) => {
+    const { email, childFirstName, childLastName, parentName, guardian } = parse(
+      z.object({
+        email: emailSchema,
+        childFirstName: z.string().trim().min(1, 'Bitte den Vornamen des Kindes eingeben.').max(100),
+        childLastName: z.string().trim().max(100).default(''),
+        parentName: z.string().trim().max(200).default(''),
+        guardian: z.boolean().default(false),
+      }),
+      req.body ?? {},
+    );
+    const ev = await findEventByParentToken(String(req.params.token ?? ''));
+    if (!ev) throw new ApiError(404, 'Dieser Link ist ungültig oder nicht mehr aktiv.');
+    if (!guardian) {
+      throw new ApiError(400, 'Bitte bestätigen Sie, dass Sie erziehungsberechtigt sind.');
+    }
+    const childName = `${childFirstName} ${childLastName}`.trim();
+    const result = await startSelfRegistration(
+      ev,
+      { email, childName, parentName },
+      req.parent ? { emailId: req.parent.emailId, email: req.parent.email } : null,
+    );
+    res.json({
+      direct: result.direct,
+      next: '/einverstaendnis',
+      message: result.direct
+        ? ''
+        : 'Wir haben Ihnen eine E-Mail geschickt. Bitte klicken Sie auf den Link darin, um Ihre Angaben zu bestätigen.',
+    });
+  }),
+);
+
+// --- Klassenerfassung: Einverständnis (angemeldete Eltern) ---------------
+// Liefert ausschliesslich die eigenen Kinder und die eigene Antwort – nie die
+// Klassenliste oder fremde Adressen.
+router.get(
+  '/consents',
+  requireParent,
+  asyncHandler(async (req, res) => {
+    const [requests, settings] = await Promise.all([
+      consentRequestsForEmail(req.parent!.emailId),
+      getAppSettings(),
+    ]);
+    res.json({
+      requests,
+      options: CONSENT_DECISIONS.map((value) => ({ value, label: CONSENT_LABELS[value] })),
+      contactEmail: settings.contact_email,
+    });
+  }),
+);
+
+router.post(
+  '/consents',
+  requireParent,
+  consentLimiter,
+  asyncHandler(async (req, res) => {
+    const { eventId, childId, decision, parentName } = parse(
+      z.object({
+        eventId: z.string().min(1),
+        childId: z.string().min(1),
+        decision: z.enum(CONSENT_DECISIONS),
+        parentName: z.string().trim().max(200).default(''),
+      }),
+      req.body ?? {},
+    );
+    const ev = await getById<Parameters<typeof recordConsent>[0]>(COL.events, eventId);
+    if (!ev) throw new ApiError(404, 'Klasse nicht gefunden.');
+    await recordConsent(
+      ev,
+      { emailId: req.parent!.emailId, email: req.parent!.email },
+      childId,
+      decision,
+      {
+        parentName,
+        ip: String(req.ip ?? ''),
+        userAgent: String(req.headers['user-agent'] ?? ''),
+      },
+    );
+    res.json({ ok: true, message: 'Vielen Dank, Ihre Antwort ist gespeichert.' });
+  }),
+);
+
+router.post(
+  '/consents/child',
+  requireParent,
+  consentLimiter,
+  asyncHandler(async (req, res) => {
+    const { eventId, childName } = parse(
+      z.object({ eventId: z.string().min(1), childName: z.string().trim().min(1).max(200) }),
+      req.body ?? {},
+    );
+    const ev = await getById<Parameters<typeof addOwnChild>[0]>(COL.events, eventId);
+    if (!ev) throw new ApiError(404, 'Klasse nicht gefunden.');
+    // Nur wer in dieser Klasse bereits ein Kind hat, darf ein weiteres eintragen.
+    const own = (await consentRequestsForEmail(req.parent!.emailId)).find((r) => r.eventId === eventId);
+    if (!own) throw new ApiError(404, 'Klasse nicht gefunden.');
+    const result = await addOwnChild(ev, { emailId: req.parent!.emailId, email: req.parent!.email }, childName);
+    res.json({ ok: true, ...result });
+  }),
+);
+
+router.post(
+  '/consents/second-parent',
+  requireParent,
+  consentLimiter,
+  asyncHandler(async (req, res) => {
+    const { eventId, childId, email } = parse(
+      z.object({ eventId: z.string().min(1), childId: z.string().min(1), email: emailSchema }),
+      req.body ?? {},
+    );
+    const ev = await getById<Parameters<typeof addSecondParent>[0]>(COL.events, eventId);
+    if (!ev) throw new ApiError(404, 'Klasse nicht gefunden.');
+    const result = await addSecondParent(
+      ev,
+      { emailId: req.parent!.emailId, email: req.parent!.email },
+      childId,
+      email,
+    );
+    res.json({
+      ok: true,
+      sent: result.sent,
+      message: 'Die zweite Adresse ist eingetragen und erhält eine Einladung.',
+    });
   }),
 );
 
