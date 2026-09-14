@@ -119,6 +119,7 @@ export function SendToSelfCheckbox({
 export function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     // events
+    collecting: { label: 'Erfassung', cls: 'class' },
     draft: { label: 'In Bearbeitung', cls: 'amber' },
     in_progress: { label: 'In Bearbeitung', cls: 'amber' },
     ready: { label: 'Bereit', cls: 'amber' },

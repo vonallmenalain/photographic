@@ -78,6 +78,39 @@ import {
   listDeliveries,
 } from '../services/mailDelivery';
 import { clearParentDeliveryProblem, type DeliveryProblemMarker } from '../lib/mailLog';
+import {
+  eventEmailIds,
+  orderedEmailIdsForEvent,
+  daysLeftUntil,
+  recordInvitationsSent,
+  invitationsSentForEvent,
+} from '../services/reminders';
+import { DEFAULT_CONSENT_TEXT, type ConsentDecision } from '../services/consent';
+import {
+  type RegistrationEvent,
+  createRegistrationEvents,
+  updateRegistrationSettings,
+  sendTeacherLink,
+  rotateParentLink,
+  parentLinkUrl,
+  parentShareText,
+  qrCodeSvg,
+  rosterForEvent,
+  rosterCsv,
+  consentHistory,
+  consentSummary,
+  registrationView,
+  addChildrenByNames,
+  renameChild,
+  confirmChild,
+  mergeChildren,
+  removeChild,
+  inviteParents,
+  remindPendingConsents,
+  closeRegistration,
+  reopenRegistration,
+  recomputeChildConsent,
+} from '../services/registration';
 
 const router = Router();
 
@@ -161,6 +194,7 @@ async function deletePhotoCascade(photoId: string): Promise<void> {
 
 async function deleteChildCascade(childId: string): Promise<void> {
   await deleteWhere(col(COL.emailChildren).where('child_id', '==', childId));
+  await deleteWhere(col(COL.consents).where('child_id', '==', childId));
   // Photos referencing this child lose the link (mirror ON DELETE SET NULL).
   const photos = await runQuery<{ child_id: string }>(
     col(COL.photos).where('child_id', '==', childId),
@@ -570,6 +604,7 @@ router.get(
         contact_email: config.mail.contactEmailDefault,
         shipping_fee_cents: config.shop.shippingFeeCentsDefault,
         mail_from: config.mail.from,
+        consent_text: DEFAULT_CONSENT_TEXT,
       },
       currency: config.stripe.currency,
       mailFrom: config.mail.from,
@@ -597,10 +632,14 @@ router.put(
         // direkt über diesen Endpunkt gesetzt, damit niemand das Secret
         // versehentlich per Klick entfernt.
         resend_webhook_secret: z.string().trim().max(200).optional(),
+        // Wortlaut der Einverständniserklärung (Klassenerfassung); leer =
+        // Standardtext.
+        consent_text: z.string().max(20_000).optional(),
       }),
       req.body ?? {},
     );
     const patch: Record<string, unknown> = {};
+    if (data.consent_text !== undefined) patch.consent_text = data.consent_text;
     if (data.contact_email !== undefined) patch.contact_email = data.contact_email;
     if (data.sender_name !== undefined) patch.sender_name = data.sender_name;
     if (data.sender_email !== undefined) patch.sender_email = data.sender_email;
@@ -628,6 +667,9 @@ router.put(
     const auditPatch = { ...patch };
     if ('resend_webhook_secret' in auditPatch) {
       auditPatch.resend_webhook_secret = patch.resend_webhook_secret ? '<gesetzt>' : '<entfernt>';
+    }
+    if (typeof auditPatch.consent_text === 'string') {
+      auditPatch.consent_text = `<${auditPatch.consent_text.length} Zeichen>`;
     }
     await audit('settings.update', JSON.stringify(auditPatch));
     res.json({ settings: settingsView(settings), adminEmails: await allAdminEmails() });
@@ -750,7 +792,9 @@ router.get(
     await archiveExpiredEvents();
     const [events, children, emailLinks, totals, reminders, parentEmails] = await Promise.all([
       runQuery<Record<string, unknown>>(col(COL.events)),
-      runQuery<{ id: string; event_id: string; name?: string }>(col(COL.children)),
+      runQuery<{ id: string; event_id: string; name?: string; consent_status?: ConsentDecision | null }>(
+        col(COL.children),
+      ),
       runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
       eventRevenueTotals(),
       runQuery<{ event_id: string }>(col(COL.reminders)),
@@ -781,6 +825,13 @@ router.get(
     const photoCounts = new Map<string, number>(photoCountEntries);
     const childCounts = new Map<string, number>();
     for (const c of children) childCounts.set(c.event_id, (childCounts.get(c.event_id) ?? 0) + 1);
+    // Kinder je Auftrag für die Zusammenfassung der Einverständnisse (Klassenerfassung).
+    const childrenByEvent = new Map<string, typeof children>();
+    for (const c of children) {
+      const list = childrenByEvent.get(c.event_id) ?? [];
+      list.push(c);
+      childrenByEvent.set(c.event_id, list);
+    }
 
     // Versendete Einladungen + Erinnerungen je Auftrag (jeder Eintrag in der
     // reminders-Sammlung steht für einen Versand bzw. einen protokollierten
@@ -826,8 +877,13 @@ router.get(
         const childNames = childNamesByEvent.get(e.id);
         if (childNames) searchParts.push(...childNames);
         if (emailSet) for (const id of emailSet) searchParts.push(emailText.get(id) ?? '');
+        const hasRegistration = !!(e as Record<string, unknown>).registration;
         return {
           ...e,
+          // Klassenerfassung: Einstellungen ohne den Klassenlink-Token, dafür mit
+          // der fertigen URL; plus Stand der Einverständnisse.
+          registration: registrationView(e as unknown as RegistrationEvent),
+          consent_summary: hasRegistration ? consentSummary(childrenByEvent.get(e.id) ?? []) : null,
           photo_count: photoCounts.get(e.id) ?? 0,
           child_count: childCounts.get(e.id) ?? 0,
           email_count: emailSet?.size ?? 0,
@@ -919,12 +975,37 @@ router.patch(
         // reset. Surfaced again via GET /events/:id so the wizard step can show
         // green when revisited.
         photos_confirmed_at: z.string().nullable().optional(),
+        // Automatische Erinnerung an Eltern ohne Bestellung, X Tage vor Ablauf
+        // der Bestellfrist (standardmässig aus).
+        auto_order_reminder: z.boolean().optional(),
+        auto_order_reminder_days: z.number().int().min(1).max(60).optional(),
       }),
       req.body,
     );
-    const event = await getById<{ expires_at: string | null }>(COL.events, req.params.id);
+    const event = await getById<{
+      expires_at: string | null;
+      status: string;
+      registration?: unknown;
+    }>(COL.events, req.params.id);
     if (!event) throw new ApiError(404, 'Event nicht gefunden.');
     const updates: Record<string, unknown> = { ...data };
+    // Status „Erfassung“ gibt es nur für Aufträge mit Klassenerfassung. Wer die
+    // Erfassung über das Status-Feld verlässt, schliesst sie damit (Klassenlink
+    // und Formular sind dann zu); zurück in die Erfassung öffnet sie wieder.
+    if (data.status === 'collecting') {
+      if (!event.registration) {
+        throw new ApiError(400, 'Nur Aufträge aus einer Klassenerfassung können in den Status „Erfassung“.');
+      }
+      if (event.status === 'published') {
+        throw new ApiError(400, 'Ein veröffentlichter Auftrag kann nicht erneut in die Erfassung.');
+      }
+      updates['registration.closed_at'] = null;
+    } else if (data.status && event.status === 'collecting' && event.registration) {
+      updates['registration.closed_at'] = nowIso();
+    }
+    // Erneutes Einschalten der automatischen Erinnerung setzt den Marker zurück,
+    // damit sie (z. B. nach einer verlängerten Bestellfrist) erneut rausgeht.
+    if (data.auto_order_reminder === true) updates.auto_order_reminder_sent_at = null;
     // Manuell gesetztes "Bestellbar bis": Datum normalisieren (akzeptiert sowohl
     // einen reinen Tag "2026-06-30" als auch einen vollständigen ISO-Zeitstempel)
     // und gegen Unsinn absichern.
@@ -961,6 +1042,8 @@ router.delete(
     await Promise.all(photos.map((p) => deletePhotoCascade(p.id)));
     await Promise.all(children.map((c) => deleteChildCascade(c.id)));
     await deleteWhere(col(COL.reminders).where('event_id', '==', req.params.id));
+    await deleteWhere(col(COL.consents).where('event_id', '==', req.params.id));
+    await deleteWhere(col(COL.eventInvitations).where('event_id', '==', req.params.id));
     // Remove the event's storage sub-folders entirely so no empty (or stray)
     // `<variant>/<eventId>` directories remain behind on the volume.
     await deleteEventStorage(req.params.id);
@@ -969,70 +1052,6 @@ router.delete(
     res.json({ ok: true });
   }),
 );
-
-// Collects the distinct parent e-mail ids connected to an Auftrag (event):
-// either through a child of that event or through a direct photo assignment.
-// Mirrors the filter logic of GET /emails?eventId=…
-async function eventEmailIds(eventId: string): Promise<Set<string>> {
-  const [children, photos, childLinks, photoLinks] = await Promise.all([
-    runQuery<{ id: string }>(col(COL.children).where('event_id', '==', eventId)),
-    runQuery<{ id: string }>(col(COL.photos).where('event_id', '==', eventId)),
-    runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
-    runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
-  ]);
-  const childIds = new Set(children.map((c) => c.id));
-  const photoIds = new Set(photos.map((p) => p.id));
-  const ids = new Set<string>();
-  for (const l of childLinks) if (childIds.has(l.child_id)) ids.add(l.email_id);
-  for (const l of photoLinks) if (photoIds.has(l.photo_id)) ids.add(l.email_id);
-  return ids;
-}
-
-interface EventInvitation {
-  event_id: string;
-  email_id: string;
-  first_sent_at: string;
-  last_sent_at: string;
-  count: number;
-}
-
-/**
- * Protokolliert je Adresse, dass die Einladung zu diesem Auftrag erfolgreich
- * versendet wurde. Deterministische Doc-Id (event__email) verhindert Duplikate;
- * beim erneuten Versand bleibt der erste Zeitpunkt erhalten und der Zähler steigt.
- */
-async function recordInvitationsSent(eventId: string, emailIds: string[]): Promise<void> {
-  const unique = [...new Set(emailIds.filter(Boolean))];
-  if (unique.length === 0) return;
-  const now = nowIso();
-  const existing = await getManyById<EventInvitation>(
-    COL.eventInvitations,
-    unique.map((id) => linkId(eventId, id)),
-  );
-  await Promise.all(
-    unique.map((emailId) => {
-      const docId = linkId(eventId, emailId);
-      const prev = existing.get(docId);
-      return setById(COL.eventInvitations, docId, {
-        event_id: eventId,
-        email_id: emailId,
-        first_sent_at: prev?.first_sent_at ?? now,
-        last_sent_at: now,
-        count: (prev?.count ?? 0) + 1,
-      });
-    }),
-  );
-}
-
-/** Map emailId -> last invitation send timestamp for an event. */
-async function invitationsSentForEvent(eventId: string): Promise<Map<string, string>> {
-  const rows = await runQuery<EventInvitation>(
-    col(COL.eventInvitations).where('event_id', '==', eventId),
-  );
-  const out = new Map<string, string>();
-  for (const r of rows) out.set(r.email_id, r.last_sent_at);
-  return out;
-}
 
 // --- "Galerie ist bereit" Sammel-E-Mail an alle Adressen eines Auftrags ----
 // Schickt den (nicht deaktivierten) Eltern-Adressen des Auftrags eine E-Mail mit
@@ -1461,6 +1480,248 @@ router.post(
       `${req.params.id} <- ${emailId} (${normalized})${created ? ', created' : ''}${linked ? ', linked' : ''}${invited ? ', invited' : ''}`,
     );
     res.json({ id: emailId, email: normalized, created, linked, invited });
+  }),
+);
+
+// --- Klassenerfassung (Lehrperson / Eltern / Einverständnis) --------------
+// Der Fotograf legt Klassen an und entscheidet, wer was tut (siehe
+// services/registration.ts). Alles, was die Lehrperson auf ihrer Klassenseite
+// kann, kann der Fotograf hier ebenfalls – zusätzlich sieht er alle Adressen,
+// den Verlauf der Entscheidungen und übernimmt die Klasse in den Auftrag.
+
+async function loadRegistrationEvent(id: string): Promise<RegistrationEvent> {
+  const ev = await getById<RegistrationEvent>(COL.events, id);
+  if (!ev) throw new ApiError(404, 'Auftrag nicht gefunden.');
+  if (!ev.registration) throw new ApiError(400, 'Dieser Auftrag hat keine Klassenerfassung.');
+  return ev;
+}
+
+const registrationSettingsSchema = z.object({
+  school: z.string().trim().max(200).default(''),
+  shootingDate: z.string().trim().max(10).nullable().default(null),
+  deadline: z.string().trim().max(10).nullable().default(null),
+  teacherEntersEmails: z.boolean().default(false),
+  parentLinkEnabled: z.boolean().default(true),
+  consentRequired: z.boolean().default(true),
+  autoConsentReminder: z.boolean().default(false),
+  autoConsentReminderDays: z.number().int().min(1).max(60).default(3),
+});
+
+router.post(
+  '/registrations',
+  asyncHandler(async (req, res) => {
+    const { classes, settings, sendTeacherLink: send } = parse(
+      z.object({
+        classes: z
+          .array(
+            z.object({
+              name: z.string().trim().min(1, 'Bitte einen Klassennamen eingeben.').max(200),
+              teacherEmail: z.union([emailSchema, z.literal('')]).default(''),
+              teacherName: z.string().trim().max(200).default(''),
+            }),
+          )
+          .min(1)
+          .max(60),
+        settings: registrationSettingsSchema,
+        sendTeacherLink: z.boolean().default(true),
+      }),
+      req.body ?? {},
+    );
+    if (!settings.parentLinkEnabled && !settings.teacherEntersEmails) {
+      throw new ApiError(
+        400,
+        'Bitte mindestens einen Weg wählen: Klassenlink für die Eltern oder Erfassung der E-Mail-Adressen.',
+      );
+    }
+    const created = await createRegistrationEvents(classes, settings, {
+      sendTeacherLink: send,
+      actor: req.admin!.username,
+    });
+    res.json({ classes: created, devLogOnly: config.mail.devLogOnly });
+  }),
+);
+
+router.get(
+  '/events/:id/registration',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    const reg = ev.registration!;
+    const [roster, history] = await Promise.all([
+      rosterForEvent(ev, { showEmails: true }),
+      consentHistory(ev),
+    ]);
+    const linkUrl = reg.parent_link_enabled && reg.parent_link_token ? parentLinkUrl(reg.parent_link_token) : null;
+    res.json({
+      event: { id: ev.id, name: ev.name, status: ev.status, expires_at: ev.expires_at ?? null },
+      registration: registrationView(ev),
+      roster,
+      history,
+      parentLink: linkUrl
+        ? { url: linkUrl, qrSvg: await qrCodeSvg(linkUrl), shareText: parentShareText(ev, linkUrl) }
+        : null,
+      devLogOnly: config.mail.devLogOnly,
+    });
+  }),
+);
+
+router.patch(
+  '/events/:id/registration',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    const input = parse(
+      z.object({
+        school: z.string().trim().max(200).optional(),
+        shootingDate: z.string().trim().max(10).nullable().optional(),
+        deadline: z.string().trim().max(10).nullable().optional(),
+        teacherEntersEmails: z.boolean().optional(),
+        parentLinkEnabled: z.boolean().optional(),
+        consentRequired: z.boolean().optional(),
+        autoConsentReminder: z.boolean().optional(),
+        autoConsentReminderDays: z.number().int().min(1).max(60).optional(),
+        teacherEmail: z.union([emailSchema, z.literal('')]).optional(),
+        teacherName: z.string().trim().max(200).optional(),
+        sendTeacherLink: z.boolean().default(false),
+      }),
+      req.body ?? {},
+    );
+    const { sendTeacherLink: send, ...patch } = input;
+    const updated = await updateRegistrationSettings(ev, patch, req.admin!.username);
+    let teacherLinkSent = false;
+    let teacherLinkError: string | null = null;
+    if (send && updated.registration?.teacher_email) {
+      try {
+        await sendTeacherLink(updated);
+        teacherLinkSent = true;
+      } catch (err) {
+        teacherLinkError = err instanceof ApiError ? err.publicMessage : 'Der Link konnte nicht verschickt werden.';
+      }
+    }
+    res.json({ ok: true, registration: registrationView(await loadRegistrationEvent(ev.id)), teacherLinkSent, teacherLinkError });
+  }),
+);
+
+router.post(
+  '/events/:id/registration/teacher-link',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    await sendTeacherLink(ev);
+    res.json({ ok: true, devLogOnly: config.mail.devLogOnly });
+  }),
+);
+
+router.post(
+  '/events/:id/registration/parent-link',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    const token = await rotateParentLink(ev, req.admin!.username);
+    const url = parentLinkUrl(token);
+    res.json({ url, qrSvg: await qrCodeSvg(url), shareText: parentShareText(ev, url) });
+  }),
+);
+
+router.post(
+  '/events/:id/registration/children',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    const { names } = parse(z.object({ names: z.array(z.string().max(200)).min(1).max(200) }), req.body ?? {});
+    res.json(await addChildrenByNames(ev, names, 'admin', req.admin!.username));
+  }),
+);
+
+router.patch(
+  '/events/:id/registration/children/:childId',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    const { name, confirm, mergeInto } = parse(
+      z.object({
+        name: z.string().trim().min(1).max(200).optional(),
+        confirm: z.boolean().optional(),
+        mergeInto: z.string().optional(),
+      }),
+      req.body ?? {},
+    );
+    if (mergeInto) {
+      await mergeChildren(ev, req.params.childId, mergeInto, req.admin!.username);
+    } else {
+      if (name !== undefined) await renameChild(ev, req.params.childId, name, req.admin!.username);
+      if (confirm) await confirmChild(ev, req.params.childId, req.admin!.username);
+    }
+    res.json({ ok: true });
+  }),
+);
+
+router.delete(
+  '/events/:id/registration/children/:childId',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    await removeChild(ev, req.params.childId, req.admin!.username);
+    res.json({ ok: true });
+  }),
+);
+
+router.post(
+  '/events/:id/registration/invite',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    const { entries } = parse(
+      z.object({
+        entries: z
+          .array(
+            z.object({
+              childName: z.string().max(200),
+              emails: z.array(z.string().max(254)).max(6),
+              parentName: z.string().max(200).default(''),
+            }),
+          )
+          .min(1)
+          .max(200),
+      }),
+      req.body ?? {},
+    );
+    const result = await inviteParents(ev, entries, 'admin', req.admin!.username);
+    res.json({ ...result, devLogOnly: config.mail.devLogOnly });
+  }),
+);
+
+router.post(
+  '/events/:id/registration/remind',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    const result = await remindPendingConsents(ev, { actor: req.admin!.username, auto: false });
+    res.json({ ...result, devLogOnly: config.mail.devLogOnly });
+  }),
+);
+
+// „In Auftrag übernehmen“: Erfassung schliessen, Status auf Entwurf, weiter im
+// Assistenten bei den Fotos.
+router.post(
+  '/events/:id/registration/close',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    await closeRegistration(ev, req.admin!.username);
+    res.json({ ok: true });
+  }),
+);
+
+router.post(
+  '/events/:id/registration/reopen',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    await reopenRegistration(ev, req.admin!.username);
+    res.json({ ok: true });
+  }),
+);
+
+// Liste für den Fototermin als CSV (Excel-tauglich).
+router.get(
+  '/events/:id/registration/export.csv',
+  asyncHandler(async (req, res) => {
+    const ev = await loadRegistrationEvent(req.params.id);
+    const roster = await rosterForEvent(ev, { showEmails: true });
+    const safeName = ev.name.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 60) || 'klasse';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="einverstaendnisse_${safeName}.csv"`);
+    res.send(rosterCsv(ev, roster));
   }),
 );
 
@@ -2046,12 +2307,19 @@ router.post(
 router.delete(
   '/emails/:id',
   asyncHandler(async (req, res) => {
+    // Einverständnisse dieser Adresse entfernen und die betroffenen Kinder neu
+    // zusammenfassen (Klassenerfassung).
+    const consents = await runQuery<{ child_id: string }>(
+      col(COL.consents).where('email_id', '==', req.params.id),
+    );
     await Promise.all([
       deleteWhere(col(COL.emailChildren).where('email_id', '==', req.params.id)),
       deleteWhere(col(COL.photoEmails).where('email_id', '==', req.params.id)),
       deleteWhere(col(COL.parentSessions).where('email_id', '==', req.params.id)),
       deleteWhere(col(COL.verificationTokens).where('email_id', '==', req.params.id)),
+      deleteWhere(col(COL.consents).where('email_id', '==', req.params.id)),
     ]);
+    await Promise.all([...new Set(consents.map((c) => c.child_id))].map((id) => recomputeChildConsent(id)));
     await deleteById(COL.parentEmails, req.params.id);
     await audit('email.delete', req.params.id);
     res.json({ ok: true });
@@ -2624,9 +2892,17 @@ function dayKey(value: string | number | Date): string {
 async function buildAnalytics(filterEventId?: string) {
     const [events, children, emailChildren, photoEmails, photos, parentEmails, orders, orderItems, reminders] =
       await Promise.all([
-        runQuery<{ id: string; name: string; status: string; created_at: string; expires_at: string | null; invited_at?: string | null }>(
-          col(COL.events),
-        ),
+        runQuery<{
+          id: string;
+          name: string;
+          status: string;
+          created_at: string;
+          expires_at: string | null;
+          invited_at?: string | null;
+          auto_order_reminder?: boolean;
+          auto_order_reminder_days?: number;
+          auto_order_reminder_sent_at?: string | null;
+        }>(col(COL.events)),
         runQuery<{ id: string; event_id: string }>(col(COL.children)),
         runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
         runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
@@ -2801,6 +3077,9 @@ async function buildAnalytics(filterEventId?: string) {
           created_at: ev.created_at,
           expires_at: ev.expires_at ?? null,
           invited_at: ev.invited_at ?? null,
+          auto_order_reminder: ev.auto_order_reminder === true,
+          auto_order_reminder_days: Math.max(1, Number(ev.auto_order_reminder_days) || 7),
+          auto_order_reminder_sent_at: ev.auto_order_reminder_sent_at ?? null,
           revenue_cents: eventRevenue.get(ev.id) ?? 0,
           order_count: eventOrders.get(ev.id)?.size ?? 0,
           email_total: linked.size,
@@ -2877,40 +3156,6 @@ router.delete(
 // Einladung unter "Aufträge" wird hier pro Kind aufgeschlüsselt, welche
 // Adressen bereits bestätigt wurden bzw. schon bestellt haben, damit der Admin
 // gezielt nur die Nicht-Besteller erinnern kann.
-
-/** Remaining days until the gallery is archived (null when no/expired date). */
-function daysLeftUntil(expiresAt: string | null): number | null {
-  if (!expiresAt) return null;
-  const end = new Date(expiresAt).getTime();
-  if (isNaN(end)) return null;
-  const days = Math.ceil((end - Date.now()) / (24 * 60 * 60 * 1000));
-  return days > 0 ? days : null;
-}
-
-/**
- * Email ids that have a confirmed (pending/completed) order within this event.
- * An order belongs to the event when at least one of its items references a
- * photo of that event.
- */
-async function orderedEmailIdsForEvent(eventId: string): Promise<Set<string>> {
-  const [photos, orders, orderItems] = await Promise.all([
-    runQuery<{ id: string }>(col(COL.photos).where('event_id', '==', eventId)),
-    runQuery<{ id: string; email_id: string; status: string }>(col(COL.orders)),
-    runQuery<{ order_id: string; photo_id: string }>(col(COL.orderItems)),
-  ]);
-  const photoIds = new Set(photos.map((p) => p.id));
-  const orderById = new Map(orders.map((o) => [o.id, o]));
-  const ordered = new Set<string>();
-  for (const item of orderItems) {
-    if (!photoIds.has(item.photo_id)) continue;
-    const order = orderById.get(item.order_id);
-    if (!order) continue;
-    if (order.status === 'pending' || order.status === 'completed') {
-      ordered.add(order.email_id);
-    }
-  }
-  return ordered;
-}
 
 router.get(
   '/events/:id/reminder-recipients',

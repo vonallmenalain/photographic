@@ -8,6 +8,7 @@ import { migrate } from './db/migrate';
 import { archiveExpiredEvents } from './services/events';
 import { sweepAbandonedCheckouts } from './services/orders';
 import { pruneOldDeliveries } from './services/mailDelivery';
+import { runAutoReminders } from './services/autoReminders';
 import { getAppSettings } from './services/settings';
 import { checkWatermarkRendering } from './lib/images';
 import { describeStripe, stripeWarnings } from './lib/stripeStatus';
@@ -15,6 +16,7 @@ import { errorHandler, notFound } from './middleware/errorHandler';
 import { requestTiming } from './middleware/requestTiming';
 import parentRoutes from './routes/parent';
 import adminRoutes from './routes/admin';
+import teacherRoutes from './routes/teacher';
 import filesRoutes from './routes/files';
 import webhookRoutes from './routes/webhook';
 
@@ -63,6 +65,8 @@ function buildApp() {
 
   app.use('/api/parent', parentRoutes);
   app.use('/api/admin', adminRoutes);
+  // Klassenseite der Lehrperson (Klassenerfassung) – gleiche Sitzung wie Eltern.
+  app.use('/api/teacher', teacherRoutes);
   app.use('/files', filesRoutes);
 
   app.use(notFound);
@@ -94,12 +98,21 @@ async function main() {
       // eslint-disable-next-line no-console
       console.error('[mail] delivery log prune failed', err);
     });
+  // Automatische Erinnerungen (Einverständnis vor der Rückmeldefrist, Eltern
+  // ohne Bestellung vor Ablauf der Bestellfrist) – je Auftrag einschaltbar.
+  const runAutoReminderSweep = () =>
+    runAutoReminders().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('[auto-reminder] sweep failed', err);
+    });
   await runArchiveSweep();
   await runCheckoutSweep();
   await runDeliveryPrune();
+  await runAutoReminderSweep();
   setInterval(runArchiveSweep, 6 * 60 * 60 * 1000).unref();
   setInterval(runCheckoutSweep, 6 * 60 * 60 * 1000).unref();
   setInterval(runDeliveryPrune, 24 * 60 * 60 * 1000).unref();
+  setInterval(runAutoReminderSweep, 3 * 60 * 60 * 1000).unref();
   const settings = await getAppSettings();
 
   const watermarkOk = await checkWatermarkRendering();

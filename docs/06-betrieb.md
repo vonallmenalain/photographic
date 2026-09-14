@@ -141,7 +141,9 @@ Bevor du ein Event auf „published“ setzt:
   entfernt. Der Status blendet eine Bestellung nie aus – auch „Storniert“ nicht.
   Soll eine Bestellung wirklich verschwinden (typisch: eine Testbestellung aus
   der Stripe-Sandbox), wird sie in der Übersicht gelöscht (6.2a).
-- **Events:** Entwurf → in Bearbeitung → bereit → veröffentlicht → archiviert · (deaktiviert)
+- **Events:** Erfassung (Klassenerfassung durch Lehrperson/Eltern, siehe
+  [docs/10-klassenerfassung.md](10-klassenerfassung.md)) → in Bearbeitung →
+  veröffentlicht → archiviert
 
 ## 6.2a Bestellungen nach Auftrag (Schule/Klasse)
 
@@ -410,6 +412,26 @@ oder über `RESEND_WEBHOOK_SECRET` in der `.env` samt Neuerstellen des
 Containers. Achtung: Ein leer gespeichertes `resend_webhook_secret` bedeutet
 „entfernt“ und übersteuert die `.env` – dann hilft nur ein neues Secret oder das
 Löschen des Feldes. Die fertigen `curl`-Befehle stehen in 4.6.
+
+## 6.12 Klassenerfassung & Einverständniserklärung
+
+Klassen lassen sich **vor dem Fototermin** online erfassen: Der Fotograf legt
+die Klasse unter **Aufträge erfassen → Klasse erfassen lassen** an, die
+Lehrperson trägt über ihren persönlichen Link die Kindernamen ein, die Eltern
+bestätigen ihre E-Mail-Adresse selbst (Klassenlink/QR-Code oder Einladung) und
+geben dabei ihr Einverständnis ab (alles / nur Klassenfoto / nur Einzelfotos /
+nein). Der Auftrag steht so lange auf **„Erfassung“**; **„In Auftrag
+übernehmen“** schliesst Klassenlink und Formular und führt in den Assistenten
+zu den Fotos. Die Erfassungsansicht (Aufträge → „Erfassung öffnen“ bzw.
+„Einverständnisse“) zeigt Klassenliste, Antworten, Verlauf, Lehrperson,
+Klassenlink mit QR-Code, Export für den Fototermin (CSV/Druck) und die
+Einstellungen. Der Wortlaut der Einverständniserklärung steht unter
+**Einstellungen**. Ablauf, Optionen und Sicherheitsmodell im Detail:
+[docs/10-klassenerfassung.md](10-klassenerfassung.md).
+
+Automatische Erinnerungen (je Auftrag, standardmässig aus): an Eltern ohne
+Antwort X Tage vor der Rückmeldefrist und an Eltern ohne Bestellung X Tage vor
+Ablauf der Bestellfrist (Auftrag aufklappen → „Einladungen & Erinnerungen“).
 
 ## 6.9 Sicherheits-Checkliste (vor Go-Live)
 

@@ -13,6 +13,8 @@ export interface AppSettings {
   report_notify_emails: string[];
   bounce_notify_enabled: boolean;
   bounce_notify_emails: string[];
+  /** Wortlaut der Einverständniserklärung (Klassenerfassung), mit Platzhaltern. */
+  consent_text: string;
   /** Ob ein Resend-Signing-Secret hinterlegt ist (der Wert selbst wird nie ausgeliefert). */
   resend_webhook_secret_set: boolean;
   /** Woher es stammt: aus dem Adminbereich, aus der .env oder gar nicht gesetzt. */
@@ -23,7 +25,7 @@ export interface AppSettings {
 export interface SettingsResponse {
   settings: AppSettings;
   adminEmails: string[];
-  defaults: { contact_email: string; shipping_fee_cents: number; mail_from: string };
+  defaults: { contact_email: string; shipping_fee_cents: number; mail_from: string; consent_text: string };
   currency: string;
   mailFrom: string;
   devLogOnly: boolean;

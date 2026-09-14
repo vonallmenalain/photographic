@@ -46,14 +46,14 @@ export default function Verify() {
       setBusy(true);
       try {
         const idToken = await completeParentSignIn(window.location.href, knownEmail);
-        const res = await api<{ verified: boolean; email: string }>('/api/parent/firebase-session', {
+        const res = await api<{ verified: boolean; email: string; next?: string }>('/api/parent/firebase-session', {
           method: 'POST',
           body: { idToken },
         });
         setVerified(res.email);
         await refresh();
         sessionStorage.removeItem('pending_email');
-        navigate('/galerie', { replace: true });
+        navigate(res.next || '/galerie', { replace: true });
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
       } finally {
@@ -69,14 +69,14 @@ export default function Verify() {
     setBusy(true);
     try {
       const idToken = await completeParentSignIn(window.location.href, email);
-      const res = await api<{ verified: boolean; email: string }>('/api/parent/firebase-session', {
+      const res = await api<{ verified: boolean; email: string; next?: string }>('/api/parent/firebase-session', {
         method: 'POST',
         body: { idToken },
       });
       setVerified(res.email);
       await refresh();
       sessionStorage.removeItem('pending_email');
-      navigate('/galerie', { replace: true });
+      navigate(res.next || '/galerie', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
     } finally {
@@ -91,15 +91,33 @@ export default function Verify() {
     (async () => {
       setBusy(true);
       try {
-        const res = await api<{ verified: boolean; email: string }>('/api/parent/verify-link', {
+        const res = await api<{ verified: boolean; email: string; next?: string }>('/api/parent/verify-link', {
           method: 'POST',
           body: { token: linkToken },
         });
         setVerified(res.email);
         await refresh();
-        navigate('/galerie', { replace: true });
+        // Links der Klassenerfassung tragen ihre Zielseite (Klassenseite,
+        // Einverständnis) mit; sonst geht es zu den Fotos.
+        navigate(res.next || '/galerie', { replace: true });
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
+        // Ein bereits eingelöster Link (z. B. zweiter Klick aus derselben Mail)
+        // ist kein Fehler, wenn die Sitzung noch besteht: einfach weiterleiten.
+        try {
+          const session = await api<{ verified: boolean; next?: string }>('/api/parent/session');
+          if (session.verified) {
+            await refresh();
+            navigate(session.next || '/galerie', { replace: true });
+            return;
+          }
+        } catch {
+          /* unten die Fehlermeldung zeigen */
+        }
+        setError(
+          err instanceof ApiError
+            ? `${err.message} Bitte melden Sie sich auf der Startseite mit Ihrer E-Mail-Adresse an.`
+            : 'Bestätigung fehlgeschlagen.',
+        );
       } finally {
         setBusy(false);
       }
@@ -111,7 +129,7 @@ export default function Verify() {
     setError('');
     setBusy(true);
     try {
-      const res = await api<{ verified: boolean; email: string }>('/api/parent/verify-code', {
+      const res = await api<{ verified: boolean; email: string; next?: string }>('/api/parent/verify-code', {
         method: 'POST',
         body: { email, code },
       });
@@ -119,7 +137,7 @@ export default function Verify() {
       await refresh();
       sessionStorage.removeItem('pending_email');
       sessionStorage.removeItem('pending_message');
-      navigate('/galerie', { replace: true });
+      navigate(res.next || '/galerie', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Bestätigung fehlgeschlagen.');
     } finally {

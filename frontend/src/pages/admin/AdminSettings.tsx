@@ -30,6 +30,7 @@ export default function AdminSettings() {
   const [senderName, setSenderName] = useState('');
   const [senderEmail, setSenderEmail] = useState('');
   const [shippingFee, setShippingFee] = useState('');
+  const [consentText, setConsentText] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
@@ -39,6 +40,7 @@ export default function AdminSettings() {
     setSenderName(settings.sender_name);
     setSenderEmail(settings.sender_email);
     setShippingFee((settings.shipping_fee_cents / 100).toFixed(2));
+    setConsentText(settings.consent_text ?? '');
   };
 
   useEffect(() => {
@@ -76,6 +78,7 @@ export default function AdminSettings() {
           sender_name: senderName.trim(),
           sender_email: senderEmail.trim(),
           shipping_fee_cents: fee,
+          consent_text: consentText,
         },
       });
       setData((d) => (d ? { ...d, settings: res.settings } : d));
@@ -259,6 +262,33 @@ export default function AdminSettings() {
               {currency.toUpperCase()}. 0 bedeutet: keine Pauschale.
             </p>
           </div>
+        </div>
+
+        <div className="card mb" style={{ maxWidth: 720 }}>
+          <h2>Einverständniserklärung (Klassenerfassung)</h2>
+          <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
+            Dieser Text steht im Einverständnis-Formular der Eltern über den vier Antworten (alles,
+            nur Klassenfoto, nur Einzelfotos, nein). Platzhalter: <code>{'{Klasse}'}</code>,{' '}
+            <code>{'{Schule}'}</code>, <code>{'{Datum}'}</code> (Fototermin) und <code>{'{Tage}'}</code>{' '}
+            (Bestelldauer). Absätze durch Leerzeilen, Aufzählungen mit „- “ am Zeilenanfang. Jede
+            Antwort speichert die Version des Textes, dem zugestimmt wurde.
+          </p>
+          <textarea
+            value={consentText}
+            onChange={(e) => setConsentText(e.target.value)}
+            rows={12}
+            style={{ width: '100%', fontSize: '0.9rem' }}
+          />
+          {data?.defaults.consent_text && consentText.trim() !== data.defaults.consent_text.trim() && (
+            <button
+              type="button"
+              className="btn ghost small"
+              style={{ marginTop: 8 }}
+              onClick={() => setConsentText(data.defaults.consent_text)}
+            >
+              Standardtext wiederherstellen
+            </button>
+          )}
         </div>
 
         <button className="btn" disabled={busy}>

@@ -37,6 +37,17 @@ interface EventRow {
   // Vom Backend vorberechneter Freitext-Index (Auftragsname + Kindernamen +
   // zugeordnete E-Mail-Adressen), alles in Kleinbuchstaben.
   search_text?: string;
+  // Klassenerfassung (falls der Auftrag darüber angelegt wurde).
+  registration?: {
+    school: string;
+    shooting_date_text: string;
+    deadline_text: string;
+    consent_required: boolean;
+    teacher_email: string;
+    teacher_name: string;
+    open: boolean;
+  } | null;
+  consent_summary?: { children: number; answered: number; none: number } | null;
 }
 
 type SortKey =
@@ -46,7 +57,7 @@ type SortKey =
   | 'orderable_asc'
   | 'revenue_desc';
 
-type FilterKey = 'all' | 'published' | 'draft' | 'archived' | 'reminders';
+type FilterKey = 'all' | 'collecting' | 'published' | 'draft' | 'archived' | 'reminders';
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'created_desc', label: 'Erfassungsdatum (neueste zuerst)' },
@@ -58,6 +69,7 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 
 const FILTER_OPTIONS: { value: FilterKey; label: string }[] = [
   { value: 'all', label: 'Alle Aufträge' },
+  { value: 'collecting', label: 'Nur in Erfassung' },
   { value: 'published', label: 'Nur veröffentlichte' },
   { value: 'draft', label: 'Nur pendente' },
   { value: 'archived', label: 'Nur archivierte' },
@@ -101,6 +113,7 @@ export default function Events() {
     const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
     let list = events.filter((ev) => {
       // Statusfilter / Erinnerungsfilter.
+      if (filter === 'collecting' && ev.status !== 'collecting') return false;
       if (filter === 'published' && ev.status !== 'published') return false;
       if (filter === 'draft' && ev.status !== 'draft') return false;
       if (filter === 'archived' && ev.status !== 'archived') return false;
@@ -279,6 +292,15 @@ function EventCard({
 
   const changeStatus = async (status: string) => {
     if (status === ev.status) return;
+    // Leaving „Erfassung“ closes the class link and the consent form.
+    if (ev.status === 'collecting' && status !== 'collecting') {
+      if (
+        !confirm(
+          'Damit wird die Klassenerfassung geschlossen: Klassenlink und Einverständnis-Formular sind danach nicht mehr aktiv. Fortfahren?',
+        )
+      )
+        return;
+    }
     // Leaving "Veröffentlicht" removes the gallery from the parents' view.
     if (ev.status === 'published' && status !== 'published') {
       if (
@@ -376,12 +398,45 @@ function EventCard({
               aria-label="Status ändern"
               title="Status des Auftrags ändern"
             >
+              {/* „Erfassung“ nur anzeigen, solange der Auftrag darin ist bzw. wenn
+                  er eine Klassenerfassung hat (zurück in die Erfassung). */}
+              {(ev.status === 'collecting' || ev.registration) && ev.status !== 'published' && (
+                <option value="collecting">Erfassung</option>
+              )}
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
               ))}
             </select>
+            {ev.status === 'collecting' && (
+              <button
+                className="btn secondary small"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/admin/events/${ev.id}/erfassung`);
+                }}
+                disabled={busy}
+                title="Klassenliste, Einverständnisse, Lehrperson und Klassenlink"
+              >
+                Erfassung öffnen
+              </button>
+            )}
+            {ev.status !== 'collecting' && ev.registration && (
+              <button
+                className="btn ghost small"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/admin/events/${ev.id}/erfassung`);
+                }}
+                disabled={busy}
+                title="Klassenliste und Einverständnisse der Klassenerfassung ansehen"
+              >
+                Einverständnisse
+              </button>
+            )}
             {ev.status === 'draft' && (
               <button
                 className="btn secondary small"
@@ -407,6 +462,12 @@ function EventCard({
 
         <div className="order-row-stats">
           <SummaryStat label="Kinder" value={String(ev.child_count)} />
+          {ev.consent_summary && ev.registration?.consent_required && (
+            <SummaryStat
+              label="Einverständnisse"
+              value={`${ev.consent_summary.answered} von ${ev.consent_summary.children}${ev.consent_summary.none ? ` (${ev.consent_summary.none}× Nein)` : ''}`}
+            />
+          )}
           <SummaryStat label="Bestellungen" value={String(ev.order_count)} />
           <SummaryStat
             label="Verifizierte E-Mails"

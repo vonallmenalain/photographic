@@ -1,6 +1,7 @@
 import { COL, getById, setById, nowIso } from '../db';
 import { config } from '../config';
 import { normalizeEmail } from '../lib/validation';
+import { DEFAULT_CONSENT_TEXT } from './consent';
 
 /**
  * App-weite Einstellungen, die der Admin im Adminbereich pflegt (statt in der
@@ -17,6 +18,10 @@ import { normalizeEmail } from '../lib/validation';
  *  - report_notify_emails   Empfänger dafür (leer = alle Admin-Konten mit E-Mail)
  *  - bounce_notify_enabled  nicht zustellbare E-Mails per E-Mail melden
  *  - bounce_notify_emails   Empfänger dafür (leer = alle Admin-Konten mit E-Mail)
+ *  - consent_text           Wortlaut der Einverständniserklärung, die Eltern bei
+ *                           der Klassenerfassung sehen (Platzhalter {Klasse},
+ *                           {Schule}, {Datum}, {Tage}); versioniert über den
+ *                           Hash des Textes, siehe services/consent.ts
  *  - resend_webhook_secret  Signing Secret des Resend-Webhooks. Bewusst hier und
  *                           nicht nur in der .env: So lässt es sich setzen, ohne
  *                           den Container neu zu erstellen (eine .env wird nur
@@ -40,6 +45,7 @@ export interface AppSettings {
   report_notify_emails: string[];
   bounce_notify_enabled: boolean;
   bounce_notify_emails: string[];
+  consent_text: string;
   resend_webhook_secret: string;
   updated_at: string | null;
 }
@@ -99,9 +105,18 @@ function defaults(): AppSettings {
     report_notify_emails: [],
     bounce_notify_enabled: true,
     bounce_notify_emails: [],
+    consent_text: DEFAULT_CONSENT_TEXT,
     resend_webhook_secret: config.resend.webhookSecret,
     updated_at: null,
   };
+}
+
+/** Bereinigt den Einverständnis-Text: Zeilenumbrüche vereinheitlichen, Länge begrenzen. */
+function cleanConsentText(value: unknown): string {
+  return String(value ?? '')
+    .replace(/\r\n?/g, '\n')
+    .trim()
+    .slice(0, 20_000);
 }
 
 /** Bereinigt eine Empfängerliste: trimmen, Kleinschreibung, Duplikate raus, nur E-Mails. */
@@ -148,6 +163,11 @@ function fromDoc(doc: Record<string, unknown> | null): AppSettings {
         ? doc.bounce_notify_enabled
         : d.bounce_notify_enabled,
     bounce_notify_emails: cleanEmailList(doc.bounce_notify_emails),
+    // Ein leer gespeicherter Text fällt auf den Standardtext zurück.
+    consent_text:
+      typeof doc.consent_text === 'string' && cleanConsentText(doc.consent_text)
+        ? cleanConsentText(doc.consent_text)
+        : d.consent_text,
     // Fehlt das Feld, gilt der Startwert aus der Umgebung; ein ausdrücklich
     // gespeicherter Leerstring bedeutet dagegen „entfernt“.
     resend_webhook_secret:
@@ -186,6 +206,7 @@ export async function updateAppSettings(patch: Partial<AppSettings>): Promise<Ap
   next.shipping_fee_cents = Math.max(0, Math.round(Number(next.shipping_fee_cents) || 0));
   next.report_notify_emails = cleanEmailList(next.report_notify_emails);
   next.bounce_notify_emails = cleanEmailList(next.bounce_notify_emails);
+  next.consent_text = cleanConsentText(next.consent_text) || DEFAULT_CONSENT_TEXT;
   next.resend_webhook_secret = String(next.resend_webhook_secret ?? '').trim();
   await setById(COL.settings, APP_SETTINGS_ID, { ...next });
   cache = { value: next, at: Date.now() };

@@ -36,6 +36,11 @@ export default function EventDetail() {
         navigate(`/admin/import?eventId=${id}`, { replace: true });
         return;
       }
+      // Eine laufende Klassenerfassung hat ihre eigene Ansicht.
+      if (res.event.status === 'collecting') {
+        navigate(`/admin/events/${id}/erfassung`, { replace: true });
+        return;
+      }
       setEv(res.event);
       setCurrency(res.currency || 'chf');
     } catch (err) {

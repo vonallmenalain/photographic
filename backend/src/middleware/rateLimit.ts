@@ -43,3 +43,24 @@ export const reportLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Zu viele Meldungen. Bitte versuchen Sie es später erneut.' },
 });
+
+// Klassenlink (Selbstregistrierung der Eltern): öffentlich erreichbar, nur mit
+// dem Klassenlink. Begrenzt, damit niemand die Klassenliste mit Einträgen
+// flutet oder die Mailadressen anderer Leute mit Bestätigungs-Mails bombardiert.
+export const registrationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.' },
+});
+
+// Einverständnis-Formular und Klassenseite der Lehrperson: zwar nur mit
+// bestätigter Sitzung erreichbar, aber ebenfalls begrenzt (Mailversand).
+export const consentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.' },
+});

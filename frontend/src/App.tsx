@@ -13,6 +13,10 @@ import OrderDetail from './pages/parent/OrderDetail';
 import Help from './pages/parent/Help';
 import Privacy from './pages/parent/Privacy';
 import Imprint from './pages/parent/Imprint';
+import ClassRegister from './pages/parent/ClassRegister';
+import Consent from './pages/parent/Consent';
+import TeacherClasses from './pages/parent/TeacherClasses';
+import TeacherClass from './pages/parent/TeacherClass';
 
 import AdminApp from './pages/admin/AdminApp';
 
@@ -40,6 +44,13 @@ function ParentRoutes() {
             <Route path="/warenkorb" element={<RequireParent><Cart /></RequireParent>} />
             <Route path="/bestellungen" element={<RequireParent><Orders /></RequireParent>} />
             <Route path="/bestellung/:id" element={<RequireParent><OrderDetail /></RequireParent>} />
+            {/* Klassenerfassung: Klassenlink für Eltern (öffentlich, nur mit
+                Link), Einverständnis-Formular und Klassenseite der Lehrperson
+                (beide nur mit bestätigter E-Mail-Adresse). */}
+            <Route path="/k/:token" element={<ClassRegister />} />
+            <Route path="/einverstaendnis" element={<RequireParent><Consent /></RequireParent>} />
+            <Route path="/klasse" element={<RequireParent><TeacherClasses /></RequireParent>} />
+            <Route path="/klasse/:id" element={<RequireParent><TeacherClass /></RequireParent>} />
             <Route path="/hilfe" element={<Help />} />
             <Route path="/datenschutz" element={<Privacy />} />
             <Route path="/impressum" element={<Imprint />} />
