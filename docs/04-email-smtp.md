@@ -89,9 +89,9 @@ erfassten Adresse steht in Resend dann statt „Delivered“ ein **„Bounced“
 Damit du dafür nicht regelmässig bei Resend nachschauen musst, kann Resend
 jedes Zustellereignis per **Webhook** an die App melden. Die App
 
-- zeigt nicht zustellbare E-Mails im Adminbereich unter **Meldungen → Nicht
+- zeigt nicht zustellbare E-Mails im Adminbereich unter **Einstellungen → Nicht
   zustellbare E-Mails** (Empfänger, Betreff, Zeitpunkt, Begründung),
-- zählt sie neben dem Menüpunkt „Meldungen“ mit,
+- zählt sie neben dem Menüpunkt „Einstellungen“ mit,
 - markiert die betroffene Eltern-Adresse überall rot mit **„Nicht zustellbar“**
   (im Auftrag unter „Bearbeiten“, in den Versand-Popups, auf der E-Mail-Seite),
 - schickt dir auf Wunsch sofort eine **E-Mail** (4.8).
@@ -106,19 +106,8 @@ Versand** meldet (z. B. eine syntaktisch unmögliche Adresse). Einrichtung:
    `email.bounced`, `email.complained`, `email.failed`
    (Öffnungen/Klicks werden nicht ausgewertet).
 4. Webhook speichern → das **Signing Secret** (`whsec_...`) kopieren.
-5. Im Adminbereich unter **Meldungen → Nicht zustellbare E-Mails → Resend-Webhook
-   einrichten** das Secret einfügen und speichern.
-
-**Kein Neustart, kein Zugriff auf die Server-Konsole nötig:** Das Secret liegt in
-den App-Einstellungen (Firestore) und gilt sofort nach dem Speichern. Die genaue
-Webhook-Adresse steht dort zum Kopieren bereit. Aus Sicherheitsgründen wird ein
-gespeichertes Secret nie wieder angezeigt – es lässt sich nur ersetzen oder
-entfernen.
-
-> **Alternative für den Erststart:** Wer ohnehin an der `.env` ist, kann dort
-> `RESEND_WEBHOOK_SECRET=whsec_xxx` setzen und den Container neu **erstellen**
-> (ein blosser Neustart liest die `.env` nicht neu). Der Wert im Adminbereich hat
-> Vorrang, sobald einer gesetzt ist.
+5. Das Secret in der App hinterlegen – **nicht im Adminbereich**, sondern wie
+   im nächsten Abschnitt beschrieben.
 
 Ob der Webhook läuft, steht im Adminbereich unter **Einstellungen → Nicht
 zustellbare E-Mails**: dort werden der Status und der Zeitpunkt des letzten
@@ -126,6 +115,78 @@ Ereignisses angezeigt. Nach der nächsten verschickten E-Mail muss ein Eintrag
 erscheinen (auch erfolgreiche Zustellungen werden protokolliert; die Ansicht
 „Alle protokollierten E-Mails“ zeigt sie). Im Server-Log erscheint beim Start
 `mail status : Resend webhook configured (/webhook/resend)`.
+
+### Signing Secret hinterlegen, ersetzen oder entfernen (Entwicklung)
+
+**Warum das nicht im Adminbereich steht:** Der Webhook wird genau einmal
+eingerichtet und danach nie wieder angefasst. Eine Bedienung dafür im
+Adminbereich hätte nur einen Effekt: Irgendwann klickt jemand „Secret
+entfernen“ – und ab dann meldet Resend keine Zustellprobleme mehr, ohne dass es
+jemandem auffällt. Die Kachel „Resend-Webhook einrichten“ wurde deshalb aus dem
+Adminbereich entfernt. Sichtbar bleibt dort nur noch der **Status** („Webhook
+ist eingerichtet“ bzw. „nicht eingerichtet“), damit ein Ausfall auffällt.
+
+Gespeichert wird das Secret weiterhin in den App-Einstellungen (Firestore,
+Dokument `settings/app`, Feld `resend_webhook_secret`). Es gilt **sofort**, ein
+Neustart des Containers ist nicht nötig. Zurückgeliefert wird es nie – die API
+sagt nur, *ob* eines hinterlegt ist und woher (`settings` = App-Einstellungen,
+`env` = `.env`, `none` = keines).
+
+#### Weg A: über die Admin-API (empfohlen, kein Server-Zugriff nötig)
+
+Der Endpunkt `PUT /api/admin/settings` nimmt das Secret weiterhin entgegen.
+Nötig sind nur Benutzername und Passwort eines Admin-Kontos:
+
+```bash
+# 1. Admin-Token holen (gilt 12 Stunden)
+curl -s -X POST https://api.alae.app/api/admin/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"DEIN-ADMIN-PASSWORT"}'
+# -> {"token":"eyJhbGciOi...","username":"admin"}
+
+# 2. Signing Secret setzen oder ersetzen
+curl -s -X PUT https://api.alae.app/api/admin/settings \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer eyJhbGciOi...' \
+  -d '{"resend_webhook_secret":"whsec_XXXXXXXXXXXX"}'
+
+# 3. Kontrolle: was ist jetzt hinterlegt?
+curl -s https://api.alae.app/api/admin/settings \
+  -H 'Authorization: Bearer eyJhbGciOi...'
+# -> "resend_webhook_secret_set": true, "resend_webhook_secret_source": "settings"
+```
+
+Zum **Entfernen** in Schritt 2 einen Leerstring senden:
+`-d '{"resend_webhook_secret":""}'`. Danach weist die App eingehende Webhooks
+mit `400 Resend webhook not configured` ab.
+
+Hinweise:
+
+- Das Secret muss mit `whsec_` beginnen; sonst antwortet die API mit
+  `400` und einer Erklärung (Schutz gegen den verwechselten API-Key `re_…`).
+- Andere Einstellungen bleiben unverändert – der Endpunkt schreibt nur die
+  mitgeschickten Felder.
+- Im Audit-Log steht nur `<gesetzt>` bzw. `<entfernt>`, nie das Secret selbst.
+- Lokal statt `https://api.alae.app` einfach `http://localhost:4000` verwenden.
+
+#### Weg B: über die Firebase-Konsole
+
+Firestore → Sammlung `settings` → Dokument `app` → Feld
+`resend_webhook_secret` (String) setzen oder leeren. Wirkt spätestens nach
+30 Sekunden (so lange hält das Backend die Einstellungen im Cache).
+
+#### Weg C: über die `.env` (nur beim Erstaufbau)
+
+`RESEND_WEBHOOK_SECRET=whsec_xxx` in der `.env` setzen und den Container neu
+**erstellen** – ein blosser Neustart liest die `.env` nicht neu.
+
+> **Stolperstein:** Die App-Einstellungen haben Vorrang vor der `.env`, und zwar
+> auch dann, wenn dort ausdrücklich ein **leerer** Wert steht (so wirkte früher
+> das inzwischen entfernte „Secret entfernen“). Ein leeres
+> `resend_webhook_secret` im Dokument `settings/app` bedeutet „entfernt“ und
+> übersteuert die `.env`. Nur ein **fehlendes** Feld lässt den Startwert aus der
+> Umgebung greifen. Wer also auf die `.env` zurückfallen will, muss das Feld in
+> der Firebase-Konsole löschen (Weg B) – Leeren genügt nicht.
 
 ### Der Webhook funktioniert nicht – so findest du den Fehler
 
@@ -143,8 +204,8 @@ Geh stattdessen der Reihe nach vor:
    `{"error":"Nicht gefunden."}`, läuft noch eine ältere Version – dann zuerst
    das Image aktualisieren (siehe [docs/09-auto-deploy.md](09-auto-deploy.md)).
 2. **Ist ein Secret hinterlegt?** Adminbereich → **Einstellungen → Nicht
-   zustellbare E-Mails**. Steht dort „Der Resend-Webhook ist noch nicht
-   eingerichtet“, fehlt das Secret.
+   zustellbare E-Mails**. Steht dort „Der Resend-Webhook ist nicht
+   eingerichtet“, fehlt das Secret – neu setzen nach Weg A oben.
 3. **Ist es das richtige Secret?** Gebraucht wird das **Signing Secret des
    Webhooks** (beginnt mit `whsec_`), **nicht** der API-Key für den Versand
    (beginnt mit `re_`). Beide stehen an verschiedenen Stellen im
@@ -155,8 +216,8 @@ Geh stattdessen der Reihe nach vor:
    | Status | Bedeutung |
    |---|---|
    | `200` | Alles in Ordnung, das Ereignis ist angekommen. |
-   | `400 Invalid signature` | Das hinterlegte Secret passt nicht zu diesem Webhook. Secret in Resend neu kopieren und im Adminbereich ersetzen. |
-   | `400 Resend webhook not configured` | Im Adminbereich ist (noch) kein Secret gespeichert. |
+   | `400 Invalid signature` | Das hinterlegte Secret passt nicht zu diesem Webhook. Secret in Resend neu kopieren und nach Weg A oben ersetzen. |
+   | `400 Resend webhook not configured` | Es ist (noch) kein Secret gespeichert – siehe Weg A oben. |
    | `404` | Falsche Adresse, oder auf dem QNAP läuft noch eine alte Version. Adresse muss exakt `https://api.alae.app/webhook/resend` lauten. |
    | Zeitüberschreitung | Die API ist von aussen nicht erreichbar. `https://api.alae.app/health` im Browser prüfen. |
 
@@ -175,8 +236,8 @@ Geh stattdessen der Reihe nach vor:
 **Aufträge → „Bearbeiten“** beim Kind mit ✎ korrigieren (die Bestätigung wird
 dabei zurückgesetzt), anschliessend die Einladung über „Einladung per E-Mail
 senden“ gezielt an diese Adresse schicken. Stimmt die Adresse (z. B. Postfach
-war nur vorübergehend voll), das Problem unter „Meldungen“ mit **„Erledigt“**
-schliessen – die rote Markierung verschwindet damit. Kommt später eine E-Mail
+war nur vorübergehend voll), das Problem unter „Einstellungen“ mit
+**„Erledigt“** schliessen – die rote Markierung verschwindet damit. Kommt später eine E-Mail
 an dieselbe Adresse an, wird die Markierung automatisch entfernt.
 
 Einträge älter als 90 Tage räumt die App selbst auf; offene Probleme bleiben
