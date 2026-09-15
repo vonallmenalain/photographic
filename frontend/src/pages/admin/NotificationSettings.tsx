@@ -43,7 +43,7 @@ const COPY = {
   bounce: {
     title: 'Benachrichtigung bei Zustellproblemen',
     intro:
-      'Kann eine E-Mail nicht zugestellt werden (z. B. weil eine Adresse im Auftrag falsch geschrieben ist), erscheint sie hier in der Liste. Zusätzlich kann sofort eine E-Mail an dich gehen – mit Empfänger, Betreff und der Begründung des Mail-Anbieters.',
+      'Kann eine E-Mail nicht zugestellt werden (z. B. weil eine E-Mail-Adresse im Auftrag falsch geschrieben ist), erscheint sie hier in der Liste. Zusätzlich kann sofort eine E-Mail an dich gehen – mit Empfänger, Betreff und der Begründung des Mail-Anbieters.',
     checkbox: 'Bei jeder nicht zustellbaren E-Mail eine E-Mail senden',
     enabledKey: 'bounce_notify_enabled' as const,
     emailsKey: 'bounce_notify_emails' as const,

@@ -15,8 +15,9 @@ import { config } from '../config';
  *  - none             Nein: gar nicht fotografieren
  *
  * Jede abgegebene Entscheidung wird als eigenes, unveränderliches Dokument in
- * der Sammlung `consents` abgelegt (Kind, Adresse, Entscheidung, Zeitpunkt,
- * Version des Textes, Browser). Eine neue Entscheidung derselben Adresse für
+ * der Sammlung `consents` abgelegt (Kind, E-Mail-Adresse, Entscheidung,
+ * Zeitpunkt, Version des Textes, Browser). Eine neue Entscheidung derselben
+ * E-Mail-Adresse für
  * dasselbe Kind ersetzt die alte, indem die alte als `superseded` markiert
  * wird – so bleibt der Verlauf als Nachweis erhalten.
  */

@@ -14,13 +14,13 @@ export default function Privacy() {
         <p>
           Die Fotos werden erst sichtbar, nachdem Sie die von Ihnen angegebene E-Mail-Adresse
           bestätigt haben. Diese E-Mail-Adresse dient als persönliche Zuordnung: Es werden
-          ausschliesslich Fotos angezeigt, die dieser Adresse zugeordnet wurden.
+          ausschliesslich Fotos angezeigt, die dieser E-Mail-Adresse zugeordnet wurden.
         </p>
         <p>
           Auch der Kauf und der spätere Download der Fotos sind nur über diese bestätigte
           E-Mail-Adresse möglich. So stellen wir sicher, dass Fotos nicht über offene Galerien oder
           frei zugängliche Links aufgerufen werden können. Bei Bedarf können die Fotos mit weiteren
-          E-Mail Adressen verknüpft werden. Melden Sie sich dazu unter{' '}
+          E-Mail-Adressen verknüpft werden. Melden Sie sich dazu unter{' '}
           <Link to="/hilfe">Hilfe &amp; Kontakt</Link>.
         </p>
         <h2>Wie die Fotos geschützt sind</h2>

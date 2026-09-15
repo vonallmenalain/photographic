@@ -109,7 +109,7 @@ export default function Help() {
       <div style={{ marginTop: 18 }}>
         <TrustNote>
           Aus Sicherheitsgründen verraten wir nicht, ob eine bestimmte E-Mail-Adresse hinterlegt ist.
-          Wenn Ihre Adresse freigeschaltet ist, erhalten Sie immer{' '}
+          Wenn Ihre E-Mail-Adresse freigeschaltet ist, erhalten Sie immer{' '}
           {firebaseEnabled ? 'einen sicheren Anmeldelink' : 'einen Zugangscode'}.
         </TrustNote>
       </div>

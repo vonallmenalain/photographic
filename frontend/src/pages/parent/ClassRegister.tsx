@@ -151,8 +151,8 @@ export default function ClassRegister() {
                 ? 'Sie sind bereits angemeldet und gelangen direkt zum Einverständnis.'
                 : 'Sie sind bereits angemeldet; Ihr Kind wird sofort eingetragen.'
               : info.consentRequired
-                ? 'Sie erhalten eine E-Mail zur Bestätigung Ihrer Adresse und gelangen danach direkt zum Einverständnis.'
-                : 'Sie erhalten eine E-Mail zur Bestätigung Ihrer Adresse.'}{' '}
+                ? 'Sie erhalten eine E-Mail zur Bestätigung Ihrer E-Mail-Adresse und gelangen danach direkt zum Einverständnis.'
+                : 'Sie erhalten eine E-Mail zur Bestätigung Ihrer E-Mail-Adresse.'}{' '}
             Pro Kind ein Eintrag; Geschwister können Sie danach ergänzen.
           </p>
           {error && <Alert kind="error">{error}</Alert>}
@@ -170,7 +170,7 @@ export default function ClassRegister() {
                 readOnly={verified && !!sessionEmail}
               />
               <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
-                Über diese Adresse sehen Sie später die Fotos Ihres Kindes.
+                Über diese E-Mail-Adresse sehen Sie später die Fotos Ihres Kindes.
               </p>
             </div>
             <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>

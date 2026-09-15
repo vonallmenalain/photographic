@@ -487,10 +487,10 @@ interface ReminderEmail {
   status: string;
   verified: boolean;
   hasOrdered: boolean;
-  // Zeitpunkt des letzten erfolgreichen Einladungs-Versands an diese Adresse
+  // Zeitpunkt des letzten erfolgreichen Einladungs-Versands an diese E-Mail-Adresse
   // (null = es wurde noch keine Einladung verschickt).
   invitedAt: string | null;
-  // Letzte E-Mail an diese Adresse kam nicht an (Resend-Webhook / SMTP-Fehler).
+  // Letzte E-Mail an diese E-Mail-Adresse kam nicht an (Resend-Webhook / SMTP-Fehler).
   deliveryProblem?: DeliveryProblemInfo | null;
 }
 interface ReminderChild {
@@ -509,11 +509,11 @@ interface ReminderRecipients {
 
 /**
  * Versand-Popup für Einladung bzw. Erinnerung. Zeigt alle aktiven Eltern-
- * Adressen des Auftrags als kompakte Liste – eine Zeile pro Adresse, ohne
+ * E-Mail-Adressen des Auftrags als kompakte Liste – eine Zeile pro Adresse, ohne
  * Zeilenumbrüche, bei Bedarf horizontal scrollbar. Spalten: E-Mail-Adresse,
  * Auswahl-Häkchen, Bestätigungs-Status, Bestell-Status und ob (bzw. wann) die
  * Einladung bereits versendet wurde. Bei der Einladung sind standardmässig alle
- * Adressen ausgewählt, bei der Erinnerung nur jene, die noch keine Bestellung
+ * E-Mail-Adressen ausgewählt, bei der Erinnerung nur jene, die noch keine Bestellung
  * erfasst haben. Optional geht eine Kopie an das eigene Admin-Konto.
  */
 function EmailDispatchModal({
@@ -540,8 +540,8 @@ function EmailDispatchModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  // Eine deduplizierte, alphabetisch sortierte Liste aller Adressen (eine Zeile
-  // pro Adresse – eine Adresse kann mehreren Kindern zugeordnet sein).
+  // Eine deduplizierte, alphabetisch sortierte Liste aller E-Mail-Adressen (eine
+  // Zeile pro Adresse – eine Adresse kann mehreren Kindern zugeordnet sein).
   const allEmails = useMemo(() => {
     if (!data) return [] as ReminderEmail[];
     const byId = new Map<string, ReminderEmail>();
@@ -612,7 +612,7 @@ function EmailDispatchModal({
       const note = res.devLogOnly
         ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
         : '';
-      onSent(`${noun} an ${res.sent} von ${res.total} Adresse(n) gesendet.${extra}${self}${note}`);
+      onSent(`${noun} an ${res.sent} von ${res.total} E-Mail-Adresse(n) gesendet.${extra}${self}${note}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Versand fehlgeschlagen.');
       setBusy(false);
@@ -644,13 +644,13 @@ function EmailDispatchModal({
           <>
             Die Erinnerung enthält den Link zur App und die Hinweise zu den Fotos
             {data?.daysLeft != null ? ` („noch ${data.daysLeft} Tage verfügbar“)` : ''}.
-            Standardmässig sind nur Adressen ausgewählt, die noch{' '}
+            Standardmässig sind nur E-Mail-Adressen ausgewählt, die noch{' '}
             <strong>keine Bestellung</strong> erfasst haben.
           </>
         ) : (
           <>
             Die Einladung enthält den Link zur App, eine Kurzanleitung zur Verifizierung sowie die
-            Hinweise zum Schutz der Fotos. Standardmässig sind alle Adressen ausgewählt.
+            Hinweise zum Schutz der Fotos. Standardmässig sind alle E-Mail-Adressen ausgewählt.
           </>
         )}
       </p>

@@ -115,12 +115,12 @@ export default function AdminSettings() {
         <div className="card mb" style={{ maxWidth: 720 }}>
           <h2>Kontakt-E-Mail-Adresse</h2>
           <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
-            Diese Adresse steht im{' '}
+            Diese E-Mail-Adresse steht im{' '}
             <Link to="/impressum" target="_blank" rel="noreferrer">
               Impressum
             </Link>{' '}
-            und auf der Hilfe-Seite, anstelle einer Telefonnummer. Sie ist zugleich die Adresse, an die
-            Antworten der Eltern gehen.
+            und auf der Hilfe-Seite, anstelle einer Telefonnummer. Sie ist zugleich die
+            E-Mail-Adresse, an die Antworten der Eltern gehen.
           </p>
           <div className="field">
             <label htmlFor="contact-email">E-Mail-Adresse</label>
@@ -137,7 +137,7 @@ export default function AdminSettings() {
           </div>
 
           <div className="alert info" style={{ marginBottom: 0 }}>
-            <strong>Wohin gehen E-Mails, die an diese Adresse geschickt werden?</strong>
+            <strong>Wohin gehen E-Mails, die an diese E-Mail-Adresse geschickt werden?</strong>
             <p style={{ margin: '6px 0 0', fontSize: '0.88rem', lineHeight: 1.55 }}>
               Die App verschickt E-Mails, empfängt aber keine. Damit E-Mails an{' '}
               <code>
@@ -172,7 +172,7 @@ export default function AdminSettings() {
               <li>
                 Reiter <strong>Routing Rules</strong>, dann <strong>Create routing rule</strong>: Email
                 pattern <code>{localPart}</code> mit Domain <code>{domain}</code>, Action „Send to an
-                email“, Destination = die bestätigte Adresse, dann Save.
+                email“, Destination = die bestätigte E-Mail-Adresse, dann Save.
               </li>
               <li>
                 Testen: Eine E-Mail an{' '}
@@ -194,7 +194,7 @@ export default function AdminSettings() {
           <h2>Absender der E-Mails</h2>
           <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
             Was die Eltern im „Von“-Feld sehen, wenn die App eine Einladung, eine Bestellbestätigung
-            oder einen Zugangscode verschickt. Trägst du hier dieselbe Adresse ein wie oben als
+            oder einen Zugangscode verschickt. Trägst du hier dieselbe E-Mail-Adresse ein wie oben als
             Kontaktadresse, landet eine Antwort direkt dort. Es gibt dann keinen
             „no-reply“-Absender mehr.
           </p>
@@ -231,7 +231,7 @@ export default function AdminSettings() {
           <p className="muted" style={{ fontSize: '0.8rem', marginTop: 10, marginBottom: 0 }}>
             Die Eltern sehen:{' '}
             <strong>{senderName.trim() ? `${senderName.trim()} <${senderEmail}>` : senderEmail || '—'}</strong>
-            {sameAsContact ? ' – Antworten gehen direkt an diese Adresse.' : ''}
+            {sameAsContact ? ' – Antworten gehen direkt an diese E-Mail-Adresse.' : ''}
           </p>
           <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
             Wichtig: Die Domain{senderDomain ? ` ${senderDomain}` : ''} muss bei deinem Mail-Anbieter

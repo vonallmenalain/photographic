@@ -11,7 +11,7 @@ interface EmailObj {
   status: string;
   note: string;
   verified_at: string | null;
-  /** Letzte E-Mail an diese Adresse kam nicht an (Resend-Webhook / SMTP-Fehler). */
+  /** Letzte E-Mail an diese E-Mail-Adresse kam nicht an (Resend-Webhook / SMTP-Fehler). */
   delivery_problem?: DeliveryProblemInfo | null;
 }
 interface LinkedChild {
@@ -91,7 +91,7 @@ export default function EmailDetail() {
       });
       if (res.addressChanged) {
         setMsg(
-          'Adresse geändert. Die Bestätigung wurde zurückgesetzt – die Eltern müssen die neue Adresse einmal bestätigen (z. B. über die Einladung).',
+          'E-Mail-Adresse geändert. Die Bestätigung wurde zurückgesetzt – die Eltern müssen die neue E-Mail-Adresse einmal bestätigen (z. B. über die Einladung).',
         );
       }
       load();
@@ -168,12 +168,12 @@ export default function EmailDetail() {
       {msg && <Alert kind="success">{msg}</Alert>}
       {email.delivery_problem && (
         <Alert kind="error">
-          <strong>Die letzte E-Mail an diese Adresse konnte nicht zugestellt werden</strong>
+          <strong>Die letzte E-Mail an diese E-Mail-Adresse konnte nicht zugestellt werden</strong>
           {email.delivery_problem.subject ? ` („${email.delivery_problem.subject}“` : ' ('}
           {email.delivery_problem.at ? `, ${formatDate(email.delivery_problem.at)})` : ')'}.
           {email.delivery_problem.reason ? ` Begründung: ${email.delivery_problem.reason}` : ''}{' '}
-          Prüfe die Schreibweise und korrigiere die Adresse unten – oder markiere das Problem als
-          erledigt, wenn die Adresse stimmt.{' '}
+          Prüfe die Schreibweise und korrigiere die E-Mail-Adresse unten – oder markiere das
+          Problem als erledigt, wenn die E-Mail-Adresse stimmt.{' '}
           <button type="button" className="btn ghost small" onClick={clearDeliveryProblem}>
             Als erledigt markieren
           </button>
@@ -197,8 +197,8 @@ export default function EmailDetail() {
           <label>E-Mail-Adresse korrigieren</label>
           <EmailEditor current={email.email} onSave={(v) => patch({ email: v })} />
           <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
-            Bei einer geänderten Adresse wird die Bestätigung zurückgesetzt; die Eltern bestätigen die
-            neue Adresse dann einmal neu.
+            Bei einer geänderten E-Mail-Adresse wird die Bestätigung zurückgesetzt; die Eltern
+            bestätigen die neue E-Mail-Adresse dann einmal neu.
           </p>
         </div>
         <div className="field mt">
@@ -310,7 +310,8 @@ export default function EmailDetail() {
           <div>
             <h2 style={{ marginBottom: 4 }}>E-Mail-Adresse löschen</h2>
             <p className="muted" style={{ fontSize: '0.82rem', margin: 0 }}>
-              Entfernt diese Adresse samt aller Verknüpfungen, Sitzungen und Bestätigungs-Tokens. Dies
+              Entfernt diese E-Mail-Adresse samt aller Verknüpfungen, Sitzungen und
+              Bestätigungs-Tokens. Dies
               kann nicht rückgängig gemacht werden.
             </p>
           </div>
@@ -394,8 +395,8 @@ function AddRelatedEmail({
           + Weitere E-Mail-Adresse hinzufügen
         </button>
         <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
-          Z. B. die Adresse des zweiten Elternteils. Sie wird mit denselben Kindern verknüpft wie
-          diese Adresse und sieht damit dieselben Fotos.
+          Z. B. die E-Mail-Adresse des zweiten Elternteils. Sie wird mit denselben Kindern
+          verknüpft wie diese E-Mail-Adresse und sieht damit dieselben Fotos.
         </p>
       </div>
     );
@@ -437,8 +438,8 @@ function AddRelatedEmail({
       </div>
       <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
         {childCount > 0
-          ? `Die Adresse wird mit ${childCount} verknüpften Kind(ern) dieser Adresse verbunden.`
-          : 'Dieser Adresse ist noch kein Kind zugewiesen – die neue Adresse wird vorerst ohne Kind-Verknüpfung angelegt.'}
+          ? `Die E-Mail-Adresse wird mit ${childCount} verknüpften Kind(ern) dieser E-Mail-Adresse verbunden.`
+          : 'Dieser E-Mail-Adresse ist noch kein Kind zugewiesen – die neue E-Mail-Adresse wird vorerst ohne Kind-Verknüpfung angelegt.'}
       </p>
     </form>
   );

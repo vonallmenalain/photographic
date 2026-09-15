@@ -223,9 +223,9 @@ interface NotifyInfo {
 }
 
 /**
- * Dialog für die Sammel-Einladung an die Adressen des Auftrags. Zeigt die
+ * Dialog für die Sammel-Einladung an die E-Mail-Adressen des Auftrags. Zeigt die
  * komplette Empfängerliste mit Häkchen (standardmässig alle ausgewählt), sodass
- * der Admin einzelne Adressen abwählen kann. Zusätzlich lässt sich „E-Mail an
+ * der Admin einzelne E-Mail-Adressen abwählen kann. Zusätzlich lässt sich „E-Mail an
  * mich senden“ aktivieren, um eine Kopie an das angemeldete Admin-Konto zu
  * schicken.
  */
@@ -249,7 +249,7 @@ export function NotifyAllModal({
     api<NotifyInfo>(`/api/admin/events/${eventId}/notify`, { admin: true })
       .then((r) => {
         setInfo(r);
-        // Default: alle Adressen ausgewählt.
+        // Default: alle E-Mail-Adressen ausgewählt.
         setSelected(new Set(r.recipients.map((x) => x.id)));
       })
       .catch((err) =>
@@ -298,7 +298,7 @@ export function NotifyAllModal({
       const note = res.devLogOnly
         ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
         : '';
-      onSent(`Einladung an ${res.sent} von ${res.total} Adresse(n) gesendet.${extra}${self}${note}`);
+      onSent(`Einladung an ${res.sent} von ${res.total} E-Mail-Adresse(n) gesendet.${extra}${self}${note}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Versand fehlgeschlagen.');
       setBusy(false);
@@ -326,7 +326,7 @@ export function NotifyAllModal({
       {error && <Alert kind="error">{error}</Alert>}
       <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
         Die Einladung enthält den Link zur App, eine Kurzanleitung zur Verifizierung sowie die
-        Hinweise zum Schutz der Fotos und zur Aufbewahrungsfrist. Wähle aus, an welche Adressen sie
+        Hinweise zum Schutz der Fotos und zur Aufbewahrungsfrist. Wähle aus, an welche E-Mail-Adressen sie
         gesendet werden soll – standardmässig sind alle ausgewählt.
       </p>
       {loading ? (
@@ -494,7 +494,7 @@ function CreateEmailModal({
             ))}
           </select>
           <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6, marginBottom: 0 }}>
-            Verknüpfst du ein Kind, ist die Adresse direkt diesem Auftrag zugeordnet.
+            Verknüpfst du ein Kind, ist die E-Mail-Adresse direkt diesem Auftrag zugeordnet.
           </p>
         </div>
       </form>

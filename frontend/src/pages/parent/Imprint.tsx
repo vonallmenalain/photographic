@@ -45,7 +45,7 @@ export default function Imprint() {
         </p>
         <p>
           Verantwortlich für den Inhalt dieser Website ist Beatrice von Allmen unter der oben
-          genannten Adresse.
+          genannten Postadresse.
         </p>
 
         <h2>Was hier verkauft wird</h2>

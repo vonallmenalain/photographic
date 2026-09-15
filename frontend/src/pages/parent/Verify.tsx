@@ -160,7 +160,7 @@ export default function Verify() {
       });
       setResent(res.message);
     } catch {
-      setResent('Falls die Adresse freigeschaltet ist, haben wir Ihnen erneut eine Nachricht gesendet.');
+      setResent('Falls die E-Mail-Adresse freigeschaltet ist, haben wir Ihnen erneut eine Nachricht gesendet.');
     }
   };
 

@@ -130,7 +130,7 @@ export function RosterTable({
   showEmails: boolean;
   actions: RosterActions;
   busy: boolean;
-  /** Adminbereich: Adresse verlinkt auf die E-Mail-Verwaltung. */
+  /** Adminbereich: E-Mail-Adresse verlinkt auf die E-Mail-Verwaltung. */
   emailLink?: (parent: RosterParent) => string;
 }) {
   const [mergeFor, setMergeFor] = useState<string | null>(null);
@@ -312,7 +312,7 @@ export interface InviteEntry {
   parentName: string;
 }
 
-/** „Lena Müller; anna@x.ch, papa@x.ch“ → Kind + Adressen; Wörter ohne @ bilden den Namen. */
+/** „Lena Müller; anna@x.ch, papa@x.ch“ → Kind + E-Mail-Adressen; Wörter ohne @ bilden den Namen. */
 export function parseInviteLines(text: string): { entries: InviteEntry[]; problems: string[] } {
   const entries: InviteEntry[] = [];
   const problems: string[] = [];
@@ -325,7 +325,7 @@ export function parseInviteLines(text: string): { entries: InviteEntry[]; proble
     const invalid = emails.filter((e) => !EMAIL_RE.test(e));
     if (!childName) problems.push(`Zeile ${i + 1}: Name des Kindes fehlt.`);
     else if (emails.length === 0) problems.push(`Zeile ${i + 1}: keine E-Mail-Adresse für „${childName}“.`);
-    else if (invalid.length) problems.push(`Zeile ${i + 1}: ungültige Adresse ${invalid.join(', ')}.`);
+    else if (invalid.length) problems.push(`Zeile ${i + 1}: ungültige E-Mail-Adresse ${invalid.join(', ')}.`);
     else entries.push({ childName, emails: [...new Set(emails)], parentName: '' });
   });
   return { entries, problems };
@@ -380,7 +380,7 @@ export function InviteForm({
       <p className="muted" style={{ fontSize: '0.88rem', marginTop: 0 }}>
         Pro Zeile ein Kind und die E-Mail-Adresse(n) der Eltern, z. B.{' '}
         <code>Lena Müller; anna@beispiel.ch, papa@beispiel.ch</code>. Die Eltern erhalten sofort eine
-        E-Mail{consentRequired ? ' mit dem Link zum Einverständnis' : ' zur Bestätigung ihrer Adresse'}.
+        E-Mail{consentRequired ? ' mit dem Link zum Einverständnis' : ' zur Bestätigung ihrer E-Mail-Adresse'}.
         Bereits eingetragene Kinder werden anhand des Namens erkannt.
       </p>
       {error && <Alert kind="error">{error}</Alert>}
@@ -403,7 +403,7 @@ export function InviteForm({
           {parsed.entries.length > 0 && (
             <p className="muted" style={{ fontSize: '0.85rem', margin: '0 0 8px' }}>
               {parsed.entries.length} Kind(er),{' '}
-              {new Set(parsed.entries.flatMap((e) => e.emails)).size} Adresse(n) erkannt.
+              {new Set(parsed.entries.flatMap((e) => e.emails)).size} E-Mail-Adresse(n) erkannt.
             </p>
           )}
         </div>

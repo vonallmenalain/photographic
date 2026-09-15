@@ -35,7 +35,7 @@ interface Overview {
  * ausgehenden E-Mails (gemeldet vom Resend-Webhook bzw. bei einem SMTP-Fehler
  * direkt beim Versand). Standardmässig nur die offenen Probleme; auf Wunsch
  * alle protokollierten E-Mails. Jedes Problem lässt sich als erledigt
- * markieren, sobald die Adresse geprüft bzw. korrigiert ist.
+ * markieren, sobald die E-Mail-Adresse geprüft bzw. korrigiert ist.
  *
  * Bewusst *nicht* hier: die Einrichtung des Resend-Webhooks (Webhook-Adresse
  * und Signing Secret). Sie wird einmalig vorgenommen und ist eine reine
@@ -99,9 +99,9 @@ export default function EmailDeliveries() {
       <p className="soft">
         Ob eine E-Mail wirklich ankommt, weiss nur der Mail-Anbieter (Resend). Ist der Resend-Webhook
         eingerichtet, meldet er jede E-Mail, die nicht zugestellt werden konnte, hierher – du musst
-        dich dafür nicht bei Resend anmelden. Die betroffene Adresse wird im Auftrag rot markiert
-        („Nicht zustellbar“), bis du das Problem hier als erledigt markierst oder die Adresse
-        korrigierst.
+        dich dafür nicht bei Resend anmelden. Die betroffene E-Mail-Adresse wird im Auftrag rot
+        markiert („Nicht zustellbar“), bis du das Problem hier als erledigt markierst oder die
+        E-Mail-Adresse korrigierst.
       </p>
 
       {overview && (
@@ -183,7 +183,7 @@ export default function EmailDeliveries() {
                     <td style={{ whiteSpace: 'nowrap' }}>{formatDate(d.status_at)}</td>
                     <td style={{ wordBreak: 'break-all' }}>
                       {d.parent_email_id ? (
-                        <Link to={`/admin/emails/${d.parent_email_id}`} title="Adresse im Adminbereich öffnen">
+                        <Link to={`/admin/emails/${d.parent_email_id}`} title="E-Mail-Adresse im Adminbereich öffnen">
                           {d.to}
                         </Link>
                       ) : (
@@ -211,7 +211,7 @@ export default function EmailDeliveries() {
                           className="btn secondary small"
                           disabled={busyId === d.id}
                           onClick={() => void acknowledge(d)}
-                          title="Problem als erledigt markieren (entfernt auch die rote Markierung an der Adresse)"
+                          title="Problem als erledigt markieren (entfernt auch die rote Markierung an der E-Mail-Adresse)"
                         >
                           Erledigt
                         </button>

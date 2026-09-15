@@ -86,7 +86,7 @@ export async function runAutoReminders(): Promise<{ consent: number; orders: num
   return { consent, orders };
 }
 
-/** „Ihre Fotos sind noch X Tage verfügbar“ an alle Adressen des Auftrags ohne Bestellung. */
+/** „Ihre Fotos sind noch X Tage verfügbar“ an alle E-Mail-Adressen des Auftrags ohne Bestellung. */
 async function sendOrderReminder(ev: AutoEvent): Promise<number> {
   const [ids, ordered] = await Promise.all([eventEmailIds(ev.id), orderedEmailIdsForEvent(ev.id)]);
   const emails = await getManyById<{ email: string; status: string }>(
@@ -111,7 +111,7 @@ async function sendOrderReminder(ev: AutoEvent): Promise<number> {
     await setById(COL.reminders, newId('rem'), {
       event_id: ev.id,
       sent_at: nowIso(),
-      note: `Automatische Erinnerung an ${sent} Adresse(n) ohne Bestellung`,
+      note: `Automatische Erinnerung an ${sent} E-Mail-Adresse(n) ohne Bestellung`,
       created_at: nowIso(),
     });
   }

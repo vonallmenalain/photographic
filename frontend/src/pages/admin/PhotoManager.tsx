@@ -758,7 +758,7 @@ export function PhotoEmailModal({
       {error && <Alert kind="error">{error}</Alert>}
       <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0 }}>
         Wähle die E-Mail-Adressen aus, die dieses Gruppen-/Klassenfoto sehen dürfen. Es werden alle
-        Adressen dieser Klasse angezeigt – ein Klick genügt zum Zuweisen bzw. Entfernen.
+        E-Mail-Adressen dieser Klasse angezeigt – ein Klick genügt zum Zuweisen bzw. Entfernen.
       </p>
 
       <div className="field" style={{ marginBottom: 12 }}>
@@ -805,8 +805,8 @@ export function PhotoEmailModal({
 
       <p className="muted" style={{ fontSize: '0.78rem', marginTop: 12, marginBottom: 0 }}>
         {assignedIds.size === 0
-          ? 'Noch keine Adresse zugewiesen.'
-          : `${assignedIds.size} Adresse(n) zugewiesen.`}
+          ? 'Noch keine E-Mail-Adresse zugewiesen.'
+          : `${assignedIds.size} E-Mail-Adresse(n) zugewiesen.`}
       </p>
     </Modal>
   );

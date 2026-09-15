@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, ReactNode 
 import { api } from '../api/client';
 import { firebaseSignOut } from '../lib/firebase';
 
-/** Klasse, für die die angemeldete Adresse als Lehrperson eingetragen ist. */
+/** Klasse, für die die angemeldete E-Mail-Adresse als Lehrperson eingetragen ist. */
 export interface TeacherClassRef {
   id: string;
   name: string;
@@ -22,7 +22,7 @@ interface ParentAuthState {
   loading: boolean;
   verified: boolean;
   email: string | null;
-  /** Klassen der Klassenerfassung, für die diese Adresse Lehrperson ist. */
+  /** Klassen der Klassenerfassung, für die diese E-Mail-Adresse Lehrperson ist. */
   teacherClasses: TeacherClassRef[];
   /** Eigene Kinder, für die noch ein Einverständnis aussteht. */
   openConsents: number;
