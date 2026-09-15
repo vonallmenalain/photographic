@@ -8,6 +8,7 @@ import {
   SendToSelfCheckbox,
   type DeliveryProblemInfo,
 } from '../../components/common';
+import { ConsentDispatchModal } from '../../components/consentDispatch';
 import { formatPrice, formatDateShort } from '../../lib/format';
 
 export interface Buyer {
@@ -290,12 +291,17 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [dispatchMode, setDispatchMode] = useState<'invitation' | 'reminder' | null>(null);
+  const [showConsent, setShowConsent] = useState(false);
   const [msg, setMsg] = useState('');
 
   // Eine Einladung lässt sich jederzeit (erneut) versenden. Erst wenn bereits eine
   // Einladung raus ist (invited_at gesetzt), steht zusätzlich der Erinnerungs-Versand
   // mit dem passenden Erinnerungstext zur Verfügung.
   const canSendReminder = !!event.invited_at;
+  // Die Einverständniserklärung lässt sich auch bei Aufträgen nachholen, die
+  // nicht über die Klassenerfassung entstanden sind (z. B. Excel-Import). In der
+  // laufenden Erfassung macht das die Erfassungsansicht, im Archiv ist es zu spät.
+  const canSendConsent = event.status !== 'collecting' && event.status !== 'archived';
 
   const add = async () => {
     setError('');
@@ -383,6 +389,19 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
             Erinnerung versenden
           </button>
         )}
+        {canSendConsent && (
+          <button
+            className="btn secondary small"
+            type="button"
+            onClick={() => {
+              setMsg('');
+              setShowConsent(true);
+            }}
+            title="Die Eltern auffordern, die Einverständniserklärung auszufüllen"
+          >
+            Einverständniserklärung versenden
+          </button>
+        )}
       </div>
 
       {dispatchMode && (
@@ -393,6 +412,19 @@ function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload:
           onClose={() => setDispatchMode(null)}
           onSent={(message) => {
             setDispatchMode(null);
+            setMsg(message);
+            setError('');
+            onReload();
+          }}
+        />
+      )}
+
+      {showConsent && (
+        <ConsentDispatchModal
+          eventId={event.id}
+          onClose={() => setShowConsent(false)}
+          onSent={(message) => {
+            setShowConsent(false);
             setMsg(message);
             setError('');
             onReload();

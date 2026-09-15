@@ -9,6 +9,7 @@ import {
   SendToSelfCheckbox,
   type DeliveryProblemInfo,
 } from '../../components/common';
+import { ConsentDispatchModal } from '../../components/consentDispatch';
 
 interface EventRef {
   id: string;
@@ -42,15 +43,23 @@ interface ChildRef {
 export default function EventEmails({
   eventId,
   eventChildren,
+  eventStatus = '',
 }: {
   eventId: string;
   eventChildren: ChildRef[];
+  /**
+   * Status des Auftrags. Steuert, ob „Einverständniserklärung versenden“
+   * angeboten wird: In der Klassenerfassung übernimmt das die Erfassungsansicht,
+   * bei einem archivierten Auftrag ist es zu spät.
+   */
+  eventStatus?: string;
 }) {
   const [emails, setEmails] = useState<EmailRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [showNotify, setShowNotify] = useState(false);
+  const [showConsent, setShowConsent] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
 
@@ -97,6 +106,20 @@ export default function EventEmails({
           <button className="btn small" onClick={() => setShowNotify(true)}>
             Einladung per E-Mail senden
           </button>
+          {/* Auch ohne Klassenerfassung (z. B. Excel-Import) lässt sich die
+              Einverständniserklärung nachträglich bei den Eltern einholen. */}
+          {eventStatus !== 'collecting' && eventStatus !== 'archived' && (
+            <button
+              className="btn small"
+              onClick={() => {
+                setMsg('');
+                setShowConsent(true);
+              }}
+              title="Die Eltern auffordern, die Einverständniserklärung auszufüllen"
+            >
+              Einverständniserklärung versenden
+            </button>
+          )}
           <button className="btn secondary small" onClick={() => setShowCreate(true)}>
             + E-Mail anlegen
           </button>
@@ -199,6 +222,18 @@ export default function EventEmails({
           onClose={() => setShowNotify(false)}
           onSent={(message) => {
             setShowNotify(false);
+            setMsg(message);
+            setError('');
+          }}
+        />
+      )}
+
+      {showConsent && (
+        <ConsentDispatchModal
+          eventId={eventId}
+          onClose={() => setShowConsent(false)}
+          onSent={(message) => {
+            setShowConsent(false);
             setMsg(message);
             setError('');
           }}

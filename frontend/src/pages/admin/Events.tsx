@@ -46,6 +46,12 @@ interface EventRow {
     teacher_email: string;
     teacher_name: string;
     open: boolean;
+    /**
+     * Nachträglich eingeholtes Einverständnis zu einem Auftrag ohne
+     * Klassenerfassung (z. B. Excel-Import) – solche Aufträge können nicht in
+     * den Status „Erfassung“ wechseln.
+     */
+    consent_only?: boolean;
   } | null;
   consent_summary?: { children: number; answered: number; none: number } | null;
 }
@@ -399,10 +405,10 @@ function EventCard({
               title="Status des Auftrags ändern"
             >
               {/* „Erfassung“ nur anzeigen, solange der Auftrag darin ist bzw. wenn
-                  er eine Klassenerfassung hat (zurück in die Erfassung). */}
-              {(ev.status === 'collecting' || ev.registration) && ev.status !== 'published' && (
-                <option value="collecting">Erfassung</option>
-              )}
+                  er aus einer echten Klassenerfassung stammt (zurück in die
+                  Erfassung). Ein bloss nachgeholtes Einverständnis zählt nicht. */}
+              {(ev.status === 'collecting' || (ev.registration && !ev.registration.consent_only)) &&
+                ev.status !== 'published' && <option value="collecting">Erfassung</option>}
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -432,7 +438,11 @@ function EventCard({
                   navigate(`/admin/events/${ev.id}/erfassung`);
                 }}
                 disabled={busy}
-                title="Klassenliste und Einverständnisse der Klassenerfassung ansehen"
+                title={
+                  ev.registration.consent_only
+                    ? 'Stand der Einverständniserklärungen ansehen'
+                    : 'Klassenliste und Einverständnisse der Klassenerfassung ansehen'
+                }
               >
                 Einverständnisse
               </button>

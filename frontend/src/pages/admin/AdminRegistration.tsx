@@ -27,6 +27,11 @@ interface Registration {
   parent_link_enabled: boolean;
   parent_link_url: string | null;
   consent_required: boolean;
+  /**
+   * Nachträglich eingeholtes Einverständnis zu einem Auftrag ohne
+   * Klassenerfassung (z. B. Excel-Import): keine Lehrperson, kein Klassenlink.
+   */
+  consent_only?: boolean;
   auto_consent_reminder: boolean;
   auto_consent_reminder_days: number;
   auto_consent_reminder_sent_at: string | null;
@@ -181,6 +186,9 @@ export default function AdminRegistration() {
 
   const reg = data.registration;
   const open = reg.open;
+  // Nachträgliches Einverständnis: Es gibt keine Erfassung, nur das Formular –
+  // entsprechend heissen die Knöpfe hier anders.
+  const consentOnly = reg.consent_only === true;
   const facts = [
     reg.school,
     reg.shooting_date_text ? `Fototermin ${reg.shooting_date_text}` : '',
@@ -196,7 +204,8 @@ export default function AdminRegistration() {
         <div>
           <h1 style={{ marginBottom: 2 }}>{data.event.name}</h1>
           <p className="soft" style={{ marginTop: 0 }}>
-            Klassenerfassung{facts.length ? ` · ${facts.join(' · ')}` : ''}
+            {consentOnly ? 'Einverständniserklärung' : 'Klassenerfassung'}
+            {facts.length ? ` · ${facts.join(' · ')}` : ''}
           </p>
         </div>
         <div className="row" style={{ gap: 10 }}>
@@ -206,16 +215,16 @@ export default function AdminRegistration() {
           </button>
           {open ? (
             <button className="btn" type="button" onClick={close} disabled={busy}>
-              In Auftrag übernehmen
+              {consentOnly ? 'Einverständnis abschliessen' : 'In Auftrag übernehmen'}
             </button>
           ) : (
             <>
               <Link className="btn secondary" to={`/admin/import?eventId=${id}`}>
                 Zum Assistenten
               </Link>
-              {data.event.status !== 'published' && (
+              {(consentOnly || data.event.status !== 'published') && (
                 <button className="btn ghost" type="button" onClick={reopen} disabled={busy}>
-                  Erfassung wieder öffnen
+                  {consentOnly ? 'Einverständnis wieder öffnen' : 'Erfassung wieder öffnen'}
                 </button>
               )}
             </>
@@ -230,13 +239,24 @@ export default function AdminRegistration() {
       {msg && <Alert kind="success">{msg}</Alert>}
       {!open && (
         <Alert kind="info">
-          Die Erfassung ist geschlossen{reg.closed_at ? ` (${formatDate(reg.closed_at)})` : ''}. Klassenlink und Formular sind
-          inaktiv; die Liste bleibt hier einsehbar.
+          {consentOnly ? 'Das Einverständnis-Formular ist geschlossen' : 'Die Erfassung ist geschlossen'}
+          {reg.closed_at ? ` (${formatDate(reg.closed_at)})` : ''}.{' '}
+          {consentOnly
+            ? 'Die Eltern können nicht mehr antworten; die Antworten bleiben hier einsehbar.'
+            : 'Klassenlink und Formular sind inaktiv; die Liste bleibt hier einsehbar.'}
         </Alert>
       )}
 
       <StatRow stats={data.roster.stats} consentRequired={reg.consent_required} />
 
+      {consentOnly ? (
+        <Alert kind="info">
+          Dieser Auftrag wurde nicht über die Klassenerfassung angelegt. Die Eltern wurden nur
+          gebeten, die Einverständniserklärung auszufüllen – es gibt deshalb keine Lehrperson und
+          keinen Klassenlink. Weitere Aufforderungen verschickst du im Auftrag über
+          „Einverständniserklärung versenden“.
+        </Alert>
+      ) : (
       <div className="card mb">
         <h2 style={{ marginTop: 0 }}>Lehrperson</h2>
         {reg.teacher_email ? (
@@ -269,6 +289,7 @@ export default function AdminRegistration() {
           </span>
         </div>
       </div>
+      )}
 
       <div className="card mb">
         <div className="row between">

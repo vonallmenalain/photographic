@@ -108,6 +108,35 @@ Fotos freigeschaltet sind – über den Knopf **„Zur Einverständniserklärung
 neben „Problem melden“. Er erscheint nur, wenn für diese E-Mail-Adresse
 tatsächlich ein Einverständnis angefragt oder bereits abgegeben wurde.
 
+## 10.5a Einverständnis zu einem bestehenden Auftrag nachholen
+
+Aufträge, die auf dem gewohnten Weg entstanden sind (Excel-Import, Kinder von
+Hand angelegt), haben keine Klassenerfassung – trotzdem lässt sich das
+Einverständnis der Eltern nachträglich einholen:
+
+- **Wo:** im Assistenten (**Aufträge erfassen → E-Mail-Adressen**) gleich neben
+  „Einladung per E-Mail senden“, und bei veröffentlichten Aufträgen unter
+  **Aufträge → Auftrag aufklappen → „Einladungen & Erinnerungen“**. Der Knopf
+  heisst **„Einverständniserklärung versenden“**.
+- **Popup:** Es listet alle E-Mail-Adressen des Auftrags mit Bestätigungs-Status,
+  bisheriger Antwort und dem letzten Versand. Vorausgewählt sind alle Adressen,
+  von denen noch nicht für jedes ihrer Kinder eine Antwort vorliegt; bereits
+  beantwortete lassen sich zusätzlich anhaken (die Eltern können ihre Antwort
+  dann ändern). Adressen ohne Kind in diesem Auftrag (nur ein Foto direkt
+  zugewiesen) können nichts beantworten und sind nicht auswählbar.
+- **E-Mail:** dieselbe Aufforderung wie in der Klassenerfassung – mit einem
+  persönlichen, einmalig einlösbaren Link direkt auf das Formular. Eine Kopie an
+  das eigene Konto gibt es hier bewusst nicht, weil der Link nur für die jeweilige
+  Adresse gilt.
+- **Status:** Der Auftrag bleibt, wo er ist („In Bearbeitung“ bzw.
+  „Veröffentlicht“) – er wechselt **nicht** in die Erfassung. Beim ersten Versand
+  bekommt er nur das Einverständnis-Formular (`registration.consent_only`), ohne
+  Lehrperson und ohne Klassenlink.
+- **Übersicht und Abschluss:** Über „Einverständnisse“ in der Aufträge-Liste
+  öffnet sich die bekannte Ansicht mit Klassenliste, Antworten, Verlauf und CSV.
+  Dort schliesst **„Einverständnis abschliessen“** das Formular; der Status des
+  Auftrags ändert sich dabei nicht. Ein erneuter Versand öffnet es wieder.
+
 ## 10.6 Automatische Erinnerungen
 
 Beide sind je Auftrag einschaltbar und standardmässig **aus**:
@@ -136,5 +165,11 @@ Stunden.
   Anmeldung macht nur Anmelde-Token ungültig, nicht diese Links.
 - Routen: Eltern `/api/parent/registration/:token`, `/api/parent/consents…`;
   Lehrperson `/api/teacher/classes…`; Admin `/api/admin/registrations`,
-  `/api/admin/events/:id/registration…`.
+  `/api/admin/events/:id/registration…` sowie
+  `/api/admin/events/:id/send-consent` (nachträgliche Aufforderung) und
+  `/api/admin/events/:id/reminder-recipients` (Empfängerliste des Popups mit
+  Stand der Einverständnisse).
+- `registration.consent_only` markiert ein nachträglich angehängtes Formular:
+  Es hängt nicht am Status `collecting`, sondern bleibt offen, bis es
+  abgeschlossen oder der Auftrag archiviert wird.
 - Der QR-Code wird im Backend erzeugt (`qrcode`) und als SVG mitgeliefert.

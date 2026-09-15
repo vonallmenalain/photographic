@@ -429,6 +429,13 @@ Einstellungen. Der Wortlaut der Einverständniserklärung steht unter
 **Einstellungen**. Ablauf, Optionen und Sicherheitsmodell im Detail:
 [docs/10-klassenerfassung.md](10-klassenerfassung.md).
 
+Bei einem Auftrag, der **ohne** Klassenerfassung entstanden ist (Excel-Import,
+Kinder von Hand), lässt sich das Einverständnis nachträglich einholen:
+**„Einverständniserklärung versenden“** neben „Einladung per E-Mail senden“
+(Assistent → E-Mail-Adressen) bzw. unter „Einladungen & Erinnerungen“. Das Popup
+zeigt vor dem Versand alle Empfänger-Adressen samt bisheriger Antwort; der
+Auftrag bleibt dabei in seinem Status.
+
 Automatische Erinnerungen (je Auftrag, standardmässig aus): an Eltern ohne
 Antwort X Tage vor der Rückmeldefrist und an Eltern ohne Bestellung X Tage vor
 Ablauf der Bestellfrist (Auftrag aufklappen → „Einladungen & Erinnerungen“).
