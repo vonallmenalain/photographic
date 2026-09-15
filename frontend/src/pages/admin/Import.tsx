@@ -284,7 +284,11 @@ export default function AuftraegeErfassen() {
 
               {/* E-Mail-Adressen (Eltern) dieses Auftrags */}
               <div id="ev-emails">
-                <EventEmails eventId={eventId} eventChildren={children} />
+                <EventEmails
+                  eventId={eventId}
+                  eventChildren={children}
+                  eventStatus={event?.status ?? ''}
+                />
               </div>
             </>
           )}

@@ -84,8 +84,13 @@ import {
   daysLeftUntil,
   recordInvitationsSent,
   invitationsSentForEvent,
+  consentRequestsSentForEvent,
 } from '../services/reminders';
-import { DEFAULT_CONSENT_TEXT, type ConsentDecision } from '../services/consent';
+import {
+  CONSENT_SHORT_LABELS,
+  DEFAULT_CONSENT_TEXT,
+  type ConsentDecision,
+} from '../services/consent';
 import {
   type RegistrationEvent,
   createRegistrationEvents,
@@ -110,6 +115,10 @@ import {
   closeRegistration,
   reopenRegistration,
   recomputeChildConsent,
+  registrationOpen,
+  ensureConsentRegistration,
+  consentTargetsForEvent,
+  sendConsentRequests,
 } from '../services/registration';
 
 const router = Router();
@@ -993,7 +1002,8 @@ router.patch(
     // Erfassung über das Status-Feld verlässt, schliesst sie damit (Klassenlink
     // und Formular sind dann zu); zurück in die Erfassung öffnet sie wieder.
     if (data.status === 'collecting') {
-      if (!event.registration) {
+      const reg = event.registration as { consent_only?: boolean } | undefined;
+      if (!reg || reg.consent_only) {
         throw new ApiError(400, 'Nur Aufträge aus einer Klassenerfassung können in den Status „Erfassung“.');
       }
       if (event.status === 'published') {
@@ -3155,20 +3165,20 @@ router.get(
   '/events/:id/reminder-recipients',
   asyncHandler(async (req, res) => {
     const eventId = req.params.id;
-    const event = await getById<{ expires_at: string | null; status: string }>(
-      COL.events,
-      eventId,
-    );
+    const event = await getById<RegistrationEvent>(COL.events, eventId);
     if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
 
-    const [children, childLinks, photos, photoLinks, ordered, invitedAt] = await Promise.all([
-      runQuery<{ name: string }>(col(COL.children).where('event_id', '==', eventId)),
-      runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
-      runQuery<{ id: string }>(col(COL.photos).where('event_id', '==', eventId)),
-      runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
-      orderedEmailIdsForEvent(eventId),
-      invitationsSentForEvent(eventId),
-    ]);
+    const [children, childLinks, photos, photoLinks, ordered, invitedAt, consentTargets, consentSentAt] =
+      await Promise.all([
+        runQuery<{ name: string }>(col(COL.children).where('event_id', '==', eventId)),
+        runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
+        runQuery<{ id: string }>(col(COL.photos).where('event_id', '==', eventId)),
+        runQuery<{ email_id: string; photo_id: string }>(col(COL.photoEmails)),
+        orderedEmailIdsForEvent(eventId),
+        invitationsSentForEvent(eventId),
+        consentTargetsForEvent(eventId),
+        consentRequestsSentForEvent(eventId),
+      ]);
     children.sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
     const childIds = new Set(children.map((c) => c.id));
@@ -3195,6 +3205,10 @@ router.get(
     const toView = (id: string) => {
       const e = emailDocs.get(id);
       if (!e || !e.email || e.status === 'disabled') return null;
+      // Stand der Einverständniserklärung dieser Adresse – Grundlage für das
+      // Versand-Popup „Einverständniserklärung versenden“. Adressen ohne Kind in
+      // diesem Auftrag können nichts beantworten (`consentChildren` = 0).
+      const target = consentTargets.get(e.id);
       return {
         id: e.id,
         email: e.email,
@@ -3204,6 +3218,11 @@ router.get(
         hasOrdered: ordered.has(e.id),
         invitedAt: invitedAt.get(e.id) ?? null,
         deliveryProblem: deliveryProblemView(e.delivery_problem),
+        consentChildren: target?.childNames.length ?? 0,
+        consentDecision: target?.decision ?? null,
+        consentDecisionLabel: target?.decision ? CONSENT_SHORT_LABELS[target.decision] : null,
+        consentPending: target ? target.pending : false,
+        consentSentAt: consentSentAt.get(e.id) ?? null,
       };
     };
 
@@ -3233,6 +3252,7 @@ router.get(
       .filter((e): e is NonNullable<typeof e> => e !== null)
       .sort((a, b) => a.email.localeCompare(b.email));
 
+    const reg = event.registration;
     res.json({
       children: childrenOut,
       otherEmails,
@@ -3240,6 +3260,53 @@ router.get(
       devLogOnly: config.mail.devLogOnly,
       retentionDays: config.retentionDaysDefault,
       daysLeft: daysLeftUntil(event.expires_at ?? null),
+      eventStatus: event.status,
+      // Einverständnis: läuft das Formular bereits, und stammt es aus einer
+      // Klassenerfassung oder wurde es nachträglich angehängt?
+      consentOpen: registrationOpen(event),
+      consentOnly: reg?.consent_only === true,
+      consentRequired: reg ? reg.consent_required !== false : false,
+    });
+  }),
+);
+
+/**
+ * „Einverständniserklärung versenden“: Fordert die Eltern eines bereits
+ * erfassten Auftrags (z. B. Excel-Import, Status „In Bearbeitung“) auf, die
+ * Einverständniserklärung auszufüllen. Beim ersten Versand bekommt der Auftrag
+ * dafür ein Einverständnis-Formular; der Status des Auftrags ändert sich nicht.
+ * Jede Adresse erhält einen persönlichen, einmalig einlösbaren Link.
+ */
+router.post(
+  '/events/:id/send-consent',
+  asyncHandler(async (req, res) => {
+    const { emailIds, reminder } = parse(
+      z.object({
+        emailIds: z.array(z.string()).optional(),
+        reminder: z.boolean().default(false),
+      }),
+      req.body ?? {},
+    );
+    const event = await getById<RegistrationEvent>(COL.events, req.params.id);
+    if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
+    const ev = await ensureConsentRegistration(event, req.admin!.username);
+    // Nur Adressen zulassen, die wirklich zu diesem Auftrag gehören.
+    const allowed = await eventEmailIds(ev.id);
+    const selected = emailIds ? emailIds.filter((id) => allowed.has(id)) : null;
+    if (emailIds && selected!.length === 0) {
+      throw new ApiError(400, 'Es wurde keine (aktive) E-Mail-Adresse ausgewählt.');
+    }
+    const result = await sendConsentRequests(ev, selected, {
+      actor: req.admin!.username,
+      reminder,
+    });
+    res.json({
+      sent: result.sent,
+      failed: result.failed.length,
+      failedEmails: result.failed,
+      skippedEmails: result.skipped,
+      total: result.total,
+      devLogOnly: config.mail.devLogOnly,
     });
   }),
 );

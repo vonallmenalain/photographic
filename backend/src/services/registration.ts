@@ -83,6 +83,14 @@ export interface RegistrationDoc {
   parent_link_enabled: boolean;
   parent_link_token: string | null;
   consent_required: boolean;
+  /**
+   * Nachträglich eingeholtes Einverständnis zu einem Auftrag, der NICHT aus
+   * einer Klassenerfassung stammt (z. B. Excel-Import): Es gibt keine
+   * Lehrperson und keinen Klassenlink, nur das Formular für die Eltern. Solche
+   * Aufträge bleiben in ihrem Status („In Bearbeitung“, „Veröffentlicht“); das
+   * Formular ist offen, bis es abgeschlossen oder der Auftrag archiviert wird.
+   */
+  consent_only?: boolean;
   auto_consent_reminder: boolean;
   auto_consent_reminder_days: number;
   auto_consent_reminder_sent_at: string | null;
@@ -161,7 +169,11 @@ export function registrationOf(ev: RegistrationEvent | null | undefined): Regist
 export function registrationOpen(ev: RegistrationEvent | null | undefined): boolean {
   if (!ev) return false;
   const reg = registrationOf(ev);
-  return ev.status === 'collecting' && !!reg && !reg.closed_at;
+  if (!reg || reg.closed_at) return false;
+  // Nachträglich eingeholtes Einverständnis: Der Auftrag ist bereits erfasst und
+  // bleibt „In Bearbeitung“ bzw. veröffentlicht – das Formular ist trotzdem offen.
+  if (reg.consent_only) return ev.status !== 'archived';
+  return ev.status === 'collecting';
 }
 
 export function isTeacherOf(ev: RegistrationEvent | null | undefined, email: string): boolean {
@@ -856,7 +868,7 @@ async function sendConsentInvitationTo(
     reminder,
     consentRequired: reg?.consent_required ?? true,
   });
-  await recordInvitationsSent(ev.id, [emailId]);
+  await recordInvitationsSent(ev.id, [emailId], { consent: reg?.consent_required !== false });
 }
 
 export async function inviteParents(
@@ -929,6 +941,190 @@ export async function inviteParents(
     'registration.invite',
     `${ev.id}: ${result.sent} Einladung(en), ${result.childrenCreated} neue Kinder, ${result.failed.length} fehlgeschlagen`,
     actor,
+  );
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Einverständnis zu einem bereits erfassten Auftrag nachholen
+// ---------------------------------------------------------------------------
+
+/**
+ * Hängt einem Auftrag, der NICHT über die Klassenerfassung entstanden ist
+ * (Excel-Import, Kinder von Hand angelegt), das Einverständnis-Formular an.
+ *
+ * Der Auftrag bleibt dabei in seinem Status – aus „In Bearbeitung“ wird also
+ * keine Erfassung. Es entsteht nur das Nötigste: Einverständnis verlangt, keine
+ * Lehrperson, kein Klassenlink. War schon einmal ein Einverständnis offen und
+ * wurde es abgeschlossen, wird ausschliesslich das Formular wieder geöffnet –
+ * der Klassenlink zur Selbstregistrierung bleibt zu, damit sich nachträglich
+ * keine fremden Kinder eintragen können.
+ */
+export async function ensureConsentRegistration(
+  ev: RegistrationEvent,
+  actor: string,
+): Promise<RegistrationEvent> {
+  if (ev.status === 'archived') {
+    throw new ApiError(400, 'Für einen archivierten Auftrag kann kein Einverständnis eingeholt werden.');
+  }
+  const reg = registrationOf(ev);
+  if (!reg) {
+    const registration: RegistrationDoc = {
+      school: '',
+      shooting_date: null,
+      deadline: null,
+      teacher_name: '',
+      teacher_email: '',
+      teacher_email_id: null,
+      // Die E-Mail-Adressen sind bereits erfasst; die App lädt sie nur noch ein.
+      teacher_enters_emails: true,
+      parent_link_enabled: false,
+      parent_link_token: null,
+      consent_required: true,
+      consent_only: true,
+      auto_consent_reminder: false,
+      auto_consent_reminder_days: 3,
+      auto_consent_reminder_sent_at: null,
+      teacher_link_sent_at: null,
+      teacher_completed_at: null,
+      last_reminder_at: null,
+      closed_at: null,
+      created_at: nowIso(),
+    };
+    await updateById(COL.events, ev.id, { registration, updated_at: nowIso() });
+    await audit('registration.consent_only', `${ev.id}: Einverständnis-Formular angelegt`, actor);
+    return loadEvent(ev.id);
+  }
+
+  const patch: Partial<RegistrationDoc> = {};
+  if (!reg.consent_required) patch.consent_required = true;
+  if (reg.closed_at) {
+    patch.closed_at = null;
+    patch.consent_only = true;
+    patch.parent_link_enabled = false;
+    patch.teacher_enters_emails = true;
+  }
+  if (Object.keys(patch).length === 0) return ev;
+  await patchRegistration(ev.id, patch);
+  await audit('registration.consent_only', `${ev.id}: Einverständnis wieder geöffnet`, actor);
+  return loadEvent(ev.id);
+}
+
+/** Stand einer einzelnen E-Mail-Adresse zum Einverständnis eines Auftrags. */
+export interface ConsentTarget {
+  /** Kinder dieses Auftrags, die an dieser E-Mail-Adresse hängen. */
+  childNames: string[];
+  /** Eigene Antwort dieser Adresse (einschränkendste, falls mehrere Kinder). */
+  decision: ConsentDecision | null;
+  /** Mindestens ein Kind dieser Adresse hat von ihr noch keine Antwort. */
+  pending: boolean;
+}
+
+/**
+ * Für jede E-Mail-Adresse eines Auftrags: die zugeordneten Kinder und was diese
+ * Adresse bereits beantwortet hat. Grundlage des Versand-Popups
+ * „Einverständniserklärung versenden“. Adressen ohne Kind in diesem Auftrag
+ * (nur ein Foto direkt zugewiesen) können nichts beantworten und fehlen deshalb
+ * in dieser Übersicht.
+ */
+export async function consentTargetsForEvent(eventId: string): Promise<Map<string, ConsentTarget>> {
+  const out = new Map<string, ConsentTarget>();
+  const children = await childrenOf(eventId);
+  if (children.length === 0) return out;
+  const nameById = new Map(children.map((c) => [c.id, c.name]));
+  const [links, consents] = await Promise.all([
+    runQuery<{ email_id: string; child_id: string }>(col(COL.emailChildren)),
+    runQuery<ConsentDoc>(col(COL.consents).where('event_id', '==', eventId)),
+  ]);
+  const decisionByPair = new Map<string, ConsentDecision>();
+  for (const c of consents) {
+    if (Number(c.superseded) === 1) continue;
+    decisionByPair.set(`${c.email_id}__${c.child_id}`, c.decision);
+  }
+  const ownDecisions = new Map<string, ConsentDecision[]>();
+  for (const l of links) {
+    const name = nameById.get(l.child_id);
+    if (!name) continue;
+    const target = out.get(l.email_id) ?? { childNames: [], decision: null, pending: false };
+    if (!target.childNames.includes(name)) target.childNames.push(name);
+    const own = decisionByPair.get(`${l.email_id}__${l.child_id}`);
+    if (own) {
+      const list = ownDecisions.get(l.email_id) ?? [];
+      list.push(own);
+      ownDecisions.set(l.email_id, list);
+    } else {
+      target.pending = true;
+    }
+    out.set(l.email_id, target);
+  }
+  for (const [emailId, target] of out) {
+    target.childNames.sort((a, b) => a.localeCompare(b, 'de'));
+    target.decision = combineDecisions(ownDecisions.get(emailId) ?? []).effective;
+  }
+  return out;
+}
+
+export interface ConsentDispatchResult {
+  sent: number;
+  failed: string[];
+  /** Ausgewählte Adressen ohne Kind in diesem Auftrag – für sie gibt es nichts zu beantworten. */
+  skipped: string[];
+  total: number;
+}
+
+/**
+ * Schickt den ausgewählten E-Mail-Adressen die Aufforderung, die
+ * Einverständniserklärung auszufüllen. Jede Adresse erhält einen persönlichen,
+ * einmalig einlösbaren Link auf ihr eigenes Formular – niemand sieht die Daten
+ * einer anderen Familie. Ohne Auswahl gehen alle Adressen des Auftrags an.
+ */
+export async function sendConsentRequests(
+  ev: RegistrationEvent,
+  emailIds: string[] | null,
+  opts: { actor: string; reminder?: boolean },
+): Promise<ConsentDispatchResult> {
+  if (!registrationOpen(ev)) {
+    throw new ApiError(410, 'Das Einverständnis-Formular dieses Auftrags ist abgeschlossen.');
+  }
+  const targets = await consentTargetsForEvent(ev.id);
+  // `null` = keine Auswahl getroffen → alle Adressen des Auftrags.
+  const wanted = emailIds === null ? [...targets.keys()] : [...new Set(emailIds)];
+  const docs = await getManyById<ParentEmailDoc>(COL.parentEmails, wanted);
+  const result: ConsentDispatchResult = { sent: 0, failed: [], skipped: [], total: 0 };
+  for (const emailId of wanted) {
+    const doc = docs.get(emailId);
+    if (!doc || !doc.email || doc.status === 'disabled') continue;
+    const target = targets.get(emailId);
+    if (!target || target.childNames.length === 0) {
+      result.skipped.push(doc.email);
+      continue;
+    }
+    result.total += 1;
+    try {
+      await sendConsentInvitationTo(ev, emailId, doc.email, target.childNames, !!opts.reminder);
+      result.sent += 1;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[registration] consent request failed', doc.email, err);
+      result.failed.push(doc.email);
+    }
+  }
+  if (result.total === 0 && result.skipped.length === 0) {
+    throw new ApiError(400, 'Es wurde keine (aktive) E-Mail-Adresse ausgewählt.');
+  }
+  if (result.sent > 0) {
+    await patchRegistration(ev.id, { last_reminder_at: nowIso() });
+    await setById(COL.reminders, newId('rem'), {
+      event_id: ev.id,
+      sent_at: nowIso(),
+      note: `${opts.reminder ? 'Erinnerung' : 'Aufforderung'} Einverständniserklärung an ${result.sent} E-Mail-Adresse(n)`,
+      created_at: nowIso(),
+    });
+  }
+  await audit(
+    'registration.consent_request',
+    `${ev.id}: ${result.sent} gesendet, ${result.failed.length} fehlgeschlagen, ${result.skipped.length} ohne Kind`,
+    opts.actor,
   );
   return result;
 }
@@ -1213,7 +1409,10 @@ export async function recordConsents(
   const reg = registrationOf(ev);
   if (!reg || !reg.consent_required) throw new ApiError(400, 'Für diese Klasse wird kein Einverständnis abgefragt.');
   if (!registrationOpen(ev)) {
-    throw new ApiError(410, 'Die Erfassung ist abgeschlossen. Änderungen bitte über „Hilfe & Kontakt“ melden.');
+    throw new ApiError(
+      410,
+      `${reg.consent_only ? 'Das Einverständnis-Formular ist abgeschlossen' : 'Die Erfassung ist abgeschlossen'}. Änderungen bitte über „Hilfe & Kontakt“ melden.`,
+    );
   }
   // Je Kind nur die letzte Angabe verwenden (doppelte Einträge im Formular).
   const byChild = new Map<string, ConsentDecision>();
@@ -1395,11 +1594,15 @@ export async function markTeacherCompleted(ev: RegistrationEvent, teacherEmail: 
 export async function closeRegistration(ev: RegistrationEvent, actor: string): Promise<void> {
   const reg = registrationOf(ev);
   if (!reg) throw new ApiError(400, 'Dieser Auftrag hat keine Klassenerfassung.');
-  await updateById(COL.events, ev.id, {
-    status: 'draft',
+  const updates: Record<string, unknown> = {
     'registration.closed_at': nowIso(),
     updated_at: nowIso(),
-  });
+  };
+  // Nur die echte Erfassung wechselt dabei in den Entwurf. Ein nachträglich
+  // eingeholtes Einverständnis lässt den Auftrag, wo er ist (sonst würde ein
+  // veröffentlichter Auftrag beim Abschliessen wieder zum Entwurf).
+  if (ev.status === 'collecting') updates.status = 'draft';
+  await updateById(COL.events, ev.id, updates);
   await audit('registration.close', ev.id, actor);
 }
 
@@ -1407,6 +1610,13 @@ export async function closeRegistration(ev: RegistrationEvent, actor: string): P
 export async function reopenRegistration(ev: RegistrationEvent, actor: string): Promise<void> {
   const reg = registrationOf(ev);
   if (!reg) throw new ApiError(400, 'Dieser Auftrag hat keine Klassenerfassung.');
+  if (reg.consent_only) {
+    // Nachträgliches Einverständnis: Es gibt keine Erfassung, in die man
+    // zurückkehren könnte – nur das Formular wird wieder geöffnet.
+    await patchRegistration(ev.id, { closed_at: null });
+    await audit('registration.reopen', `${ev.id} (nur Einverständnis)`, actor);
+    return;
+  }
   if (ev.status === 'published') {
     throw new ApiError(400, 'Ein veröffentlichter Auftrag kann nicht erneut in die Erfassung.');
   }

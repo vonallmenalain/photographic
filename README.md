@@ -90,7 +90,7 @@ optional SMTP/Stripe), ist Schritt für Schritt in [`docs/`](docs/) beschrieben.
 | Massen-Import | E-Mails + Kinder + Verknüpfungen per Copy-&-Paste oder CSV/Excel (tolerante Spaltenerkennung); **mehrere Eltern-Adressen pro Kind** (Komma-getrennt in einer Spalte oder über mehrere E-Mail-Spalten) |
 | Auto-Zuordnung | Fotos werden beim Upload automatisch dem Kind im Dateinamen zugeordnet – schon der Vorname samt Nummer (z. B. `Elin 1.jpg`) genügt; mehrdeutige Treffer bleiben unzugeordnet |
 | Statuswerte | Fotos, E-Mails, Bestellungen, Events – wie im Konzept benannt |
-| Klassenerfassung & Einverständnis | Klasse vor dem Fototermin online erfassen: Lehrperson trägt Kindernamen ein, Eltern bestätigen ihre E-Mail-Adresse per Klassenlink/QR-Code oder Einladung und geben das Einverständnis ab (alles / nur Klassenfoto / nur Einzelfotos / nein); Übernahme in den Auftrag mit einem Klick; automatische Erinnerungen optional – siehe [`docs/10-klassenerfassung.md`](docs/10-klassenerfassung.md) |
+| Klassenerfassung & Einverständnis | Klasse vor dem Fototermin online erfassen: Lehrperson trägt Kindernamen ein, Eltern bestätigen ihre E-Mail-Adresse per Klassenlink/QR-Code oder Einladung und geben das Einverständnis ab (alles / nur Klassenfoto / nur Einzelfotos / nein); Übernahme in den Auftrag mit einem Klick; automatische Erinnerungen optional. Bei einem Auftrag ohne Klassenerfassung lässt sich das Einverständnis mit „Einverständniserklärung versenden“ nachträglich einholen – siehe [`docs/10-klassenerfassung.md`](docs/10-klassenerfassung.md) |
 
 Details zur fachlichen Logik: [`docs/07-konzept-abgleich.md`](docs/07-konzept-abgleich.md).
 
@@ -163,7 +163,8 @@ In dieser Reihenfolge durcharbeiten:
 8. **[Automatisches Deployment](docs/09-auto-deploy.md)** – Backend bei jedem
    Merge ohne ZIP/Kopieren automatisch aufs QNAP bringen (GitHub Actions + Watchtower).
 9. **[Klassenerfassung & Einverständnis](docs/10-klassenerfassung.md)** – Klassen
-   vor dem Fototermin durch Lehrperson und Eltern online erfassen lassen.
+   vor dem Fototermin durch Lehrperson und Eltern online erfassen lassen; das
+   Einverständnis lässt sich auch für einen bestehenden Auftrag nachholen.
 
 ### Domains dieses Projekts
 

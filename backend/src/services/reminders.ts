@@ -66,6 +66,8 @@ interface EventInvitation {
   first_sent_at: string;
   last_sent_at: string;
   count: number;
+  /** Zuletzt versendete Aufforderung zur Einverständniserklärung (falls je eine). */
+  consent_sent_at?: string | null;
 }
 
 /**
@@ -74,7 +76,11 @@ interface EventInvitation {
  * beim erneuten Versand bleibt der erste Zeitpunkt erhalten und der Zähler steigt.
  * Gilt für die Galerie-Einladung ebenso wie für die Einladung zum Einverständnis.
  */
-export async function recordInvitationsSent(eventId: string, emailIds: string[]): Promise<void> {
+export async function recordInvitationsSent(
+  eventId: string,
+  emailIds: string[],
+  opts: { consent?: boolean } = {},
+): Promise<void> {
   const unique = [...new Set(emailIds.filter(Boolean))];
   if (unique.length === 0) return;
   const now = nowIso();
@@ -92,6 +98,7 @@ export async function recordInvitationsSent(eventId: string, emailIds: string[])
         first_sent_at: prev?.first_sent_at ?? now,
         last_sent_at: now,
         count: (prev?.count ?? 0) + 1,
+        consent_sent_at: opts.consent ? now : prev?.consent_sent_at ?? null,
       });
     }),
   );
@@ -104,5 +111,18 @@ export async function invitationsSentForEvent(eventId: string): Promise<Map<stri
   );
   const out = new Map<string, string>();
   for (const r of rows) out.set(r.email_id, r.last_sent_at);
+  return out;
+}
+
+/**
+ * Wie `invitationsSentForEvent`, aber nur für die Aufforderung zur
+ * Einverständniserklärung – damit das Versand-Popup zeigt, wer sie schon hat.
+ */
+export async function consentRequestsSentForEvent(eventId: string): Promise<Map<string, string>> {
+  const rows = await runQuery<EventInvitation>(
+    col(COL.eventInvitations).where('event_id', '==', eventId),
+  );
+  const out = new Map<string, string>();
+  for (const r of rows) if (r.consent_sent_at) out.set(r.email_id, r.consent_sent_at);
   return out;
 }

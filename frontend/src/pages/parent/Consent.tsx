@@ -255,8 +255,8 @@ function RequestCard({
 
       {!req.open && (
         <Alert kind="info">
-          Die Erfassung dieser Klasse ist abgeschlossen. Änderungen melden Sie bitte über{' '}
-          <Link to="/hilfe">Hilfe &amp; Kontakt</Link>.
+          Diese Klasse ist abgeschlossen; eine Antwort ist nicht mehr möglich. Änderungen melden Sie
+          bitte über <Link to="/hilfe">Hilfe &amp; Kontakt</Link>.
         </Alert>
       )}
 
