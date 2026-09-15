@@ -552,7 +552,7 @@ export async function sendTeacherLinkEmail(to: string, info: TeacherLinkMailInfo
   const todosText: string[] = [...todosHtml];
   if (info.parentLinkEnabled) {
     const t =
-      'Den Klassenlink oder QR-Code an die Eltern weitergeben, z. B. über Ihren üblichen Kommunikationskanal. Die Eltern tragen ihre E-Mail-Adresse und ihr Kind selbst ein.';
+      'Den Klassenlink oder QR-Code an die Eltern weitergeben, z. B. über Ihren üblichen Kommunikationskanal. Die Eltern tragen ihre E-Mail-Adresse und ihr Kind ebenfalls ein.';
     todosHtml.push(t);
     todosText.push(t);
   }
@@ -564,7 +564,7 @@ export async function sendTeacherLinkEmail(to: string, info: TeacherLinkMailInfo
   }
   if (info.consentRequired) {
     const t =
-      'Auf der Klassenseite sehen Sie jederzeit, welche Eltern das Einverständnis bereits abgegeben haben, und können mit einem Klick an alle Ausstehenden erinnern.';
+      'Auf der Klassenseite sehen Sie jederzeit, welche Eltern das Einverständnis bereits abgegeben haben.';
     todosHtml.push(t);
     todosText.push(t);
   }
@@ -694,36 +694,60 @@ Der Link ist 48 Stunden gültig. Falls Sie das nicht waren, können Sie diese E-
 }
 
 export interface ConsentConfirmationMailInfo extends ClassMailInfo {
-  childName: string;
-  decisionLabel: string;
+  /**
+   * Eine Zeile je Kind. Geschwister landen bewusst in EINER E-Mail: Wer für
+   * zwei Kinder antwortet, soll auch nur eine Bestätigung erhalten.
+   */
+  entries: { childName: string; decisionLabel: string }[];
   link: string;
 }
 
-/** Bestätigung der abgegebenen Entscheidung, als Beleg für die Eltern. */
+/** Bestätigung der abgegebenen Entscheidung(en), als Beleg für die Eltern. */
 export async function sendConsentConfirmationEmail(to: string, info: ConsentConfirmationMailInfo) {
-  const subject = `Ihre Antwort zur Schulfotografie: ${info.childName}`;
+  const names = info.entries.map((e) => e.childName);
+  const many = info.entries.length > 1;
+  const subject = many
+    ? `Ihre Antworten zur Schulfotografie: ${names.join(', ')}`
+    : `Ihre Antwort zur Schulfotografie: ${names[0] ?? ''}`;
   const facts = classFacts(info);
   const footer = await contactFooter();
+  const intro = many
+    ? 'Ihre Antworten haben wir gespeichert:'
+    : `Ihre Antwort für <strong>${escapeHtml(names[0] ?? '')}</strong> haben wir gespeichert:`;
+  const introText = many
+    ? 'Ihre Antworten haben wir gespeichert:'
+    : `Ihre Antwort für ${names[0] ?? ''} haben wir gespeichert:`;
+  const answersHtml = info.entries
+    .map(
+      (e) =>
+        `<p style="font-size:15px;line-height:1.6;background:#f0f4f8;border-radius:12px;padding:14px 16px;margin:0 0 10px;">${
+          many ? `<strong>${escapeHtml(e.childName)}</strong><br />` : ''
+        }<strong>${escapeHtml(e.decisionLabel)}</strong></p>`,
+    )
+    .join('');
+  const answersText = info.entries
+    .map((e) => (many ? `${e.childName}: ${e.decisionLabel}` : e.decisionLabel))
+    .join('\n');
   const html = wrap(
     'Vielen Dank für Ihre Antwort',
     `<p style="font-size:15px;line-height:1.6;">Guten Tag</p>
-     <p style="font-size:15px;line-height:1.6;">Ihre Antwort für <strong>${escapeHtml(info.childName)}</strong> haben wir gespeichert:</p>
-     <p style="font-size:15px;line-height:1.6;background:#f0f4f8;border-radius:12px;padding:14px 16px;font-weight:600;">${escapeHtml(info.decisionLabel)}</p>
+     <p style="font-size:15px;line-height:1.6;">${intro}</p>
+     ${answersHtml}
      ${facts.html}
-     <p style="font-size:14px;line-height:1.6;">Sie können Ihre Antwort bis zum Fototermin ändern. Melden Sie sich dazu einfach mit dieser E-Mail-Adresse an.</p>
-     ${button(info.link, 'Antwort ansehen')}`,
+     <p style="font-size:14px;line-height:1.6;">Sie können Ihre ${many ? 'Antworten' : 'Antwort'} bis zum Fototermin ändern. Melden Sie sich dazu einfach mit dieser E-Mail-Adresse an.</p>
+     ${button(info.link, many ? 'Antworten ansehen' : 'Antwort ansehen')}`,
     520,
     footer.html,
   );
   const text = `Guten Tag
 
-Ihre Antwort für ${info.childName} haben wir gespeichert:
+${introText}
 
-${info.decisionLabel}
+${answersText}
 
 ${facts.text}
 
-Sie können Ihre Antwort bis zum Fototermin ändern. Melden Sie sich dazu einfach mit dieser E-Mail-Adresse an: ${info.link}${footer.text}`;
+Sie können Ihre ${many ? 'Antworten' : 'Antwort'} bis zum Fototermin ändern. Melden Sie sich dazu einfach mit dieser E-Mail-Adresse an: ${info.link}${footer.text}`;
   await sendMail({ to, subject, html, text });
 }
 

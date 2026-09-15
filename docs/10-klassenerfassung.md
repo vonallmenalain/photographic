@@ -10,10 +10,10 @@ Auftrag ist danach ein einziger Klick.
 
 | Schritt | Wer | Was passiert |
 |---|---|---|
-| 1 | Fotograf | Adminbereich → **Aufträge erfassen** → **Klasse erfassen lassen**: Schule, Fototermin, Rückmeldefrist, Klassen mit Lehrpersonen, Optionen (siehe 10.2). Jede Klasse wird ein Auftrag im Status **„Erfassung“**. Die Lehrperson erhält ihren persönlichen Link per E-Mail. |
+| 1 | Fotograf | Adminbereich → **Aufträge erfassen** → **Klasse erfassen lassen**: Schule, Fototermin, Rückmeldefrist, dann die Klassen-Tabelle (Klasse, E-Mail-Adresse und Name der Lehrperson – meist eine Zeile), danach Einverständnis und daraus folgend der Weg zu den Eltern (siehe 10.2). Jede Klasse wird ein Auftrag im Status **„Erfassung“**. Die Lehrperson erhält ihren persönlichen Link per E-Mail. |
 | 2 | Lehrperson | Klick auf den Link → **Klassenseite** (`/klasse/<Auftrag>`). Kindernamen eintragen (Vor- und Nachname, ein Name pro Zeile). |
-| 3 | Lehrperson | Eltern erreichen: **Klassenlink/QR-Code** weitergeben (Elternbrief, Klassen-App) und/oder **E-Mail-Adressen erfassen** (Kind; E-Mail), worauf die App die Eltern einlädt. |
-| 4 | Eltern | Über den Klassenlink (`/k/<Token>`): E-Mail-Adresse, Kind, Häkchen „erziehungsberechtigt“ → Bestätigungs-Mail → **Einverständnis-Formular** (`/einverstaendnis`). Über die Einladung: ein Klick, das Kind ist vorausgewählt. Bestätigungs-Mail mit der Antwort. |
+| 3 | Lehrperson | Eltern erreichen – je nach gewähltem Weg: **Klassenlink/QR-Code** weitergeben (Elternbrief, Klassen-App) **oder** die **E-Mail-Adressen erfassen** (Tabelle mit Kind, E-Mail-Adresse, optional zweite E-Mail-Adresse und Name der Eltern; alternativ eine Liste einfügen), worauf die App die Eltern einlädt. |
+| 4 | Eltern | Über den Klassenlink (`/k/<Token>`): E-Mail-Adresse, Kind, eigener Name (optional), Häkchen „erziehungsberechtigt“ → Bestätigungs-Mail → **Einverständnis-Formular** (`/einverstaendnis`). Über die Einladung: ein Klick, das Kind ist vorausgewählt. Im Formular steht pro eigenem Kind eine Auswahl und darunter **ein einziger Knopf**; für Geschwister geht genau **eine** Bestätigungs-Mail raus. |
 | 5 | Lehrperson / Fotograf | Stand je Kind: erteilt, nur Klassenfoto, nur Einzelfotos, nein, eingeladen ohne Antwort, ohne E-Mail-Adresse. Erinnerung an alle Ausstehenden mit einem Klick (Lehrperson höchstens einmal je 24 Stunden). Lehrperson meldet „vollständig“. |
 | 6 | Fotograf | **In Auftrag übernehmen** → Klassenlink und Formular schliessen, Status „In Bearbeitung“, weiter im Assistenten bei „Fotos hochladen“. Liste für den Fototermin als CSV oder Druck. |
 
@@ -34,14 +34,16 @@ erlauben). Das Kind erscheint zusätzlich mit dem Hinweis „Widerspruch“.
 
 | Option | Wirkung |
 |---|---|
-| **Klassenlink mit QR-Code** | Eltern tragen sich selbst ein. Die Lehrperson sieht **keine** E-Mail-Adressen (maskiert), Erinnerungen verschickt die App. |
-| **Lehrperson erfasst die E-Mail-Adressen** | Die Lehrperson trägt Kind + E-Mail-Adresse ein, die App lädt die Eltern ein. Die Lehrperson sieht dadurch die E-Mail-Adressen ihrer Klasse. |
-| **Einverständnis über die App** | Aus, wenn die Schule das Einverständnis auf Papier einholt; dann dient die Erfassung nur der Klassenliste. |
+| **Einverständnis über die App** | Die erste Entscheidung, weil alles Weitere davon abhängt. Aus, wenn die Schule das Einverständnis auf Papier einholt; dann dient die Erfassung nur der Klassenliste. |
+| **Weg zu den Eltern** | Nur bei aktivem Einverständnis, und dann **genau einer** von beiden – sonst bekäme dieselbe Familie zwei Aufforderungen. Ist das Einverständnis aus, haben die Eltern nichts zu tun: Dann erfasst immer die Lehrperson die E-Mail-Adressen, ein Klassenlink entfällt. |
+| ↳ **Klassenlink mit QR-Code** | Eltern tragen sich selbst ein. Die Lehrperson sieht **keine** E-Mail-Adressen (maskiert), Erinnerungen verschickt die App. |
+| ↳ **Lehrperson erfasst die E-Mail-Adressen** | Die Lehrperson trägt Kind + E-Mail-Adresse ein, die App lädt die Eltern ein. Die Lehrperson sieht dadurch die E-Mail-Adressen ihrer Klasse. Pro Kind sind zwei E-Mail-Adressen möglich (Mutter und Vater), und dieselbe E-Mail-Adresse darf bei mehreren Kindern stehen (Geschwister) – dorthin geht dann nur **eine** Einladung für alle Kinder. |
 | **Automatische Erinnerung** | Standardmässig aus. Wenn an: einmalig X Tage vor der Rückmeldefrist an alle Eltern, deren Kind noch keine Antwort hat. |
 | **Lehrperson** | Optional. Ohne Lehrperson erfasst der Fotograf die Klasse selbst (Kinder eintragen, QR-Zettel drucken). Alles, was die Lehrperson kann, kann der Fotograf in der Erfassungsansicht ebenfalls. |
 
-Mehrere Klassen einer Schule lassen sich in einem Schritt anlegen (eine Zeile
-je Klasse: `Klasse; E-Mail Lehrperson; Name Lehrperson`).
+Mehrere Klassen einer Schule lassen sich in einem Schritt anlegen: Die Tabelle
+beim Anlegen nimmt pro Zeile eine Klasse mit ihrer Lehrperson auf. In der Regel
+bleibt es bei einer Zeile, weil meist ein Auftrag je Klasse entsteht.
 
 ## 10.3 Was wer sieht (Sicherheit)
 
@@ -99,6 +101,12 @@ Schule abstimmen oder prüfen lassen, bevor die erste Klasse angelegt wird.
   Nachzügler zu, solange der Auftrag nicht veröffentlicht ist.
 - Kinder ohne Einverständnis bzw. mit „Nein“ bleiben in der Liste, damit am
   Fototermin klar ist, wer nicht fotografiert wird.
+
+Eltern, die sich über `photographic.alae.app` normal anmelden, finden ihr
+Einverständnis auf zwei Wegen: über das Profilmenü und – solange noch keine
+Fotos freigeschaltet sind – über den Knopf **„Zur Einverständniserklärung“**
+neben „Problem melden“. Er erscheint nur, wenn für diese E-Mail-Adresse
+tatsächlich ein Einverständnis angefragt oder bereits abgegeben wurde.
 
 ## 10.6 Automatische Erinnerungen
 

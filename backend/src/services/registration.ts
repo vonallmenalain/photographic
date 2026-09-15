@@ -51,13 +51,15 @@ import {
  * Der Fotograf legt eine Klasse an und entscheidet dabei, wer was tut:
  *  - Die Lehrperson erhält einen persönlichen Link zur Klassenseite, trägt die
  *    Kindernamen ein und sieht den Stand der Einverständnisse.
- *  - Optional erfasst die Lehrperson (oder der Fotograf) die E-Mail-Adressen der
- *    Eltern; die App lädt die Eltern dann per E-Mail ein (`teacher_enters_emails`).
- *  - Optional gibt es einen Klassenlink mit QR-Code, über den sich die Eltern
- *    selbst eintragen: E-Mail-Adresse, Kind, Bestätigung per Mail
- *    (`parent_link_enabled`).
- *  - Optional wird ein Einverständnis abgefragt (`consent_required`); ohne
- *    dient die Erfassung nur der Klassenliste.
+ *  - Zuerst entscheidet sich, ob ein Einverständnis über die App eingeholt wird
+ *    (`consent_required`). Ohne Einverständnis müssen die Eltern gar nichts tun:
+ *    Dann erfasst die Lehrperson die E-Mail-Adressen, ein Klassenlink wäre
+ *    zwecklos.
+ *  - Mit Einverständnis gibt es GENAU EINEN Weg zu den Eltern – entweder den
+ *    Klassenlink mit QR-Code, über den sich die Eltern selbst eintragen
+ *    (`parent_link_enabled`), ODER die Erfassung der E-Mail-Adressen durch die
+ *    Lehrperson (`teacher_enters_emails`), worauf die App einlädt. Beides
+ *    zusammen gäbe zwei konkurrierende Wege für dieselbe Familie.
  *
  * Die Erfassung IST der Auftrag (Status `collecting`): Kinder, E-Mail-Adressen
  * und Verknüpfungen entstehen direkt in den bekannten Sammlungen. „In Auftrag
@@ -236,6 +238,33 @@ export interface NewClassInput {
   teacherName: string;
 }
 
+/**
+ * Bringt die beiden Wege zu den Eltern in einen gültigen Zustand:
+ *  - ohne Einverständnis: immer „Lehrperson erfasst die E-Mail-Adressen“,
+ *    der Klassenlink entfällt (die Eltern hätten dort nichts zu tun);
+ *  - mit Einverständnis: genau einer der beiden Wege.
+ */
+export function normalizeWays(input: {
+  consentRequired: boolean;
+  parentLinkEnabled: boolean;
+  teacherEntersEmails: boolean;
+}): { parentLinkEnabled: boolean; teacherEntersEmails: boolean } {
+  if (!input.consentRequired) return { parentLinkEnabled: false, teacherEntersEmails: true };
+  if (input.parentLinkEnabled && input.teacherEntersEmails) {
+    throw new ApiError(
+      400,
+      'Bitte genau einen Weg zu den Eltern wählen: Klassenlink mit QR-Code oder Erfassung der E-Mail-Adressen durch die Lehrperson.',
+    );
+  }
+  if (!input.parentLinkEnabled && !input.teacherEntersEmails) {
+    throw new ApiError(
+      400,
+      'Bitte einen Weg zu den Eltern wählen: Klassenlink mit QR-Code oder Erfassung der E-Mail-Adressen durch die Lehrperson.',
+    );
+  }
+  return { parentLinkEnabled: input.parentLinkEnabled, teacherEntersEmails: input.teacherEntersEmails };
+}
+
 export interface CreatedClass {
   id: string;
   name: string;
@@ -249,6 +278,7 @@ export async function createRegistrationEvents(
   opts: { sendTeacherLink: boolean; actor: string },
 ): Promise<CreatedClass[]> {
   const out: CreatedClass[] = [];
+  const ways = normalizeWays(settings);
   for (const cls of classes) {
     const id = newId('evt');
     const teacherEmail = cls.teacherEmail ? normalizeEmail(cls.teacherEmail) : '';
@@ -259,9 +289,9 @@ export async function createRegistrationEvents(
       teacher_name: cls.teacherName.trim(),
       teacher_email: teacherEmail,
       teacher_email_id: null,
-      teacher_enters_emails: settings.teacherEntersEmails,
-      parent_link_enabled: settings.parentLinkEnabled,
-      parent_link_token: settings.parentLinkEnabled ? randomToken(24) : null,
+      teacher_enters_emails: ways.teacherEntersEmails,
+      parent_link_enabled: ways.parentLinkEnabled,
+      parent_link_token: ways.parentLinkEnabled ? randomToken(24) : null,
       consent_required: settings.consentRequired,
       auto_consent_reminder: settings.autoConsentReminder,
       auto_consent_reminder_days: Math.max(1, Math.min(60, Math.round(settings.autoConsentReminderDays || 3))),
@@ -314,15 +344,26 @@ export async function updateRegistrationSettings(
   if (input.school !== undefined) patch.school = input.school.trim();
   if (input.shootingDate !== undefined) patch.shooting_date = isoDate(input.shootingDate);
   if (input.deadline !== undefined) patch.deadline = isoDate(input.deadline);
-  if (input.teacherEntersEmails !== undefined) patch.teacher_enters_emails = input.teacherEntersEmails;
   if (input.consentRequired !== undefined) patch.consent_required = input.consentRequired;
   if (input.autoConsentReminder !== undefined) patch.auto_consent_reminder = input.autoConsentReminder;
   if (input.autoConsentReminderDays !== undefined) {
     patch.auto_consent_reminder_days = Math.max(1, Math.min(60, Math.round(input.autoConsentReminderDays)));
   }
-  if (input.parentLinkEnabled !== undefined) {
-    patch.parent_link_enabled = input.parentLinkEnabled;
-    if (input.parentLinkEnabled && !reg.parent_link_token) patch.parent_link_token = randomToken(24);
+  // Einverständnis und die beiden Wege hängen zusammen, deshalb immer gemeinsam
+  // prüfen – auch wenn nur eines der Felder mitgeschickt wird.
+  if (
+    input.consentRequired !== undefined ||
+    input.parentLinkEnabled !== undefined ||
+    input.teacherEntersEmails !== undefined
+  ) {
+    const ways = normalizeWays({
+      consentRequired: input.consentRequired ?? reg.consent_required,
+      parentLinkEnabled: input.parentLinkEnabled ?? reg.parent_link_enabled,
+      teacherEntersEmails: input.teacherEntersEmails ?? reg.teacher_enters_emails,
+    });
+    patch.parent_link_enabled = ways.parentLinkEnabled;
+    patch.teacher_enters_emails = ways.teacherEntersEmails;
+    if (ways.parentLinkEnabled && !reg.parent_link_token) patch.parent_link_token = randomToken(24);
   }
   if (input.teacherName !== undefined) patch.teacher_name = input.teacherName.trim();
   if (input.teacherEmail !== undefined) {
@@ -1132,17 +1173,6 @@ export async function consentRequestsForEmail(emailId: string): Promise<ConsentR
   return out;
 }
 
-/** Anzahl eigener Kinder in laufenden Erfassungen, für die noch keine Antwort vorliegt. */
-export async function pendingConsentCountForEmail(emailId: string): Promise<number> {
-  const requests = await consentRequestsForEmail(emailId);
-  let n = 0;
-  for (const r of requests) {
-    if (!r.open || !r.consentRequired) continue;
-    n += r.children.filter((c) => !c.decision).length;
-  }
-  return n;
-}
-
 export async function recomputeChildConsent(childId: string): Promise<void> {
   const consents = (await runQuery<ConsentDoc>(col(COL.consents).where('child_id', '==', childId))).filter(
     (c) => Number(c.superseded) !== 1,
@@ -1157,70 +1187,92 @@ export async function recomputeChildConsent(childId: string): Promise<void> {
 }
 
 export interface RecordConsentMeta {
-  parentName: string;
   ip: string;
   userAgent: string;
 }
 
-export async function recordConsent(
+export interface ConsentInput {
+  childId: string;
+  decision: ConsentDecision;
+}
+
+/**
+ * Speichert die Antwort(en) einer Familie und schickt GENAU EINE Bestätigung.
+ * Wer für Geschwister antwortet, erhält also eine E-Mail mit beiden Angaben
+ * statt zwei getrennter Mails.
+ *
+ * Der Name der Eltern wird nicht mehr abgefragt: Er stammt – falls vorhanden –
+ * aus der Selbstregistrierung bzw. aus der Erfassung durch die Lehrperson.
+ */
+export async function recordConsents(
   ev: RegistrationEvent,
   session: { emailId: string; email: string },
-  childId: string,
-  decision: ConsentDecision,
+  decisions: ConsentInput[],
   meta: RecordConsentMeta,
-): Promise<void> {
+): Promise<{ saved: number }> {
   const reg = registrationOf(ev);
   if (!reg || !reg.consent_required) throw new ApiError(400, 'Für diese Klasse wird kein Einverständnis abgefragt.');
   if (!registrationOpen(ev)) {
     throw new ApiError(410, 'Die Erfassung ist abgeschlossen. Änderungen bitte über „Hilfe & Kontakt“ melden.');
   }
-  const child = await getById<ChildDoc>(COL.children, childId);
-  if (!child || child.event_id !== ev.id) throw new ApiError(404, 'Kind nicht gefunden.');
-  const link = await getById(COL.emailChildren, linkId(session.emailId, childId));
-  if (!link) throw new ApiError(403, 'Dieses Kind ist nicht mit Ihrer E-Mail-Adresse verknüpft.');
+  // Je Kind nur die letzte Angabe verwenden (doppelte Einträge im Formular).
+  const byChild = new Map<string, ConsentDecision>();
+  for (const d of decisions) byChild.set(d.childId, d.decision);
+  if (byChild.size === 0) throw new ApiError(400, 'Bitte wählen Sie eine Antwort.');
 
   const settings = await getAppSettings();
   const textHash = await storeConsentText(settings.consent_text);
+  const parent = await getById<ParentEmailDoc>(COL.parentEmails, session.emailId);
+  const parentName = (parent?.name ?? '').trim().slice(0, 200);
+  const entries: { childName: string; decisionLabel: string }[] = [];
 
-  const previous = await runQuery<ConsentDoc>(
-    col(COL.consents).where('child_id', '==', childId).where('email_id', '==', session.emailId),
-  );
-  await Promise.all(
-    previous
-      .filter((c) => Number(c.superseded) !== 1)
-      .map((c) => updateById(COL.consents, c.id, { superseded: 1 })),
-  );
-  const parentName = meta.parentName.replace(/\s+/g, ' ').trim().slice(0, 200);
-  await setById(COL.consents, newId('cns'), {
-    event_id: ev.id,
-    child_id: childId,
-    email_id: session.emailId,
-    email: session.email,
-    decision,
-    parent_name: parentName,
-    text_hash: textHash,
-    given_at: nowIso(),
-    ip: meta.ip.slice(0, 64),
-    user_agent: meta.userAgent.slice(0, 255),
-    superseded: 0,
-  } satisfies ConsentDoc);
-  if (parentName) {
-    const row = await getById<ParentEmailDoc>(COL.parentEmails, session.emailId);
-    if (row && !row.name) await updateById(COL.parentEmails, session.emailId, { name: parentName, updated_at: nowIso() });
+  for (const [childId, decision] of byChild) {
+    const child = await getById<ChildDoc>(COL.children, childId);
+    if (!child || child.event_id !== ev.id) throw new ApiError(404, 'Kind nicht gefunden.');
+    const link = await getById(COL.emailChildren, linkId(session.emailId, childId));
+    if (!link) throw new ApiError(403, 'Dieses Kind ist nicht mit Ihrer E-Mail-Adresse verknüpft.');
+
+    const previous = await runQuery<ConsentDoc>(
+      col(COL.consents).where('child_id', '==', childId).where('email_id', '==', session.emailId),
+    );
+    await Promise.all(
+      previous
+        .filter((c) => Number(c.superseded) !== 1)
+        .map((c) => updateById(COL.consents, c.id, { superseded: 1 })),
+    );
+    await setById(COL.consents, newId('cns'), {
+      event_id: ev.id,
+      child_id: childId,
+      email_id: session.emailId,
+      email: session.email,
+      decision,
+      parent_name: parentName,
+      text_hash: textHash,
+      given_at: nowIso(),
+      ip: meta.ip.slice(0, 64),
+      user_agent: meta.userAgent.slice(0, 255),
+      superseded: 0,
+    } satisfies ConsentDoc);
+    await recomputeChildConsent(childId);
+    entries.push({ childName: child.name, decisionLabel: CONSENT_LABELS[decision] });
   }
-  await recomputeChildConsent(childId);
-  await audit('consent.record', `${ev.id}: ${childId} = ${decision}`, session.email);
+
+  await audit(
+    'consent.record',
+    `${ev.id}: ${[...byChild].map(([id, d]) => `${id} = ${d}`).join(', ')}`,
+    session.email,
+  );
   try {
     await sendConsentConfirmationEmail(session.email, {
       ...classMailInfo(ev),
-      childName: child.name,
-      decisionLabel: CONSENT_LABELS[decision],
+      entries,
       link: `${config.publicAppUrl}/einverstaendnis`,
     });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[registration] consent confirmation e-mail failed', err);
   }
+  return { saved: entries.length };
 }
 
 // ---------------------------------------------------------------------------

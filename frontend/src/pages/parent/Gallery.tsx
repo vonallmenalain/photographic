@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError, imageUrl } from '../../api/client';
 import { Alert, Spinner, TrustNote } from '../../components/common';
+import { useParentAuth } from '../../context/ParentAuth';
 import { ProtectedImage } from '../../components/ProtectedImage';
 import { ProductMockup, hasMockup } from '../../components/ProductMockups';
 import { useCart } from '../../context/Cart';
@@ -101,6 +102,9 @@ export default function Gallery() {
   // download option is greyed out once a print that includes it is in the cart).
   const [states, setStates] = useState<Record<string, PhotoState>>({});
   const { refresh: refreshCart } = useCart();
+  // Zeigt den Weg zur Einverständniserklärung, wenn es für diese
+  // E-Mail-Adresse eine gibt (offen oder bereits abgegeben).
+  const { consentRequests } = useParentAuth();
 
   useEffect(() => {
     (async () => {
@@ -206,9 +210,19 @@ export default function Gallery() {
             Mögliche Gründe: Die Fotos sind noch nicht freigegeben, die E-Mail-Adresse wurde anders
             geschrieben, oder die Zuordnung fehlt noch. Wir helfen Ihnen gerne weiter.
           </p>
-          <Link to="/hilfe" className="btn secondary">
-            Problem melden
-          </Link>
+          {/* Wurde für diese E-Mail-Adresse ein Einverständnis angefragt (oder
+              bereits abgegeben), führt der Weg dorthin direkt von hier – sonst
+              steckt er nur im Profilmenü. */}
+          <div className="row">
+            {consentRequests > 0 && (
+              <Link to="/einverstaendnis" className="btn">
+                Zur Einverständniserklärung
+              </Link>
+            )}
+            <Link to="/hilfe" className="btn secondary">
+              Problem melden
+            </Link>
+          </div>
         </div>
       )}
 

@@ -15,6 +15,7 @@ interface SessionResponse {
   email?: string;
   teacherClasses?: TeacherClassRef[];
   openConsents?: number;
+  consentRequests?: number;
   next?: string;
 }
 
@@ -26,6 +27,8 @@ interface ParentAuthState {
   teacherClasses: TeacherClassRef[];
   /** Eigene Kinder, für die noch ein Einverständnis aussteht. */
   openConsents: number;
+  /** Klassen, zu denen diese E-Mail-Adresse ein Einverständnis sieht – auch beantwortete. */
+  consentRequests: number;
   /** Zielseite nach der Anmeldung (Einverständnis, Klassenseite oder Galerie). */
   next: string;
   refresh: () => Promise<void>;
@@ -41,6 +44,7 @@ export function ParentAuthProvider({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassRef[]>([]);
   const [openConsents, setOpenConsents] = useState(0);
+  const [consentRequests, setConsentRequests] = useState(0);
   const [next, setNext] = useState('/galerie');
 
   const refresh = useCallback(async () => {
@@ -50,12 +54,14 @@ export function ParentAuthProvider({ children }: { children: ReactNode }) {
       setEmail(res.email ?? null);
       setTeacherClasses(res.teacherClasses ?? []);
       setOpenConsents(res.openConsents ?? 0);
+      setConsentRequests(res.consentRequests ?? 0);
       setNext(res.next || '/galerie');
     } catch {
       setV(false);
       setEmail(null);
       setTeacherClasses([]);
       setOpenConsents(0);
+      setConsentRequests(0);
       setNext('/galerie');
     } finally {
       setLoading(false);
@@ -82,12 +88,24 @@ export function ParentAuthProvider({ children }: { children: ReactNode }) {
     setEmail(null);
     setTeacherClasses([]);
     setOpenConsents(0);
+    setConsentRequests(0);
     setNext('/galerie');
   };
 
   return (
     <Ctx.Provider
-      value={{ loading, verified, email, teacherClasses, openConsents, next, refresh, setVerified, logout }}
+      value={{
+        loading,
+        verified,
+        email,
+        teacherClasses,
+        openConsents,
+        consentRequests,
+        next,
+        refresh,
+        setVerified,
+        logout,
+      }}
     >
       {children}
     </Ctx.Provider>

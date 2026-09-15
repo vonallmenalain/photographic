@@ -455,9 +455,11 @@ function SettingsModal({
   const [deadline, setDeadline] = useState(reg.deadline ?? '');
   const [teacherEmail, setTeacherEmail] = useState(reg.teacher_email);
   const [teacherName, setTeacherName] = useState(reg.teacher_name);
-  const [teacherEntersEmails, setTeacherEntersEmails] = useState(reg.teacher_enters_emails);
-  const [parentLinkEnabled, setParentLinkEnabled] = useState(reg.parent_link_enabled);
   const [consentRequired, setConsentRequired] = useState(reg.consent_required);
+  // Genau ein Weg zu den Eltern; ohne Einverständnis immer „Lehrperson“.
+  const [parentWay, setParentWay] = useState<'link' | 'teacher'>(
+    reg.parent_link_enabled ? 'link' : 'teacher',
+  );
   const [autoReminder, setAutoReminder] = useState(reg.auto_consent_reminder);
   const [autoReminderDays, setAutoReminderDays] = useState(String(reg.auto_consent_reminder_days));
   const [sendLink, setSendLink] = useState(false);
@@ -479,8 +481,8 @@ function SettingsModal({
           deadline: deadline || null,
           teacherEmail: teacherEmail.trim(),
           teacherName,
-          teacherEntersEmails,
-          parentLinkEnabled,
+          teacherEntersEmails: !consentRequired || parentWay === 'teacher',
+          parentLinkEnabled: consentRequired && parentWay === 'link',
           consentRequired,
           autoConsentReminder: autoReminder,
           autoConsentReminderDays: Math.max(1, parseInt(autoReminderDays, 10) || 3),
@@ -543,17 +545,40 @@ function SettingsModal({
         </p>
       )}
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-        <input type="checkbox" checked={parentLinkEnabled} onChange={(e) => setParentLinkEnabled(e.target.checked)} style={{ width: 'auto' }} />
-        Klassenlink mit QR-Code für die Eltern
-      </label>
-      <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-        <input type="checkbox" checked={teacherEntersEmails} onChange={(e) => setTeacherEntersEmails(e.target.checked)} style={{ width: 'auto' }} />
-        Lehrperson erfasst und sieht die E-Mail-Adressen
-      </label>
-      <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
         <input type="checkbox" checked={consentRequired} onChange={(e) => setConsentRequired(e.target.checked)} style={{ width: 'auto' }} />
         Einverständnis über die App einholen
       </label>
+      {consentRequired ? (
+        <>
+          <p className="muted" style={{ fontSize: '0.82rem', margin: '4px 0 6px' }}>
+            Weg zu den Eltern – genau einer:
+          </p>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+            <input
+              type="radio"
+              name="way"
+              checked={parentWay === 'link'}
+              onChange={() => setParentWay('link')}
+              style={{ width: 'auto' }}
+            />
+            Klassenlink mit QR-Code; die Eltern tragen sich selbst ein
+          </label>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+            <input
+              type="radio"
+              name="way"
+              checked={parentWay === 'teacher'}
+              onChange={() => setParentWay('teacher')}
+              style={{ width: 'auto' }}
+            />
+            Lehrperson erfasst und sieht die E-Mail-Adressen
+          </label>
+        </>
+      ) : (
+        <p className="muted" style={{ fontSize: '0.82rem', margin: '4px 0 8px' }}>
+          Ohne Einverständnis erfasst die Lehrperson die E-Mail-Adressen; ein Klassenlink entfällt.
+        </p>
+      )}
       <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 8 }}>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="checkbox" checked={autoReminder} disabled={!consentRequired} onChange={(e) => setAutoReminder(e.target.checked)} style={{ width: 'auto' }} />

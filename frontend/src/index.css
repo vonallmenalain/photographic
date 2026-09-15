@@ -1892,3 +1892,19 @@ input.input-error,
   .print-only svg { width: 200px; height: 200px; }
   .parent-bg, .appbar, .footer, .admin-side { display: none !important; }
 }
+
+/* Erfassungs-Tabellen (Klassen anlegen, Eltern einladen): kompakte Zeilen, in
+   denen jede Zelle ein Eingabefeld über die volle Breite trägt. */
+.entry-table { width: 100%; border-collapse: collapse; }
+.entry-table th {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 0 8px 6px 0;
+  font-weight: 600;
+}
+.entry-table td { padding: 0 8px 8px 0; vertical-align: top; border: none; }
+.entry-table td:last-child, .entry-table th:last-child { padding-right: 0; white-space: nowrap; }
+.entry-table input { width: 100%; }
