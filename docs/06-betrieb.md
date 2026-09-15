@@ -248,7 +248,7 @@ docker compose ps                        # Status
 | Previews ohne Wasserzeichen | Im Backend-Image fehlten Schriftarten – das Wasserzeichen wird als Text gerendert und bleibt ohne Font unsichtbar. Im aktuellen Image sind `fontconfig`, `fonts-dejavu-core`/`fonts-liberation` **und die Schrift Comic Neue** (freie Schwester von Comic Sans MS, aus `backend/assets/fonts`) enthalten. Beim Start zeigt das Log `watermark : OK (fonts available)`; steht dort `BROKEN`, Image neu bauen/ziehen. Bereits ohne Wasserzeichen erzeugte Fotos neu hochladen (oder im Admin neu verarbeiten). |
 | Wasserzeichen-Schrift ändern | Die Website nutzt überall **Comic Sans MS**. Da diese Schrift proprietär ist und nicht mitgeliefert werden darf, rendert das Backend das Wasserzeichen mit der freien, sehr ähnlichen **Comic Neue** (`backend/assets/fonts`). Legst du eine lizenzierte `Comic Sans MS`-TTF in `backend/assets/fonts` und baust das Image neu, wird sie automatisch verwendet (sie steht in `IMG_WATERMARK_FONT_FAMILY` an erster Stelle). Die Fallbacks am Ende des Werts (`Liberation Sans`, `DejaVu Sans`, …) sollten stehen bleiben, damit das Wasserzeichen nie unsichtbar wird. |
 | Foto erscheint bei Eltern nicht | Checkliste 6.3 „Eltern finden keine Fotos“. |
-| E-Mail an eine Familie kommt nicht an (in Resend „Bounced“) | Adminbereich → **Einstellungen → Nicht zustellbare E-Mails**: dort stehen Empfänger, Betreff und Begründung, die Adresse ist im Auftrag rot markiert. Adresse unter **Aufträge → „Bearbeiten“** beim Kind mit ✎ korrigieren und die Einladung erneut an diese Adresse senden. Voraussetzung ist der eingerichtete Resend-Webhook ([docs/04-email-smtp.md, 4.6](04-email-smtp.md)); ohne ihn steht nur in Resend, dass die E-Mail nicht ankam. |
+| E-Mail an eine Familie kommt nicht an (in Resend „Bounced“) | Adminbereich → **Einstellungen → Nicht zustellbare E-Mails**: dort stehen Empfänger, Betreff und Begründung, die E-Mail-Adresse ist im Auftrag rot markiert. E-Mail-Adresse unter **Aufträge → „Bearbeiten“** beim Kind mit ✎ korrigieren und die Einladung erneut an diese E-Mail-Adresse senden. Voraussetzung ist der eingerichtete Resend-Webhook ([docs/04-email-smtp.md, 4.6](04-email-smtp.md)); ohne ihn steht nur in Resend, dass die E-Mail nicht ankam. |
 | Antworten der Eltern auf Einladungen/Bestätigungen verschwinden | Antworten gehen an die **Kontakt-E-Mail-Adresse** aus **Einstellungen**. Ist dort nichts eingetragen, landen sie beim Absender. Adresse eintragen, als Absender übernehmen und die Weiterleitung bei Cloudflare einrichten ([docs/04-email-smtp.md, 4.7 und 4.9](04-email-smtp.md)). |
 | Aufruf von `…/webhook/resend` im Browser zeigt „Nicht gefunden“ | **Kein Fehler.** Der Endpunkt nimmt nur `POST` entgegen, ein Browser schickt `GET`. Zum Prüfen des Deployments stattdessen `https://api.alae.app/api/parent/site` aufrufen; zur Webhook-Fehlersuche siehe [docs/04-email-smtp.md, 4.6](04-email-smtp.md). |
 | Stripe-Bestellung bleibt „Kauf gestartet“ | Webhook fehlt/falsch. Endpoint `…/webhook/stripe` und `STRIPE_WEBHOOK_SECRET` prüfen. Nach dem Wechsel Sandbox → Live muss der Webhook **im Live-Modus neu** angelegt werden (eigenes `whsec_…`) – siehe [docs/05-stripe.md, 5.6](05-stripe.md#56-von-der-sandbox-in-den-produktivmodus-wechseln-go-live). |
@@ -348,7 +348,7 @@ Eltern.
 
 - **Kontakt-E-Mail-Adresse** (z. B. `photographic@alae.app`): steht im
   Impressum und auf der Hilfe-Seite anstelle einer Telefonnummer und ist die
-  Adresse, an die Antworten der Eltern gehen. Damit E-Mails an diese Adresse in
+  E-Mail-Adresse, an die Antworten der Eltern gehen. Damit E-Mails an diese in
   einem Postfach ankommen, ist einmalig eine Weiterleitung bei Cloudflare nötig –
   die Schritte stehen direkt auf der Seite und in
   [docs/04-email-smtp.md, 4.7](04-email-smtp.md).
@@ -369,10 +369,10 @@ Eltern, die Zahl neben **Einstellungen** die offenen Zustellprobleme.
 eingerichtet ([docs/04-email-smtp.md, 4.6](04-email-smtp.md)), meldet Resend
 jede E-Mail, die nicht zugestellt werden konnte (Bounce, Spam-Beschwerde,
 Fehlschlag). Die Liste zeigt Empfänger, Betreff, Zeitpunkt und Begründung; die
-betroffene Eltern-Adresse ist überall rot mit **„Nicht zustellbar“** markiert.
+betroffene E-Mail-Adresse ist überall rot mit **„Nicht zustellbar“** markiert.
 Mit **„Erledigt“** wird ein Problem geschlossen (die Markierung verschwindet);
-eine korrigierte Adresse oder eine spätere erfolgreiche Zustellung an dieselbe
-Adresse hebt die Markierung ebenfalls auf. Ohne Webhook erfasst die App nur
+eine korrigierte E-Mail-Adresse oder eine spätere erfolgreiche Zustellung an
+dieselbe E-Mail-Adresse hebt die Markierung ebenfalls auf. Ohne Webhook erfasst die App nur
 Fehler, die der Mailserver schon beim Versand meldet. „Alle protokollierten
 E-Mails“ zeigt auch die erfolgreich zugestellten; Einträge älter als 90 Tage
 werden automatisch aufgeräumt.

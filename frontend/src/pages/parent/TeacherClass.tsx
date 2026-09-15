@@ -103,7 +103,7 @@ export default function TeacherClass() {
         method: 'POST',
       });
       setMsg(
-        `Erinnerung an ${res.sent} Adresse(n) verschickt.${res.withoutEmail ? ` ${res.withoutEmail} Kind(er) ohne bekannte Adresse konnten nicht erinnert werden.` : ''}${res.failed.length ? ` Fehlgeschlagen: ${res.failed.join(', ')}` : ''}`,
+        `Erinnerung an ${res.sent} E-Mail-Adresse(n) verschickt.${res.withoutEmail ? ` ${res.withoutEmail} Kind(er) ohne bekannte E-Mail-Adresse konnten nicht erinnert werden.` : ''}${res.failed.length ? ` Fehlgeschlagen: ${res.failed.join(', ')}` : ''}`,
       );
     }, 'Erinnerung konnte nicht verschickt werden.');
 

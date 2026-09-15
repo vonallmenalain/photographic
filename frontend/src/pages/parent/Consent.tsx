@@ -167,7 +167,7 @@ function RequestCard({
       setNewChild('');
       setMsg(
         res.matched
-          ? 'Das Kind wurde Ihrer Adresse zugeordnet.'
+          ? 'Das Kind wurde Ihrer E-Mail-Adresse zugeordnet.'
           : 'Das Kind wurde eingetragen. Die Lehrperson prüft den Eintrag.',
       );
       await onChanged();
@@ -373,7 +373,7 @@ function ChildForm({
             Zweiten Elternteil einladen (optional)
           </summary>
           <p className="muted" style={{ fontSize: '0.85rem', margin: '8px 0' }}>
-            Die zweite Adresse erhält eine eigene Einladung und sieht später ebenfalls die Fotos.
+            Die zweite E-Mail-Adresse erhält eine eigene Einladung und sieht später ebenfalls die Fotos.
           </p>
           {secondMsg && <Alert kind="success">{secondMsg}</Alert>}
           <form onSubmit={addSecond} className="row" style={{ alignItems: 'flex-end' }}>

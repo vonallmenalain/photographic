@@ -23,7 +23,7 @@ interface ClassRow {
   };
 }
 
-/** Übersicht der Klassen, für die die angemeldete Adresse Lehrperson ist. */
+/** Übersicht der Klassen, für die die angemeldete E-Mail-Adresse Lehrperson ist. */
 export default function TeacherClasses() {
   const navigate = useNavigate();
   const [classes, setClasses] = useState<ClassRow[] | null>(null);

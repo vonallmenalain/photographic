@@ -401,7 +401,7 @@ router.post(
     res.json({
       ok: true,
       sent: result.sent,
-      message: 'Die zweite Adresse ist eingetragen und erhält eine Einladung.',
+      message: 'Die zweite E-Mail-Adresse ist eingetragen und erhält eine Einladung.',
     });
   }),
 );

@@ -69,7 +69,7 @@ interface EventInvitation {
 }
 
 /**
- * Protokolliert je Adresse, dass die Einladung zu diesem Auftrag erfolgreich
+ * Protokolliert je E-Mail-Adresse, dass die Einladung zu diesem Auftrag erfolgreich
  * versendet wurde. Deterministische Doc-Id (event__email) verhindert Duplikate;
  * beim erneuten Versand bleibt der erste Zeitpunkt erhalten und der Zähler steigt.
  * Gilt für die Galerie-Einladung ebenso wie für die Einladung zum Einverständnis.

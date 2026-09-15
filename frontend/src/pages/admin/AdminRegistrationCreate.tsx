@@ -179,8 +179,8 @@ export default function AdminRegistrationCreate({ onCancel }: { onCancel: () => 
             <strong>Lehrperson erfasst die E-Mail-Adressen</strong>
             <br />
             <span className="muted">
-              Die Lehrperson trägt Kind und Adresse ein, die App lädt die Eltern per E-Mail ein. Die
-              Lehrperson sieht dadurch alle Adressen der Klasse.
+              Die Lehrperson trägt Kind und E-Mail-Adresse ein, die App lädt die Eltern per E-Mail
+              ein. Die Lehrperson sieht dadurch alle E-Mail-Adressen der Klasse.
             </span>
           </span>
         </label>

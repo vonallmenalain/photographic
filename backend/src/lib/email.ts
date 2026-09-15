@@ -102,7 +102,7 @@ async function contactAddress(): Promise<string> {
 
 /**
  * Fusszeile für alle E-Mails an Eltern: Hinweis auf die Kontaktadresse, damit
- * Rückfragen einen klaren Weg haben. Ohne konfigurierte Adresse bleibt sie leer.
+ * Rückfragen einen klaren Weg haben. Ohne konfigurierte Kontaktadresse bleibt sie leer.
  */
 async function contactFooter(): Promise<{ html: string; text: string }> {
   const contact = await contactAddress();
@@ -176,7 +176,7 @@ export async function sendPasswordResetEmail(to: string, username: string, link:
 
 /**
  * "Ihre Fotos sind bereit" – Sammel-E-Mail, die der Admin pro Auftrag an alle
- * erfassten Eltern-Adressen schicken kann, sobald die Galerie freigeschaltet
+ * erfassten E-Mail-Adressen der Eltern schicken kann, sobald die Galerie freigeschaltet
  * ist. Enthält den Link zur App sowie Informationen zu den Fotos (Bestätigung,
  * Kauf, Wasserzeichen, Speicherort und Aufbewahrungsfrist).
  *
@@ -308,7 +308,7 @@ export async function sendOrderConfirmation(
   const printHtml = hasPrint
     ? `<p style="font-size:15px;line-height:1.6;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 16px;">
          <strong>Hinweis zu Ihren ausgedruckten Fotos:</strong><br />
-         Ihre bestellten Fotos zum Ausdrucken werden in ca. <strong>3–4 Wochen</strong> an die unten angegebene Adresse versandt.
+         Ihre bestellten Fotos zum Ausdrucken werden in ca. <strong>3–4 Wochen</strong> an die unten angegebene Lieferadresse versandt.
        </p>${
          shippingAddress
            ? `<p style="font-size:14px;line-height:1.6;">
@@ -334,7 +334,7 @@ export async function sendOrderConfirmation(
   );
 
   const printText = hasPrint
-    ? `\n\nHinweis: Ihre bestellten Fotos zum Ausdrucken werden in ca. 3–4 Wochen an die angegebene Adresse versandt.${
+    ? `\n\nHinweis: Ihre bestellten Fotos zum Ausdrucken werden in ca. 3–4 Wochen an die angegebene Lieferadresse versandt.${
         shippingAddress
           ? `\n\nLieferadresse:\n${shippingAddress.first_name} ${shippingAddress.last_name}\n${shippingAddress.street} ${shippingAddress.house_no}\n${shippingAddress.zip} ${shippingAddress.city}`
           : ''
@@ -463,8 +463,8 @@ export async function sendDeliveryProblemEmail(to: string[], info: DeliveryProbl
   const statusLabel = DELIVERY_STATUS_LABEL[info.status] ?? info.status;
   const subject = `E-Mail nicht zustellbar: ${info.recipient}`;
   const parentLine = info.parentEmailId
-    ? `Die Adresse ist als Eltern-Adresse erfasst${info.parentName ? ` (${escapeHtml(info.parentName)})` : ''} und im Adminbereich rot markiert. Prüfe die Schreibweise und korrigiere sie im Auftrag („Bearbeiten“ → Adresse beim Kind anpassen).`
-    : 'Die Adresse ist keiner erfassten Eltern-Adresse zugeordnet.';
+    ? `Die E-Mail-Adresse ist als Adresse der Eltern erfasst${info.parentName ? ` (${escapeHtml(info.parentName)})` : ''} und im Adminbereich rot markiert. Prüfe die Schreibweise und korrigiere sie im Auftrag („Bearbeiten“ → E-Mail-Adresse beim Kind anpassen).`
+    : 'Die E-Mail-Adresse ist keiner erfassten Adresse der Eltern zugeordnet.';
   const html = wrap(
     'E-Mail konnte nicht zugestellt werden',
     `<table style="font-size:14px;line-height:1.6;border-collapse:collapse;">
@@ -486,7 +486,7 @@ Betreff:   ${info.subject || '—'}
 Status:    ${statusLabel}
 Zeitpunkt: ${formatWhen(info.at)}${info.reason ? `\nBegründung: ${info.reason}` : ''}
 
-${info.parentEmailId ? 'Die Adresse ist als Eltern-Adresse erfasst und im Adminbereich rot markiert. Prüfe die Schreibweise und korrigiere sie im Auftrag.' : 'Die Adresse ist keiner erfassten Eltern-Adresse zugeordnet.'}
+${info.parentEmailId ? 'Die E-Mail-Adresse ist als Adresse der Eltern erfasst und im Adminbereich rot markiert. Prüfe die Schreibweise und korrigiere sie im Auftrag.' : 'Die E-Mail-Adresse ist keiner erfassten Adresse der Eltern zugeordnet.'}
 
 Zustellprobleme im Adminbereich öffnen: ${info.adminLink}`;
   await sendMail({ to, subject, html, text });
@@ -558,7 +558,7 @@ export async function sendTeacherLinkEmail(to: string, info: TeacherLinkMailInfo
   }
   if (info.teacherEntersEmails) {
     const t =
-      'Die E-Mail-Adressen der Eltern erfassen (Kind und Adresse). Die Eltern erhalten dann automatisch eine Einladung.';
+      'Die E-Mail-Adressen der Eltern erfassen (Kind und E-Mail-Adresse). Die Eltern erhalten dann automatisch eine Einladung.';
     todosHtml.push(t);
     todosText.push(t);
   }
@@ -607,8 +607,8 @@ export interface ConsentInviteMailInfo extends ClassMailInfo {
 }
 
 /**
- * Einladung an Eltern, deren Adresse die Lehrperson oder der Fotograf erfasst
- * hat: ein Klick bestätigt die Adresse und öffnet das Einverständnis-Formular.
+ * Einladung an Eltern, deren E-Mail-Adresse die Lehrperson oder der Fotograf
+ * erfasst hat: ein Klick bestätigt sie und öffnet das Einverständnis-Formular.
  * Mit `reminder` als Erinnerung formuliert.
  */
 export async function sendConsentInviteEmail(to: string, info: ConsentInviteMailInfo) {

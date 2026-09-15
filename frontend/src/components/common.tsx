@@ -157,7 +157,7 @@ export function StatusBadge({ status }: { status: string }) {
   return <span className={`badge ${info.cls}`}>{info.label}</span>;
 }
 
-/** Zustellproblem einer Eltern-Adresse, wie es die Admin-Endpunkte liefern. */
+/** Zustellproblem einer E-Mail-Adresse der Eltern, wie es die Admin-Endpunkte liefern. */
 export interface DeliveryProblemInfo {
   status: string;
   subject: string;
@@ -179,11 +179,11 @@ export function DeliveryProblemBadge({ problem }: { problem: DeliveryProblemInfo
   const title = [
     problem.status === 'complained'
       ? 'Der Empfänger hat eine E-Mail als Spam gemeldet.'
-      : 'Die letzte E-Mail an diese Adresse konnte nicht zugestellt werden.',
+      : 'Die letzte E-Mail an diese E-Mail-Adresse konnte nicht zugestellt werden.',
     problem.subject ? `Betreff: ${problem.subject}` : '',
     whenText ? `Zeitpunkt: ${whenText}` : '',
     problem.reason ? `Begründung: ${problem.reason}` : '',
-    'Adresse prüfen und ggf. korrigieren – Details unter „Einstellungen“.',
+    'E-Mail-Adresse prüfen und ggf. korrigieren – Details unter „Einstellungen“.',
   ]
     .filter(Boolean)
     .join('\n');

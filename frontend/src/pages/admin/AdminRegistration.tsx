@@ -148,7 +148,7 @@ export default function AdminRegistration() {
       if (!confirm('Erinnerung an alle Eltern schicken, deren Kind noch keine Antwort hat?')) return;
       const res = await api<{ sent: number; failed: string[]; withoutEmail: number }>(`${base}/remind`, { method: 'POST', admin: true });
       setMsg(
-        `Erinnerung an ${res.sent} Adresse(n) verschickt.${res.withoutEmail ? ` ${res.withoutEmail} Kind(er) ohne bekannte Adresse.` : ''}${res.failed.length ? ` Fehlgeschlagen: ${res.failed.join(', ')}` : ''}`,
+        `Erinnerung an ${res.sent} E-Mail-Adresse(n) verschickt.${res.withoutEmail ? ` ${res.withoutEmail} Kind(er) ohne bekannte E-Mail-Adresse.` : ''}${res.failed.length ? ` Fehlgeschlagen: ${res.failed.join(', ')}` : ''}`,
       );
     }, 'Erinnerung konnte nicht verschickt werden.');
 
@@ -539,7 +539,7 @@ function SettingsModal({
       </div>
       {teacherChanged && teacherEmail.trim() && (
         <p className="muted" style={{ fontSize: '0.82rem', marginTop: -8 }}>
-          Neue Lehrperson: Der bisherige Zugang verfällt, die neue Adresse erhält beim Speichern ihren Link.
+          Neue Lehrperson: Der bisherige Zugang verfällt, die neue E-Mail-Adresse erhält beim Speichern ihren Link.
         </p>
       )}
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>

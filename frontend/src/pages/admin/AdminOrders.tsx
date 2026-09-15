@@ -951,7 +951,8 @@ function DeleteOrderModal({
       <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
         Diese Bestellung wird mit allen Positionen unwiderruflich entfernt und verschwindet aus der
         Übersicht, aus dem Umsatz und aus den Auswertungen. Auch die Download-Freigaben werden
-        gelöscht – bereits gekaufte Digitalfotos kann diese Adresse danach nicht mehr herunterladen.
+        gelöscht – bereits gekaufte Digitalfotos kann diese E-Mail-Adresse danach nicht mehr
+        herunterladen.
         Fotos, Kinder und E-Mail-Adressen bleiben unverändert bestehen.
       </p>
       <div
@@ -982,7 +983,7 @@ interface ShippingMeta {
 
 /**
  * Versand-Popup für die Versandbestätigung einer einzelnen Bestellung. Zeigt nur
- * die zur angeklickten Bestellung gehörende Adresse. Nach erfolgreichem Versand
+ * die zur angeklickten Bestellung gehörende E-Mail-Adresse. Nach erfolgreichem Versand
  * wird die Bestellung serverseitig automatisch auf „Abgeschlossen“ gesetzt.
  * Optional geht eine Kopie an das eigene Admin-Konto.
  */
@@ -1065,7 +1066,8 @@ function ShippingConfirmationModal({
       {error && <Alert kind="error">{error}</Alert>}
       <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
         Die Versandbestätigung informiert die Eltern, dass ihre bestellten Fotos heute verschickt
-        wurden. Sie wird an die zu dieser Bestellung gehörende Adresse gesendet. Anschliessend wird
+        wurden. Sie wird an die zu dieser Bestellung gehörende E-Mail-Adresse gesendet.
+        Anschliessend wird
         die Bestellung automatisch auf „Abgeschlossen“ gesetzt.
       </p>
       <div

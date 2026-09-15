@@ -35,7 +35,7 @@ erlauben). Das Kind erscheint zusätzlich mit dem Hinweis „Widerspruch“.
 | Option | Wirkung |
 |---|---|
 | **Klassenlink mit QR-Code** | Eltern tragen sich selbst ein. Die Lehrperson sieht **keine** E-Mail-Adressen (maskiert), Erinnerungen verschickt die App. |
-| **Lehrperson erfasst die E-Mail-Adressen** | Die Lehrperson trägt Kind + Adresse ein, die App lädt die Eltern ein. Die Lehrperson sieht dadurch die Adressen ihrer Klasse. |
+| **Lehrperson erfasst die E-Mail-Adressen** | Die Lehrperson trägt Kind + E-Mail-Adresse ein, die App lädt die Eltern ein. Die Lehrperson sieht dadurch die E-Mail-Adressen ihrer Klasse. |
 | **Einverständnis über die App** | Aus, wenn die Schule das Einverständnis auf Papier einholt; dann dient die Erfassung nur der Klassenliste. |
 | **Automatische Erinnerung** | Standardmässig aus. Wenn an: einmalig X Tage vor der Rückmeldefrist an alle Eltern, deren Kind noch keine Antwort hat. |
 | **Lehrperson** | Optional. Ohne Lehrperson erfasst der Fotograf die Klasse selbst (Kinder eintragen, QR-Zettel drucken). Alles, was die Lehrperson kann, kann der Fotograf in der Erfassungsansicht ebenfalls. |
@@ -49,18 +49,19 @@ je Klasse: `Klasse; E-Mail Lehrperson; Name Lehrperson`).
   Browser; die Firestore-Regeln bleiben gesperrt.
 - **Eine Identität, abgeleitete Rollen.** Lehrperson und Eltern melden sich wie
   bisher mit bestätigter E-Mail-Adresse an (kein Passwort). „Lehrperson“ ist
-  kein Konto, sondern die am Auftrag eingetragene Adresse: nur sie sieht die
-  Klassenseite. Trägt der Fotograf eine andere Adresse ein, ist der Zugriff sofort
+  kein Konto, sondern die am Auftrag eingetragene E-Mail-Adresse: nur sie sieht
+  die Klassenseite. Trägt der Fotograf eine andere E-Mail-Adresse ein, ist der
+  Zugriff sofort
   weg und der alte Link ungültig.
 - **Eltern sehen nur sich.** Das Einverständnis-Formular liefert ausschliesslich
   die eigenen Kinder und die eigene Antwort. Die Klassenliste, Statusangaben oder
-  fremde Adressen sind für Eltern nie erreichbar. Der Klassenlink zeigt keine
+  fremde E-Mail-Adressen sind für Eltern nie erreichbar. Der Klassenlink zeigt keine
   Namen: Die Eltern **tippen** den Namen ihres Kindes; der Server gleicht ihn mit
   der Liste der Lehrperson ab (gleicher Name, alle getippten Namensteile passen
   auf genau ein Kind, oder umgekehrt). Ohne eindeutigen Treffer entsteht ein
   Eintrag „von Eltern ergänzt“, den die Lehrperson bestätigt oder mit dem
   richtigen Kind zusammenführt.
-- **Lehrpersonen sehen keine Adressen**, ausser sie erfassen sie selbst (Option
+- **Lehrpersonen sehen keine E-Mail-Adressen**, ausser sie erfassen sie selbst (Option
   oben). Keine Fotos, keine Bestellungen, keine anderen Klassen, keine Exporte.
 - **Links sind Geheimnisse.** Lehrpersonen-Link, Einladungslinks und
   Bestätigungslinks sind zufällige, **einmalig** einlösbare Token mit Ablaufdatum
@@ -70,15 +71,15 @@ je Klasse: `Klasse; E-Mail Lehrperson; Name Lehrperson`).
   normale Anmeldung mit der E-Mail-Adresse; die App leitet automatisch zur
   Klassenseite bzw. zum Einverständnis.
 - **Keine Rückschlüsse für Aussenstehende.** Die Klassenlink-Seite antwortet
-  immer gleich, egal ob eine Adresse schon bekannt ist. Registrierung, Formular
+  immer gleich, egal ob eine E-Mail-Adresse schon bekannt ist. Registrierung, Formular
   und Klassenseite sind mit Rate-Limits geschützt; eine Klasse fasst höchstens
   80 Kinder.
 - **Nachweisbares Einverständnis.** Jede Antwort wird als eigener,
-  unveränderlicher Datensatz gespeichert (Kind, Adresse, Antwort, Zeitpunkt,
+  unveränderlicher Datensatz gespeichert (Kind, E-Mail-Adresse, Antwort, Zeitpunkt,
   Version des Textes, Browser). Eine neue Antwort ersetzt die alte, der Verlauf
   bleibt sichtbar (Adminbereich → Erfassung → „Verlauf der Antworten“).
 - **Datensparsamkeit und Löschung.** Gespeichert werden nur Name des Kindes,
-  Adresse der Eltern (optional deren Name) und die Antwort. Einverständnisse
+  E-Mail-Adresse der Eltern (optional deren Name) und die Antwort. Einverständnisse
   hängen am Auftrag und werden mit ihm gelöscht.
 
 ## 10.4 Einverständnis-Text

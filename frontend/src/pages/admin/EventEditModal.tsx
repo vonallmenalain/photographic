@@ -28,7 +28,7 @@ interface OverviewChildEmail {
   email: string;
   name: string;
   status: string;
-  /** Letzte E-Mail an diese Adresse kam nicht an (Resend-Webhook / SMTP). */
+  /** Letzte E-Mail an diese E-Mail-Adresse kam nicht an (Resend-Webhook / SMTP). */
   delivery_problem: DeliveryProblemInfo | null;
 }
 interface OverviewChild {
@@ -117,7 +117,7 @@ export function EventEditModal({
   const [dragOver, setDragOver] = useState(false);
   // "+ E-Mail-Adresse": Kind, für das gerade das Formular offen ist.
   const [emailFormChildId, setEmailFormChildId] = useState<string | null>(null);
-  // Adresse, die gerade an Ort und Stelle korrigiert wird – je Kind, weil
+  // E-Mail-Adresse, die gerade an Ort und Stelle korrigiert wird – je Kind, weil
   // dieselbe Adresse (Geschwister) bei mehreren Kindern stehen kann.
   const [emailEdit, setEmailEdit] = useState<{
     childId: string;
@@ -274,10 +274,10 @@ export function EventEditModal({
         ? ` und mit „${child.name}“ verknüpft`
         : ` – sie war bereits mit „${child.name}“ verknüpft`;
       const invite = res.invited
-        ? ' Die Einladung wurde an diese Adresse gesendet.'
+        ? ' Die Einladung wurde an diese E-Mail-Adresse gesendet.'
         : sendInvitation
           ? ' Die Einladung wurde nicht gesendet (Auftrag nicht veröffentlicht oder Versand fehlgeschlagen).'
-          : ' Die Einladung kannst du über „Einladung per E-Mail senden“ gezielt an diese Adresse schicken.';
+          : ' Die Einladung kannst du über „Einladung per E-Mail senden“ gezielt an diese E-Mail-Adresse schicken.';
       setNotice(`E-Mail-Adresse ${res.email} ${what}${link}.${invite}`);
       setEmailFormChildId(null);
       await load(true);
@@ -310,7 +310,7 @@ export function EventEditModal({
       setNotice(
         `E-Mail-Adresse korrigiert zu ${value.toLowerCase()}.${
           res.addressChanged
-            ? ' Die Bestätigung wurde zurückgesetzt – die Eltern müssen die neue Adresse einmal bestätigen; die Einladung kannst du gezielt an diese Adresse senden.'
+            ? ' Die Bestätigung wurde zurückgesetzt – die Eltern müssen die neue E-Mail-Adresse einmal bestätigen; die Einladung kannst du gezielt an diese E-Mail-Adresse senden.'
             : ''
         }`,
       );
@@ -326,7 +326,7 @@ export function EventEditModal({
   const unlinkEmail = async (child: OverviewChild, email: OverviewChildEmail) => {
     if (
       !confirm(
-        `Verknüpfung zwischen ${email.email} und „${child.name}“ entfernen? Die Adresse sieht die Fotos dieses Kindes dann nicht mehr. Die Adresse selbst bleibt bestehen.`,
+        `Verknüpfung zwischen ${email.email} und „${child.name}“ entfernen? Die E-Mail-Adresse sieht die Fotos dieses Kindes dann nicht mehr. Die E-Mail-Adresse selbst bleibt bestehen.`,
       )
     )
       return;
@@ -730,7 +730,7 @@ export function EventEditModal({
 /**
  * Inline-Formular „+ E-Mail-Adresse“ unter dem Kind: Adresse (Pflicht), Name
  * (optional) und – bei veröffentlichtem Auftrag – die Option, die Einladung
- * sofort an diese Adresse zu schicken.
+ * sofort an diese E-Mail-Adresse zu schicken.
  */
 function ChildEmailForm({
   childName,
@@ -805,11 +805,12 @@ function ChildEmailForm({
             style={{ width: 'auto', margin: 0 }}
             disabled={busy}
           />
-          <span>Einladung („Ihre Fotos sind bereit“) sofort an diese Adresse senden</span>
+          <span>Einladung („Ihre Fotos sind bereit“) sofort an diese E-Mail-Adresse senden</span>
         </label>
       ) : (
         <p className="muted" style={{ fontSize: '0.8rem', marginTop: 8, marginBottom: 0 }}>
-          Existiert die Adresse bereits (z. B. bei einem Geschwisterkind), wird sie übernommen und nur
+          Existiert die E-Mail-Adresse bereits (z. B. bei einem Geschwisterkind), wird sie
+          übernommen und nur
           mit diesem Kind verknüpft. Die Einladung geht erst nach dem Veröffentlichen raus.
         </p>
       )}

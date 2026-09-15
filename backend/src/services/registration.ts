@@ -59,7 +59,7 @@ import {
  *  - Optional wird ein Einverständnis abgefragt (`consent_required`); ohne
  *    dient die Erfassung nur der Klassenliste.
  *
- * Die Erfassung IST der Auftrag (Status `collecting`): Kinder, Eltern-Adressen
+ * Die Erfassung IST der Auftrag (Status `collecting`): Kinder, E-Mail-Adressen
  * und Verknüpfungen entstehen direkt in den bekannten Sammlungen. „In Auftrag
  * übernehmen“ ist deshalb nur ein Statuswechsel auf `draft`, danach geht es im
  * Assistenten mit den Fotos weiter.
@@ -72,7 +72,7 @@ export interface RegistrationDoc {
   /** Rückmeldefrist als „YYYY-MM-DD“ (informativ + Basis der automatischen Erinnerung). */
   deadline: string | null;
   teacher_name: string;
-  /** Normalisierte Adresse der Lehrperson; leer = keine Lehrperson beteiligt. */
+  /** Normalisierte E-Mail-Adresse der Lehrperson; leer = keine Lehrperson beteiligt. */
   teacher_email: string;
   teacher_email_id: string | null;
   /** Lehrperson erfasst E-Mail-Adressen und sieht sie deshalb auch. */
@@ -183,7 +183,7 @@ export function classMailInfo(ev: RegistrationEvent): ClassMailInfo {
   };
 }
 
-/** „anna.muster@gmail.com“ → „an…@gmail.com“ (für Lehrpersonen ohne Adress-Einsicht). */
+/** „anna.muster@gmail.com“ → „an…@gmail.com“ (für Lehrpersonen ohne Einsicht in die E-Mail-Adressen). */
 export function maskEmail(email: string): string {
   const at = email.indexOf('@');
   if (at <= 0) return '…';
@@ -329,7 +329,7 @@ export async function updateRegistrationSettings(
     const next = input.teacherEmail ? normalizeEmail(input.teacherEmail) : '';
     if (next !== reg.teacher_email) {
       // Eine andere Lehrperson: Der alte persönliche Link verfällt sofort. Die
-      // Rolle selbst hängt an der Adresse am Auftrag, sie ist damit ebenfalls weg.
+      // Rolle selbst hängt an der E-Mail-Adresse am Auftrag, sie ist damit ebenfalls weg.
       if (reg.teacher_email_id) {
         await revokeLinkTokens(reg.teacher_email_id, 'teacher', `/klasse/${ev.id}`);
       }
@@ -350,7 +350,7 @@ export async function updateRegistrationSettings(
 // Lehrpersonen-Link
 // ---------------------------------------------------------------------------
 
-/** Findet oder erstellt das parent_emails-Dokument zu einer Adresse. */
+/** Findet oder erstellt das parent_emails-Dokument zu einer E-Mail-Adresse. */
 async function upsertParentEmail(
   email: string,
   name: string,
@@ -460,7 +460,7 @@ export interface RosterChild {
   conflict: boolean;
   consent_updated_at: string | null;
   parents: RosterParent[];
-  /** answered = Antwort liegt vor · invited = Adresse bekannt, keine Antwort · no_email = keine Adresse */
+  /** answered = Antwort liegt vor · invited = E-Mail-Adresse bekannt, keine Antwort · no_email = keine E-Mail-Adresse */
   state: 'answered' | 'invited' | 'no_email';
 }
 
@@ -733,7 +733,7 @@ export async function mergeChildren(
   }
   const consents = await runQuery<ConsentDoc>(col(COL.consents).where('child_id', '==', sourceId));
   for (const c of consents) {
-    // Gibt es für dieselbe Adresse schon eine Antwort beim Zielkind, gilt die neuere.
+    // Gibt es für dieselbe E-Mail-Adresse schon eine Antwort beim Zielkind, gilt die neuere.
     if (Number(c.superseded) !== 1) {
       const existing = await runQuery<ConsentDoc>(
         col(COL.consents).where('child_id', '==', targetId).where('email_id', '==', c.email_id),
@@ -774,7 +774,7 @@ export async function removeChild(ev: RegistrationEvent, childId: string, actor:
 }
 
 // ---------------------------------------------------------------------------
-// Eltern einladen (Adresse erfasst durch Lehrperson oder Fotograf)
+// Eltern einladen (E-Mail-Adresse erfasst durch Lehrperson oder Fotograf)
 // ---------------------------------------------------------------------------
 
 export interface InviteEntry {
@@ -904,9 +904,9 @@ export interface SelfRegistrationInput {
 
 /**
  * Schritt 1 der Selbstregistrierung. Hat die Person bereits eine bestätigte
- * Sitzung mit derselben Adresse, wird das Kind sofort eingetragen; sonst geht
+ * Sitzung mit derselben E-Mail-Adresse, wird das Kind sofort eingetragen; sonst geht
  * eine Bestätigungs-Mail raus und erst der Klick trägt das Kind ein. Die
- * Antwort ist in beiden Fällen neutral (kein Rückschluss auf bestehende Adressen).
+ * Antwort ist in beiden Fällen neutral (kein Rückschluss auf bestehende E-Mail-Adressen).
  */
 export async function startSelfRegistration(
   ev: RegistrationEvent,
@@ -950,7 +950,7 @@ export async function startSelfRegistration(
 }
 
 /**
- * Schritt 2: Nach bestätigter Adresse das Kind in die Klassenliste eintragen
+ * Schritt 2: Nach bestätigter E-Mail-Adresse das Kind in die Klassenliste eintragen
  * (bzw. mit dem Eintrag der Lehrperson verknüpfen). Läuft die Erfassung nicht
  * mehr, passiert nichts.
  */
@@ -1004,7 +1004,7 @@ export async function addOwnChild(
   return { childId: result.childId, matched: result.matched };
 }
 
-/** Zweite Eltern-Adresse (z. B. anderer Elternteil) für ein eigenes Kind. */
+/** Zweite E-Mail-Adresse der Eltern (z. B. anderer Elternteil) für ein eigenes Kind. */
 export async function addSecondParent(
   ev: RegistrationEvent,
   session: { emailId: string; email: string },
@@ -1014,7 +1014,7 @@ export async function addSecondParent(
   if (!registrationOpen(ev)) throw new ApiError(410, 'Die Erfassung für diese Klasse ist abgeschlossen.');
   const normalized = normalizeEmail(email);
   if (!EMAIL_RE.test(normalized)) throw new ApiError(400, 'Bitte geben Sie eine gültige E-Mail-Adresse ein.');
-  if (normalized === session.email) throw new ApiError(400, 'Das ist bereits Ihre eigene Adresse.');
+  if (normalized === session.email) throw new ApiError(400, 'Das ist bereits Ihre eigene E-Mail-Adresse.');
   const own = await getById(COL.emailChildren, linkId(session.emailId, childId));
   const child = await getById<ChildDoc>(COL.children, childId);
   if (!own || !child || child.event_id !== ev.id) throw new ApiError(404, 'Kind nicht gefunden.');
@@ -1045,7 +1045,7 @@ export interface ConsentRequestChild {
   name: string;
   decision: ConsentDecision | null;
   decidedAt: string | null;
-  /** Ein anderer Elternteil hat bereits geantwortet (ohne dessen Adresse zu zeigen). */
+  /** Ein anderer Elternteil hat bereits geantwortet (ohne dessen E-Mail-Adresse zu zeigen). */
   othersAnswered: boolean;
   needsReview: boolean;
 }
@@ -1063,7 +1063,7 @@ export interface ConsentRequestView {
   children: ConsentRequestChild[];
 }
 
-/** Alle Klassen, in denen diese Adresse ein Kind eingetragen hat, mit eigenem Stand. */
+/** Alle Klassen, in denen diese E-Mail-Adresse ein Kind eingetragen hat, mit eigenem Stand. */
 export async function consentRequestsForEmail(emailId: string): Promise<ConsentRequestView[]> {
   const links = await runQuery<{ email_id: string; child_id: string }>(
     col(COL.emailChildren).where('email_id', '==', emailId),
@@ -1230,12 +1230,12 @@ export async function recordConsent(
 export interface RemindResult {
   sent: number;
   failed: string[];
-  /** Kinder ohne bekannte Adresse – die kann die App nicht erinnern. */
+  /** Kinder ohne bekannte E-Mail-Adresse – die kann die App nicht erinnern. */
   withoutEmail: number;
 }
 
 /**
- * Erinnert alle Eltern, deren Kind noch keine Antwort hat und deren Adresse
+ * Erinnert alle Eltern, deren Kind noch keine Antwort hat und deren E-Mail-Adresse
  * bekannt ist. `throttleMs` verhindert, dass die Lehrperson die Eltern mehrmals
  * am Tag anschreibt; der Fotograf und die automatische Erinnerung sind frei.
  */
@@ -1292,7 +1292,7 @@ export async function remindPendingConsents(
     await setById(COL.reminders, newId('rem'), {
       event_id: ev.id,
       sent_at: nowIso(),
-      note: `${opts.auto ? 'Automatische Erinnerung' : 'Erinnerung'} Einverständnis an ${result.sent} Adresse(n)`,
+      note: `${opts.auto ? 'Automatische Erinnerung' : 'Erinnerung'} Einverständnis an ${result.sent} E-Mail-Adresse(n)`,
       created_at: nowIso(),
     });
   }
@@ -1338,7 +1338,7 @@ export async function markTeacherCompleted(ev: RegistrationEvent, teacherEmail: 
 /**
  * „In Auftrag übernehmen“: schliesst die Erfassung (Klassenlink und Formular
  * sind danach zu) und setzt den Status auf Entwurf, damit es im Assistenten
- * mit den Fotos weitergeht. Kinder, Adressen und Verknüpfungen bleiben.
+ * mit den Fotos weitergeht. Kinder, E-Mail-Adressen und Verknüpfungen bleiben.
  */
 export async function closeRegistration(ev: RegistrationEvent, actor: string): Promise<void> {
   const reg = registrationOf(ev);
@@ -1366,7 +1366,7 @@ export async function reopenRegistration(ev: RegistrationEvent, actor: string): 
   await audit('registration.reopen', ev.id, actor);
 }
 
-/** Alle Klassen, für die diese Adresse als Lehrperson eingetragen ist. */
+/** Alle Klassen, für die diese E-Mail-Adresse als Lehrperson eingetragen ist. */
 export async function teacherEventsForEmail(email: string): Promise<RegistrationEvent[]> {
   const normalized = normalizeEmail(email);
   if (!normalized) return [];
@@ -1467,7 +1467,7 @@ export function parentShareText(ev: RegistrationEvent, url: string): string {
     `Bitte tragen Sie Ihr Kind${until ? ` bis zum ${until}` : ''} über diesen Link ein${consent ? ' und geben Sie dort Ihr Einverständnis' : ''}:`,
     url,
     '',
-    'Sie brauchen dafür nur Ihre E-Mail-Adresse. Über dieselbe Adresse sehen Sie später die Fotos. Es besteht keine Kaufpflicht.',
+    'Sie brauchen dafür nur Ihre E-Mail-Adresse. Über dieselbe E-Mail-Adresse sehen Sie später die Fotos. Es besteht keine Kaufpflicht.',
   ].join('\n');
 }
 

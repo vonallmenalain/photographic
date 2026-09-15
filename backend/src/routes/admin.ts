@@ -206,7 +206,7 @@ async function deleteChildCascade(childId: string): Promise<void> {
 /**
  * Entfernt eine Bestellung endgültig – samt allem, was ausschliesslich an ihr
  * hängt: den Bestellpositionen und den Download-Freigaben (die gekauften
- * Digitalfotos sind für diese Adresse danach nicht mehr herunterladbar).
+ * Digitalfotos sind für diese E-Mail-Adresse danach nicht mehr herunterladbar).
  * Fotos, Kinder und E-Mail-Adressen bleiben unberührt, sie gehören zum Auftrag
  * und nicht zur Bestellung.
  */
@@ -1053,8 +1053,8 @@ router.delete(
   }),
 );
 
-// --- "Galerie ist bereit" Sammel-E-Mail an alle Adressen eines Auftrags ----
-// Schickt den (nicht deaktivierten) Eltern-Adressen des Auftrags eine E-Mail mit
+// --- "Galerie ist bereit" Sammel-E-Mail an alle E-Mail-Adressen eines Auftrags
+// Schickt den (nicht deaktivierten) E-Mail-Adressen der Eltern eine E-Mail mit
 // Link zur App, Kurzanleitung zur Verifizierung sowie den Schutz-/Aufbewahrungs-
 // hinweisen ("Einladung per E-Mail"). Per GET wird die komplette Empfängerliste
 // geliefert, damit das Frontend einzelne Adressen abwählen kann; standardmässig
@@ -1164,7 +1164,7 @@ router.post(
       await setById(COL.reminders, newId('rem'), {
         event_id: req.params.id,
         sent_at: nowIso(),
-        note: `Einladung per E-Mail an ${sent} Adresse(n)`,
+        note: `Einladung per E-Mail an ${sent} E-Mail-Adresse(n)`,
         created_at: nowIso(),
       });
       await updateById(COL.events, req.params.id, { invited_at: nowIso(), updated_at: nowIso() });
@@ -3312,7 +3312,7 @@ router.post(
       await setById(COL.reminders, newId('rem'), {
         event_id: eventId,
         sent_at: nowIso(),
-        note: `Reminder per E-Mail an ${sent} Adresse(n)`,
+        note: `Erinnerung per E-Mail an ${sent} E-Mail-Adresse(n)`,
         created_at: nowIso(),
       });
     }
