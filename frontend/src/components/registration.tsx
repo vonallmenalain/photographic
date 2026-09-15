@@ -331,6 +331,75 @@ export function parseInviteLines(text: string): { entries: InviteEntry[]; proble
   return { entries, problems };
 }
 
+/** Eine Zeile der Erfassungs-Tabelle: ein Kind mit einer oder zwei E-Mail-Adressen. */
+interface InviteRow {
+  uid: number;
+  childName: string;
+  email1: string;
+  email2: string;
+  parentName: string;
+}
+
+let inviteUid = 1;
+const makeInviteRow = (preset: Partial<InviteRow> = {}): InviteRow => ({
+  uid: inviteUid++,
+  childName: '',
+  email1: '',
+  email2: '',
+  parentName: '',
+  ...preset,
+});
+
+/** Tabellenzeilen in dieselbe Form bringen, die auch die eingefügte Liste ergibt. */
+export function rowsToEntries(rows: InviteRow[]): { entries: InviteEntry[]; problems: string[] } {
+  const entries: InviteEntry[] = [];
+  const problems: string[] = [];
+  rows.forEach((row, i) => {
+    const childName = row.childName.trim();
+    const emails = [row.email1, row.email2]
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    if (!childName && emails.length === 0) return; // leere Zeile
+    if (!childName) {
+      problems.push(`Zeile ${i + 1}: Name des Kindes fehlt.`);
+      return;
+    }
+    if (emails.length === 0) {
+      problems.push(`Zeile ${i + 1}: keine E-Mail-Adresse für „${childName}“.`);
+      return;
+    }
+    const invalid = emails.filter((e) => !EMAIL_RE.test(e));
+    if (invalid.length > 0) {
+      problems.push(`Zeile ${i + 1}: ungültige E-Mail-Adresse ${invalid.join(', ')}.`);
+      return;
+    }
+    entries.push({ childName, emails: [...new Set(emails)], parentName: row.parentName.trim() });
+  });
+  return { entries, problems };
+}
+
+/** Wie viele Kinder teilen sich eine E-Mail-Adresse (Geschwister)? */
+function sharedAddressCount(entries: InviteEntry[]): number {
+  const perEmail = new Map<string, number>();
+  for (const e of entries) {
+    for (const mail of e.emails) perEmail.set(mail, (perEmail.get(mail) ?? 0) + 1);
+  }
+  let shared = 0;
+  for (const count of perEmail.values()) if (count > 1) shared += 1;
+  return shared;
+}
+
+/**
+ * „Eltern per E-Mail einladen“ – für die Lehrperson auf ihrer Klassenseite und
+ * für den Fotografen in der Erfassungsansicht.
+ *
+ * Zwei Wege zum selben Ziel: eine Tabelle mit Kind, E-Mail-Adresse und
+ * optionalem Namen der Eltern (Voreinstellung) oder eine eingefügte Liste aus
+ * einer bestehenden Klassenliste. Pro Kind sind zwei E-Mail-Adressen möglich
+ * (Mutter und Vater), und dieselbe E-Mail-Adresse darf bei mehreren Kindern
+ * stehen (Geschwister) – dann geht an sie nur EINE Einladung, in der beide
+ * Kinder stehen.
+ */
 export function InviteForm({
   endpoint,
   consentRequired,
@@ -340,15 +409,36 @@ export function InviteForm({
   consentRequired: boolean;
   onDone: (message: string) => Promise<void>;
 }) {
+  const [mode, setMode] = useState<'table' | 'paste'>('table');
+  const [rows, setRows] = useState<InviteRow[]>([makeInviteRow(), makeInviteRow(), makeInviteRow()]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const parsed = useMemo(() => parseInviteLines(text), [text]);
+
+  const parsed = useMemo(
+    () => (mode === 'table' ? rowsToEntries(rows) : parseInviteLines(text)),
+    [mode, rows, text],
+  );
+  const shared = sharedAddressCount(parsed.entries);
+
+  const updateRow = (uid: number, patch: Partial<InviteRow>) =>
+    setRows((prev) => prev.map((r) => (r.uid === uid ? { ...r, ...patch } : r)));
+  const removeRow = (uid: number) =>
+    setRows((prev) => (prev.length <= 1 ? [makeInviteRow()] : prev.filter((r) => r.uid !== uid)));
+  /** Geschwisterkind: neue Zeile direkt darunter, mit denselben E-Mail-Adressen. */
+  const addSibling = (row: InviteRow) =>
+    setRows((prev) => {
+      const at = prev.findIndex((r) => r.uid === row.uid);
+      const copy = makeInviteRow({ email1: row.email1, email2: row.email2, parentName: row.parentName });
+      const next = [...prev];
+      next.splice(at + 1, 0, copy);
+      return next;
+    });
 
   const send = async () => {
     setError('');
     if (parsed.entries.length === 0) {
-      setError('Bitte mindestens eine Zeile mit Kind und E-Mail-Adresse eintragen.');
+      setError('Bitte mindestens ein Kind mit E-Mail-Adresse eintragen.');
       return;
     }
     setBusy(true);
@@ -361,6 +451,7 @@ export function InviteForm({
         invalid: string[];
         devLogOnly: boolean;
       }>(endpoint, { method: 'POST', body: { entries: parsed.entries } });
+      setRows([makeInviteRow(), makeInviteRow(), makeInviteRow()]);
       setText('');
       await onDone(
         `${res.sent} Einladung(en) verschickt${res.childrenCreated ? `, ${res.childrenCreated} Kind(er) neu eingetragen` : ''}.` +
@@ -376,22 +467,134 @@ export function InviteForm({
 
   return (
     <div className="card mb">
-      <h2>Eltern per E-Mail einladen</h2>
-      <p className="muted" style={{ fontSize: '0.88rem', marginTop: 0 }}>
-        Pro Zeile ein Kind und die E-Mail-Adresse(n) der Eltern, z. B.{' '}
-        <code>Lena Müller; anna@beispiel.ch, papa@beispiel.ch</code>. Die Eltern erhalten sofort eine
-        E-Mail{consentRequired ? ' mit dem Link zum Einverständnis' : ' zur Bestätigung ihrer E-Mail-Adresse'}.
+      <div className="row between" style={{ alignItems: 'flex-start' }}>
+        <h2 style={{ marginBottom: 0 }}>Eltern per E-Mail einladen</h2>
+        <div className="row" style={{ gap: 6 }}>
+          <button
+            type="button"
+            className={`btn small ${mode === 'table' ? '' : 'secondary'}`}
+            onClick={() => setMode('table')}
+          >
+            Tabelle
+          </button>
+          <button
+            type="button"
+            className={`btn small ${mode === 'paste' ? '' : 'secondary'}`}
+            onClick={() => setMode('paste')}
+          >
+            Liste einfügen
+          </button>
+        </div>
+      </div>
+      <p className="muted" style={{ fontSize: '0.88rem', marginTop: 6 }}>
+        Die Eltern erhalten sofort eine E-Mail
+        {consentRequired ? ' mit dem Link zum Einverständnis' : ' zur Bestätigung ihrer E-Mail-Adresse'}.
         Bereits eingetragene Kinder werden anhand des Namens erkannt.
       </p>
       {error && <Alert kind="error">{error}</Alert>}
-      <textarea
-        rows={6}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={'Lena Müller; anna@beispiel.ch, papa@beispiel.ch\nTim Weber; weber@beispiel.ch'}
-        style={{ width: '100%' }}
-      />
-      {text.trim() && (
+
+      {mode === 'table' ? (
+        <>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="entry-table">
+              <thead>
+                <tr>
+                  <th style={{ minWidth: 160 }}>Name Kind</th>
+                  <th style={{ minWidth: 200 }}>E-Mail-Adresse Eltern</th>
+                  <th style={{ minWidth: 200 }}>2. E-Mail-Adresse (optional)</th>
+                  <th style={{ minWidth: 150 }}>Name Eltern (optional)</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr key={row.uid}>
+                    <td>
+                      <input
+                        value={row.childName}
+                        onChange={(e) => updateRow(row.uid, { childName: e.target.value })}
+                        placeholder="z. B. Lena Müller"
+                        aria-label={`Name Kind ${i + 1}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="email"
+                        value={row.email1}
+                        onChange={(e) => updateRow(row.uid, { email1: e.target.value })}
+                        placeholder="mutter@beispiel.ch"
+                        aria-label={`E-Mail-Adresse Eltern ${i + 1}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="email"
+                        value={row.email2}
+                        onChange={(e) => updateRow(row.uid, { email2: e.target.value })}
+                        placeholder="vater@beispiel.ch"
+                        aria-label={`Zweite E-Mail-Adresse ${i + 1}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        value={row.parentName}
+                        onChange={(e) => updateRow(row.uid, { parentName: e.target.value })}
+                        placeholder="Familie Müller"
+                        aria-label={`Name Eltern ${i + 1}`}
+                      />
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        onClick={() => addSibling(row)}
+                        title="Geschwisterkind mit denselben E-Mail-Adressen ergänzen"
+                        disabled={!row.email1.trim()}
+                      >
+                        + Geschwister
+                      </button>
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        style={{ color: 'var(--danger)' }}
+                        onClick={() => removeRow(row.uid)}
+                        title="Zeile entfernen"
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className="btn secondary small"
+              onClick={() => setRows((prev) => [...prev, makeInviteRow()])}
+            >
+              + weiteres Kind
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
+            Pro Zeile ein Kind und die E-Mail-Adresse(n) der Eltern, z. B.{' '}
+            <code>Lena Müller; anna@beispiel.ch, papa@beispiel.ch</code>.
+          </p>
+          <textarea
+            rows={6}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={'Lena Müller; anna@beispiel.ch, papa@beispiel.ch\nTim Weber; weber@beispiel.ch'}
+            style={{ width: '100%' }}
+          />
+        </>
+      )}
+
+      {(parsed.problems.length > 0 || parsed.entries.length > 0) && (
         <div style={{ marginTop: 10 }}>
           {parsed.problems.length > 0 && (
             <Alert kind="info">
@@ -404,10 +607,12 @@ export function InviteForm({
             <p className="muted" style={{ fontSize: '0.85rem', margin: '0 0 8px' }}>
               {parsed.entries.length} Kind(er),{' '}
               {new Set(parsed.entries.flatMap((e) => e.emails)).size} E-Mail-Adresse(n) erkannt.
+              {shared > 0 && ` ${shared} E-Mail-Adresse(n) für mehrere Kinder – dorthin geht nur eine Einladung für alle Kinder.`}
             </p>
           )}
         </div>
       )}
+
       <div className="row" style={{ marginTop: 10 }}>
         <button className="btn" type="button" onClick={send} disabled={busy || parsed.entries.length === 0}>
           {busy ? 'Wird verschickt …' : 'Einladungen verschicken'}

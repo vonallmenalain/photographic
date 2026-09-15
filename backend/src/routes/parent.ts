@@ -49,8 +49,7 @@ import {
   startSelfRegistration,
   materializeRegistration,
   consentRequestsForEmail,
-  pendingConsentCountForEmail,
-  recordConsent,
+  recordConsents,
   addOwnChild,
   addSecondParent,
   registrationOpen,
@@ -118,9 +117,9 @@ function toShippingAddress(input: z.infer<typeof shippingAddressSchema>): Shippi
  * daraus abgeleitete Zielseite nach der Anmeldung.
  */
 async function sessionExtras(emailId: string, email: string) {
-  const [teacherEvents, openConsents] = await Promise.all([
+  const [teacherEvents, requests] = await Promise.all([
     teacherEventsForEmail(email),
-    pendingConsentCountForEmail(emailId),
+    consentRequestsForEmail(emailId),
   ]);
   const teacherClasses = teacherEvents.map((ev) => ({
     id: ev.id,
@@ -128,9 +127,18 @@ async function sessionExtras(emailId: string, email: string) {
     status: ev.status,
     open: registrationOpen(ev),
   }));
+  // Offen = eigenes Kind in einer laufenden Erfassung ohne Antwort.
+  let openConsents = 0;
+  for (const r of requests) {
+    if (!r.open || !r.consentRequired) continue;
+    openConsents += r.children.filter((c) => !c.decision).length;
+  }
   const next =
     openConsents > 0 ? '/einverstaendnis' : teacherClasses.some((c) => c.open) ? '/klasse' : '/galerie';
-  return { teacherClasses, openConsents, next };
+  // `consentRequests` zählt alle Klassen, zu denen diese E-Mail-Adresse etwas
+  // sieht – auch bereits beantwortete. Die Galerie blendet damit den Knopf
+  // „Zur Einverständniserklärung“ ein.
+  return { teacherClasses, openConsents, consentRequests: requests.length, next };
 }
 
 // Neutral message that never reveals whether an address exists.
@@ -336,29 +344,43 @@ router.post(
   requireParent,
   consentLimiter,
   asyncHandler(async (req, res) => {
-    const { eventId, childId, decision, parentName } = parse(
+    // Eine Familie beantwortet alle ihre Kinder einer Klasse auf einmal; die
+    // Einzelform bleibt für ältere Browser-Tabs gültig.
+    const { eventId, childId, decision, decisions } = parse(
       z.object({
         eventId: z.string().min(1),
-        childId: z.string().min(1),
-        decision: z.enum(CONSENT_DECISIONS),
-        parentName: z.string().trim().max(200).default(''),
+        childId: z.string().min(1).optional(),
+        decision: z.enum(CONSENT_DECISIONS).optional(),
+        decisions: z
+          .array(z.object({ childId: z.string().min(1), decision: z.enum(CONSENT_DECISIONS) }))
+          .max(20)
+          .optional(),
       }),
       req.body ?? {},
     );
-    const ev = await getById<Parameters<typeof recordConsent>[0]>(COL.events, eventId);
+    const list =
+      decisions && decisions.length > 0
+        ? decisions
+        : childId && decision
+          ? [{ childId, decision }]
+          : [];
+    if (list.length === 0) throw new ApiError(400, 'Bitte wählen Sie eine Antwort.');
+    const ev = await getById<Parameters<typeof recordConsents>[0]>(COL.events, eventId);
     if (!ev) throw new ApiError(404, 'Klasse nicht gefunden.');
-    await recordConsent(
+    const result = await recordConsents(
       ev,
       { emailId: req.parent!.emailId, email: req.parent!.email },
-      childId,
-      decision,
-      {
-        parentName,
-        ip: String(req.ip ?? ''),
-        userAgent: String(req.headers['user-agent'] ?? ''),
-      },
+      list,
+      { ip: String(req.ip ?? ''), userAgent: String(req.headers['user-agent'] ?? '') },
     );
-    res.json({ ok: true, message: 'Vielen Dank, Ihre Antwort ist gespeichert.' });
+    res.json({
+      ok: true,
+      saved: result.saved,
+      message:
+        result.saved > 1
+          ? 'Vielen Dank, Ihre Antworten sind gespeichert. Die Bestätigung haben wir Ihnen per E-Mail geschickt.'
+          : 'Vielen Dank, Ihre Antwort ist gespeichert. Die Bestätigung haben wir Ihnen per E-Mail geschickt.',
+    });
   }),
 );
 

@@ -1527,12 +1527,6 @@ router.post(
       }),
       req.body ?? {},
     );
-    if (!settings.parentLinkEnabled && !settings.teacherEntersEmails) {
-      throw new ApiError(
-        400,
-        'Bitte mindestens einen Weg wählen: Klassenlink für die Eltern oder Erfassung der E-Mail-Adressen.',
-      );
-    }
     const created = await createRegistrationEvents(classes, settings, {
       sendTeacherLink: send,
       actor: req.admin!.username,
