@@ -4,7 +4,30 @@ import { api, ApiError } from '../../api/client';
 import { useParentAuth } from '../../context/ParentAuth';
 import { Alert, TrustNote } from '../../components/common';
 import { firebaseEnabled, sendParentSignInLink } from '../../lib/firebase';
+import { BUSINESS, BUSINESS_FULL_NAME } from '../../lib/business';
+import { formatPrice } from '../../lib/format';
+import { paymentMethodLabels, useSiteInfo } from '../../lib/siteInfo';
 
+/** Öffentliche Preisliste (GET /api/parent/products, ohne Login). */
+interface PublicProduct {
+  id: string;
+  name: string;
+  description: string;
+  type: 'digital' | 'print';
+  price_cents: number;
+  additional_price_cents: number | null;
+  scope: 'all' | 'portrait' | 'group';
+  currency: string;
+}
+
+/**
+ * Startseite. Neben der Anmeldung zeigt sie bewusst öffentlich, wer hier was zu
+ * welchen Preisen verkauft: Zahlungsanbieter (u. a. TWINT über Stripe)
+ * schalten eine Zahlungsart nur für Websites frei, die ohne Passwort erreichbar
+ * sind und Anbieter, Angebot, CHF-Preise und Lieferung in die Schweiz
+ * erkennen lassen. Geschützt bleiben nur die Fotos selbst – sie erscheinen
+ * erst nach der Bestätigung der E-Mail-Adresse.
+ */
 export default function Landing() {
   const { verified, loading, next } = useParentAuth();
   const navigate = useNavigate();
@@ -12,6 +35,25 @@ export default function Landing() {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const site = useSiteInfo();
+  const [products, setProducts] = useState<PublicProduct[] | null>(null);
+  const [shippingFee, setShippingFee] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ products: PublicProduct[]; shipping_fee_cents: number }>('/api/parent/products')
+      .then((res) => {
+        if (cancelled) return;
+        setProducts(res.products);
+        setShippingFee(Math.max(0, Number(res.shipping_fee_cents) || 0));
+      })
+      .catch(() => {
+        if (!cancelled) setProducts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Angemeldete Personen landen auf ihrer Zielseite: offenes Einverständnis,
   // Klassenseite der Lehrperson oder die Fotos.
@@ -54,20 +96,29 @@ export default function Landing() {
     }
   };
 
+  const currency = (site?.currency ?? 'chf').toUpperCase();
+  const fee = shippingFee ?? site?.shippingFeeCents ?? 0;
+  const methods = paymentMethodLabels(site?.paymentMethods ?? []);
+
   return (
-    <div className="narrow" style={{ margin: '0 auto' }}>
+    <div className="narrow-wide" style={{ margin: '0 auto' }}>
       <div className="hero">
         <div className="lock-big">🔒</div>
         <h1>Ihre Kinderfotos – sicher &amp; geschützt</h1>
+        <p className="soft">
+          {BUSINESS.platform} ist die Bestellplattform von <strong>{BUSINESS_FULL_NAME}</strong>{' '}
+          für die Fotos, die bei Foto-Terminen in Schulen und Kindergärten entstanden sind.
+        </p>
+      </div>
+
+      <div className="card narrow" style={{ margin: '0 auto' }}>
+        <h2>Zu Ihren Fotos</h2>
         <p className="soft">
           Geben Sie Ihre E-Mail-Adresse ein. Wir senden Ihnen{' '}
           {firebaseEnabled ? 'einen sicheren Anmeldelink' : 'einen Zugangscode'}, damit nur Sie Ihre
           zugeordneten Fotos sehen können. Die Fotos sind sicher auf einem lokalen Schweizer Server
           gespeichert.
         </p>
-      </div>
-
-      <div className="card">
         {message && <Alert kind="success">{message}</Alert>}
         {error && <Alert kind="error">{error}</Alert>}
         <form onSubmit={submit}>
@@ -77,7 +128,7 @@ export default function Landing() {
               id="email"
               type="email"
               autoComplete="email"
-              placeholder="name@beispiel.de"
+              placeholder="name@beispiel.ch"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -97,12 +148,135 @@ export default function Landing() {
         </p>
       </div>
 
-      <div style={{ marginTop: 18 }}>
+      <div className="narrow" style={{ margin: '18px auto 0' }}>
         <TrustNote>
-          <strong>Warum eine Bestätigung?</strong> Zum Schutz Ihrer Fotos zeigen wir die Bilder erst
+          <strong>Warum eine Bestätigung?</strong> Zum Schutz der Kinder zeigen wir die Bilder erst
           an, nachdem Ihre E-Mail-Adresse bestätigt wurde. Die Fotos sind genau dieser E-Mail-Adresse
-          zugeordnet und können nur nach erfolgreicher Bestätigung angezeigt werden.
+          zugeordnet und können nur nach erfolgreicher Bestätigung angezeigt werden. Angebot, Preise
+          und Bedingungen finden Sie hier auf dieser Seite.
         </TrustNote>
+      </div>
+
+      <div className="card" style={{ marginTop: 28 }}>
+        <h2>So funktioniert die Bestellung</h2>
+        <ol>
+          <li>
+            Nach dem Foto-Termin in der Schule oder im Kindergarten ordnen wir die Fotos Ihres Kindes
+            Ihrer E-Mail-Adresse zu und benachrichtigen Sie per E-Mail.
+          </li>
+          <li>
+            Sie bestätigen hier Ihre E-Mail-Adresse und sehen die Fotos als Vorschau mit
+            Wasserzeichen.
+          </li>
+          <li>Sie wählen Fotos und Produkte aus und legen sie in den Warenkorb.</li>
+          <li>
+            Sie bezahlen im Voraus online über unseren Zahlungsdienstleister Stripe. Alle Preise
+            werden in Schweizer Franken (CHF) angezeigt.
+          </li>
+          <li>
+            Digitale Fotos stehen sofort nach der Zahlung zum Download bereit. Gedruckte Produkte
+            werden produziert und per Post an Ihre Adresse in der Schweiz geschickt.
+          </li>
+        </ol>
+      </div>
+
+      <div className="card">
+        <h2>Angebot &amp; Preise</h2>
+        {products === null ? (
+          <p className="muted">Preisliste wird geladen …</p>
+        ) : products.length === 0 ? (
+          <p className="muted">
+            Die Preisliste ist im Moment nicht verfügbar. Die aktuellen Preise in CHF sehen Sie bei
+            der Auswahl der Fotos und im Warenkorb.
+          </p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Produkt</th>
+                  <th style={{ textAlign: 'right' }}>Preis ({currency})</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((p) => (
+                  <tr key={p.id}>
+                    <td>
+                      <strong>{p.name}</strong>
+                      {p.scope === 'portrait' ? (
+                        <span className="muted"> · nur für Einzelfotos</span>
+                      ) : p.scope === 'group' ? (
+                        <span className="muted"> · nur für Gruppenfotos</span>
+                      ) : null}
+                      {p.description ? (
+                        <div className="muted" style={{ fontSize: '0.85rem' }}>
+                          {p.description}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {formatPrice(p.price_cents, p.currency || 'chf')} {(p.currency || 'chf').toUpperCase()}
+                      {p.additional_price_cents !== null &&
+                      p.additional_price_cents !== p.price_cents ? (
+                        <div className="muted" style={{ fontSize: '0.85rem' }}>
+                          jedes weitere Stück +{formatPrice(p.additional_price_cents, p.currency || 'chf')}
+                        </div>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="soft" style={{ marginTop: 14, marginBottom: 0, fontSize: '0.9rem' }}>
+          Alle Preise in Schweizer Franken (CHF). „Jedes weitere Stück“ gilt für weitere Exemplare
+          desselben Fotos im selben Produkt.
+          {fee > 0 ? (
+            <>
+              {' '}
+              Für gedruckte Produkte wird pro Bestellung einmalig eine Versandpauschale von{' '}
+              {formatPrice(fee, currency)} {currency} verrechnet; digitale Downloads sind versandfrei.
+            </>
+          ) : null}
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Zahlung &amp; Lieferung</h2>
+        <p>
+          <strong>Zahlung:</strong> im Voraus online über Stripe
+          {methods.length ? <> – mit {methods.join(', ')}</> : null}. Die Bestellung wird erst nach
+          erfolgreicher Zahlung ausgeführt.
+        </p>
+        <p>
+          <strong>Lieferung:</strong> Digitale Downloads sind sofort nach der Zahlung unter
+          „Bestellungen“ verfügbar. Gedruckte Produkte senden wir per Post; wir liefern in die{' '}
+          <strong>Schweiz</strong>.
+        </p>
+        <p style={{ marginBottom: 0 }}>
+          Einzelheiten stehen in den <Link to="/agb">Allgemeinen Geschäftsbedingungen</Link>.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Anbieter &amp; Kontakt</h2>
+        <p style={{ marginBottom: 8 }}>
+          <strong>{BUSINESS_FULL_NAME}</strong>, {BUSINESS.legalForm}
+          <br />
+          {BUSINESS.street}, {BUSINESS.zipCity}, {BUSINESS.country}
+          <br />
+          E-Mail: <a href={`mailto:${BUSINESS.email}`}>{BUSINESS.email}</a>
+          <br />
+          Website:{' '}
+          <a href={BUSINESS.website} target="_blank" rel="noopener noreferrer">
+            {BUSINESS.websiteLabel}
+          </a>
+        </p>
+        <p className="muted" style={{ marginBottom: 0, fontSize: '0.9rem' }}>
+          <Link to="/impressum">Impressum</Link> · <Link to="/agb">AGB</Link> ·{' '}
+          <Link to="/datenschutz">Datenschutz</Link> · <Link to="/hilfe">Hilfe &amp; Kontakt</Link>
+        </p>
       </div>
     </div>
   );

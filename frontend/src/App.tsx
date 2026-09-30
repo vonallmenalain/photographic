@@ -13,6 +13,7 @@ import OrderDetail from './pages/parent/OrderDetail';
 import Help from './pages/parent/Help';
 import Privacy from './pages/parent/Privacy';
 import Imprint from './pages/parent/Imprint';
+import Terms from './pages/parent/Terms';
 import ClassRegister from './pages/parent/ClassRegister';
 import Consent from './pages/parent/Consent';
 import TeacherClasses from './pages/parent/TeacherClasses';
@@ -54,6 +55,7 @@ function ParentRoutes() {
             <Route path="/hilfe" element={<Help />} />
             <Route path="/datenschutz" element={<Privacy />} />
             <Route path="/impressum" element={<Imprint />} />
+            <Route path="/agb" element={<Terms />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

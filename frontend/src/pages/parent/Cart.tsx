@@ -342,6 +342,10 @@ export default function Cart() {
           <button className="btn block mt" onClick={checkout} disabled={busy}>
             {busy ? 'Einen Moment …' : 'Zur Zahlung'}
           </button>
+          <p className="muted center" style={{ marginTop: 10, marginBottom: 0, fontSize: '0.85rem' }}>
+            Mit der Zahlung gelten die <Link to="/agb">Allgemeinen Geschäftsbedingungen</Link>. Alle
+            Preise in CHF.
+          </p>
 
           <div style={{ marginTop: 18 }}>
             <TrustNote>

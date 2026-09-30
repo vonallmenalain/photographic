@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { formatPrice } from '../../lib/format';
-import { useSiteInfo } from '../../lib/siteInfo';
+import { BUSINESS, BUSINESS_FULL_NAME } from '../../lib/business';
+import { paymentMethodLabels, useSiteInfo } from '../../lib/siteInfo';
 
 /**
  * Impressum mit den Pflichtangaben zum Betreiber sowie den Eckpunkten von
@@ -10,42 +11,54 @@ import { useSiteInfo } from '../../lib/siteInfo';
  * Kontaktmöglichkeit, Preise in CHF und – bei physischen Produkten – die
  * Schweiz als Lieferziel.
  *
- * Die Kontakt-E-Mail-Adresse und die Versandpauschale kommen aus den
- * Einstellungen des Adminbereichs (öffentlicher Endpunkt /api/parent/site).
+ * Anbieterangaben inkl. E-Mail-Adresse stehen fest im Code (lib/business.ts),
+ * damit sie auch ohne erreichbare API sichtbar sind. Die zusätzliche
+ * Kontaktadresse für Fotofragen, die Versandpauschale und die Zahlungsarten
+ * kommen aus dem öffentlichen Endpunkt /api/parent/site.
  */
 export default function Imprint() {
   const site = useSiteInfo();
   const contactEmail = site?.contactEmail ?? '';
   const shippingFee = site?.shippingFeeCents ?? 0;
   const currency = (site?.currency ?? 'chf').toUpperCase();
+  const methods = paymentMethodLabels(site?.paymentMethods ?? []);
   return (
     <div className="narrow" style={{ margin: '0 auto' }}>
       <h1>Impressum</h1>
       <div className="card">
         <h2>Betreiberin dieser Website</h2>
         <p>
-          <strong>CreArt – Beatrice von Allmen</strong>
+          <strong>{BUSINESS_FULL_NAME}</strong>
           <br />
-          Einzelunternehmen
+          {BUSINESS.legalForm}
           <br />
-          Schlossmattstrasse 4
+          {BUSINESS.street}
           <br />
-          3400 Burgdorf
+          {BUSINESS.zipCity}
           <br />
-          Schweiz
+          {BUSINESS.country}
         </p>
         <p>
-          {contactEmail ? (
+          E-Mail: <a href={`mailto:${BUSINESS.email}`}>{BUSINESS.email}</a>
+          <br />
+          {contactEmail && contactEmail !== BUSINESS.email ? (
             <>
-              E-Mail: <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+              Fragen zu Fotos und Bestellungen:{' '}
+              <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
               <br />
             </>
           ) : null}
           Kontaktformular: <Link to="/hilfe">Hilfe &amp; Kontakt</Link>
+          <br />
+          Website:{' '}
+          <a href={BUSINESS.website} target="_blank" rel="noopener noreferrer">
+            {BUSINESS.websiteLabel}
+          </a>
         </p>
         <p>
-          Verantwortlich für den Inhalt dieser Website ist Beatrice von Allmen unter der oben
-          genannten Postadresse.
+          {BUSINESS.platform} ist die Bestellplattform von {BUSINESS_FULL_NAME}. Verantwortlich für
+          den Inhalt dieser Website ist {BUSINESS.owner} unter der oben genannten Adresse. Für
+          Bestellungen gelten die <Link to="/agb">Allgemeinen Geschäftsbedingungen</Link>.
         </p>
 
         <h2>Was hier verkauft wird</h2>
@@ -63,17 +76,18 @@ export default function Imprint() {
 
         <h2>Preise</h2>
         <p>
-          Alle Preise verstehen sich in <strong>Schweizer Franken (CHF)</strong> und werden im
-          Warenkorb sowie während des gesamten Bezahlvorgangs in CHF angezeigt. Massgebend ist der
+          Alle Preise verstehen sich in <strong>Schweizer Franken (CHF)</strong>. Die Preisliste steht
+          auf der <Link to="/">Startseite</Link>; die Preise werden zudem im Warenkorb sowie während des gesamten Bezahlvorgangs in CHF angezeigt. Massgebend ist der
           Preis, der zum Zeitpunkt der Bestellung im Warenkorb steht. Bei mehreren Stück desselben
           Produkts und Fotos gilt der ausgewiesene Preis für jedes weitere Stück.
         </p>
 
         <h2>Zahlung</h2>
         <p>
-          Die Zahlung erfolgt vor der Lieferung über unseren Zahlungsdienstleister Stripe. Dabei
-          werden die Zahlungsdaten direkt von Stripe verarbeitet; wir sehen und speichern keine
-          Kartendaten. Welche Zahlungsarten zur Verfügung stehen, wird auf der Bezahlseite
+          Die Zahlung erfolgt vor der Lieferung über unseren Zahlungsdienstleister Stripe
+          {methods.length ? <> – mit {methods.join(', ')}</> : null}. Dabei werden die
+          Zahlungsdaten direkt von Stripe verarbeitet; wir sehen und speichern keine Kartendaten.
+          Welche Zahlungsarten im Einzelfall zur Verfügung stehen, wird auf der Bezahlseite
           angezeigt.
         </p>
 
@@ -106,8 +120,8 @@ export default function Imprint() {
         <h2>Rückgabe, Mängel und Reklamationen</h2>
         <p>
           Gedruckte Produkte sind personalisierte Einzelanfertigungen und digitale Downloads sind
-          nach dem Herunterladen nicht rückgabefähig; ein Umtausch ist daher grundsätzlich
-          ausgeschlossen.
+          sofort nach der Zahlung verfügbar; ein Widerruf, eine Rückgabe oder ein Umtausch ist nach
+          abgeschlossener Zahlung daher ausgeschlossen (siehe <Link to="/agb">AGB</Link>, Ziffer 6).
         </p>
         <p>
           Sollte etwas nicht stimmen – ein beschädigter oder fehlerhafter Druck, eine falsche

@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useParentAuth } from '../context/ParentAuth';
 import { useCart } from '../context/Cart';
+import { BUSINESS, BUSINESS_FULL_NAME } from '../lib/business';
 
 export function Layout({ children }: { children: ReactNode }) {
   const { verified, teacherClasses, openConsents } = useParentAuth();
@@ -44,9 +45,13 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="container page-pad">{children}</main>
       <footer className="footer">
         <div className="container">
+          {BUSINESS.platform} ist ein Angebot von {BUSINESS_FULL_NAME}, {BUSINESS.zipCity} ·{' '}
+          <a href={`mailto:${BUSINESS.email}`}>{BUSINESS.email}</a>
+          <br />
           Diese App schützt Kinderfotos bewusst. Die Fotos sind nur nach Bestätigung Ihrer
-          E-Mail-Adresse sichtbar. · <Link to="/datenschutz">Datenschutz</Link> ·{' '}
-          <Link to="/impressum">Impressum</Link> · <Link to="/hilfe">Hilfe & Kontakt</Link>
+          E-Mail-Adresse sichtbar. · <Link to="/agb">AGB</Link> ·{' '}
+          <Link to="/datenschutz">Datenschutz</Link> · <Link to="/impressum">Impressum</Link> ·{' '}
+          <Link to="/hilfe">Hilfe & Kontakt</Link>
         </div>
       </footer>
     </div>

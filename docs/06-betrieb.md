@@ -347,7 +347,8 @@ der `.env` stand. Unter **Meldungen** stehen dadurch nur noch die Anliegen der
 Eltern.
 
 - **Kontakt-E-Mail-Adresse** (z. B. `photographic@alae.app`): steht im
-  Impressum und auf der Hilfe-Seite anstelle einer Telefonnummer und ist die
+  Impressum (als Adresse für Fotofragen, zusätzlich zu `info@creart.ch`) und
+  auf der Hilfe-Seite und ist die
   E-Mail-Adresse, an die Antworten der Eltern gehen. Damit E-Mails an diese in
   einem Postfach ankommen, ist einmalig eine Weiterleitung bei Cloudflare nötig –
   die Schritte stehen direkt auf der Seite und in

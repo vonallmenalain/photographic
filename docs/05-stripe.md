@@ -107,6 +107,44 @@ Wichtig dazu:
 > Dashboard nicht abschalten lässt. Nur was in `STRIPE_PAYMENT_METHODS` steht
 > (bzw. als Wallet zu `card` gehört), wird angeboten.
 
+## 5.2b TWINT-Freischaltung: was die Website zeigen muss
+
+Stripe schaltet TWINT erst frei, wenn die Website die **TWINT-Anforderungen**
+erfüllt (bis dahin steht TWINT im Dashboard auf „Ausstehend“ oder wird
+abgelehnt):
+
+1. Funktionsfähige Website, erreichbar, **nicht passwortgeschützt**, kein
+   „in Kürze verfügbar“.
+2. Im Impressum bzw. in den AGB sichtbar: Unternehmensname und Rechtsform
+   (bei Einzelunternehmen voller Vor- und Nachname), vollständige
+   Geschäftsadresse, E-Mail-Adresse und/oder Telefonnummer.
+3. Schweiz als Versandziel für physische Waren, Preise spätestens im
+   Bestellvorgang in CHF.
+
+So erfüllt die App das, ohne die Fotos zu öffnen – geschützt bleiben nur die
+Fotos selbst:
+
+| Anforderung | Wo |
+|---|---|
+| Öffentlich erreichbar, Angebot erkennbar | **Startseite** `/`: Ablauf, Preisliste in CHF (live aus dem Sortiment), Zahlung & Lieferung, Anbieter |
+| Name, Rechtsform, Adresse, E-Mail | **Impressum** `/impressum` und **AGB** `/agb`, dazu Startseite und Fusszeile |
+| Schweiz als Lieferziel, CHF | Startseite, AGB (Ziffern 3 und 5), Impressum, Warenkorb, Bezahlseite |
+
+Die Anbieterangaben stehen **fest im Code** in
+`frontend/src/lib/business.ts` (CreArt – Beatrice von Allmen,
+Einzelunternehmen, Schlossmattstrasse 4, 3400 Burgdorf, `info@creart.ch`), damit
+sie auch sichtbar sind, wenn die API gerade nicht antwortet. Ändert sich etwas,
+dort anpassen – und die Geschäftsdaten im Stripe-Konto gleich mitziehen: Name,
+Adresse und Website im Stripe-Konto müssen mit dem Impressum übereinstimmen.
+Die angezeigten Zahlungsarten kommen aus `STRIPE_PAYMENT_METHODS` (öffentlicher
+Endpunkt `/api/parent/site`); nach der TWINT-Freischaltung `twint` dort
+ergänzen, dann erscheint TWINT auch auf Startseite, AGB und Impressum.
+
+Nach einer Ablehnung: im Stripe-Konto als Website `https://photographic.alae.app`
+eintragen und in der Produktbeschreibung erwähnen, dass aus Kinderschutzgründen
+nur die Fotos hinter der E-Mail-Bestätigung liegen; dann beim **Stripe-Support**
+eine erneute Prüfung verlangen.
+
 ## 5.3 Testmodus (Sandbox)
 
 - Verwende zuerst die **Test-Schlüssel** (`sk_test_...`, `whsec_...` aus dem
