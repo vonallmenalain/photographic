@@ -72,8 +72,9 @@ const REPORT_TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * Öffentliche Angaben der Website, die Impressum und Hilfe-Seite anzeigen: die
- * im Adminbereich gepflegte Kontaktadresse und die Versandpauschale. Bewusst
+ * Öffentliche Angaben der Website, die Startseite, AGB, Impressum und
+ * Hilfe-Seite anzeigen: die im Adminbereich gepflegte Kontaktadresse, die
+ * Versandpauschale und die angebotenen Zahlungsarten. Bewusst
  * ohne Login – das Impressum muss für alle erreichbar sein.
  */
 router.get(
@@ -85,6 +86,10 @@ router.get(
       shippingFeeCents: settings.shipping_fee_cents,
       currency: config.stripe.currency,
       retentionDays: config.retentionDaysDefault,
+      // Zahlungsarten, die die Bezahlseite anbietet (Startseite, AGB und
+      // Impressum listen sie auf). Leer ohne Stripe bzw. wenn das Stripe-
+      // Dashboard die Auswahl steuert (STRIPE_PAYMENT_METHODS leer).
+      paymentMethods: config.stripe.enabled ? config.stripe.paymentMethods : [],
     });
   }),
 );
