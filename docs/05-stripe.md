@@ -109,6 +109,11 @@ Wichtig dazu:
 
 ## 5.2b TWINT-Freischaltung: was die Website zeigen muss
 
+> ✅ **TWINT ist bei dir freigeschaltet** (Oktober 2026). Der Abschnitt bleibt
+> als Referenz stehen, falls Stripe die Website erneut prüft. Was nach der
+> Freischaltung noch zu kontrollieren ist, steht in
+> [5.2c](#52c-nach-der-twint-freischaltung-zahlungsarten-kontrollieren).
+
 Stripe schaltet TWINT erst frei, wenn die Website die **TWINT-Anforderungen**
 erfüllt (bis dahin steht TWINT im Dashboard auf „Ausstehend“ oder wird
 abgelehnt):
@@ -126,9 +131,16 @@ Fotos selbst:
 
 | Anforderung | Wo |
 |---|---|
-| Öffentlich erreichbar, Angebot erkennbar | **Startseite** `/`: Ablauf, Preisliste in CHF (live aus dem Sortiment), Zahlung & Lieferung, Anbieter |
-| Name, Rechtsform, Adresse, E-Mail | **Impressum** `/impressum` und **AGB** `/agb`, dazu Startseite und Fusszeile |
-| Schweiz als Lieferziel, CHF | Startseite, AGB (Ziffern 3 und 5), Impressum, Warenkorb, Bezahlseite |
+| Öffentlich erreichbar, Angebot erkennbar | **Startseite** `/` unter dem Knopf **„Weitere Informationen“**: Ablauf, Preisliste in CHF (live aus dem Sortiment), Zahlung & Lieferung, Anbieter |
+| Name, Rechtsform, Adresse, E-Mail | **Impressum** `/impressum` und **AGB** `/agb`, dazu Fusszeile und Startseite („Weitere Informationen“) |
+| Schweiz als Lieferziel, CHF | AGB (Ziffern 3 und 5), Impressum, Startseite („Weitere Informationen“), Warenkorb, Bezahlseite |
+
+Auf der Startseite sind diese Angaben bewusst nicht im Vordergrund: Oben
+stehen wie vor der TWINT-Prüfung nur die Anmeldung und der Hinweis „Warum eine
+Bestätigung?“. Darunter klappt der Knopf **„Weitere Informationen“** die Kacheln
+Ablauf, Angebot & Preise, Zahlung & Lieferung sowie Anbieter & Kontakt auf; die
+Preisliste wird erst dann geladen. AGB und Impressum verlinken direkt auf
+`/#preise` – dieser Link öffnet die Kacheln gleich bei der Preisliste.
 
 Die Anbieterangaben stehen **fest im Code** in
 `frontend/src/lib/business.ts` (CreArt – Beatrice von Allmen,
@@ -137,13 +149,53 @@ sie auch sichtbar sind, wenn die API gerade nicht antwortet. Ändert sich etwas,
 dort anpassen – und die Geschäftsdaten im Stripe-Konto gleich mitziehen: Name,
 Adresse und Website im Stripe-Konto müssen mit dem Impressum übereinstimmen.
 Die angezeigten Zahlungsarten kommen aus `STRIPE_PAYMENT_METHODS` (öffentlicher
-Endpunkt `/api/parent/site`); nach der TWINT-Freischaltung `twint` dort
-ergänzen, dann erscheint TWINT auch auf Startseite, AGB und Impressum.
+Endpunkt `/api/parent/site`) – siehe 5.2c.
 
 Nach einer Ablehnung: im Stripe-Konto als Website `https://photographic.alae.app`
 eintragen und in der Produktbeschreibung erwähnen, dass aus Kinderschutzgründen
 nur die Fotos hinter der E-Mail-Bestätigung liegen; dann beim **Stripe-Support**
 eine erneute Prüfung verlangen.
+
+## 5.2c Nach der TWINT-Freischaltung: Zahlungsarten kontrollieren
+
+Am Code ist nichts zu ändern: Ohne eigene Angabe bietet die Bezahlseite Karte,
+Apple Pay, Google Pay und TWINT an (Standard `card,twint,apple_pay,google_pay`).
+Entscheidend ist nur, was in der `.env` auf dem QNAP steht – wurde TWINT dort
+während der Prüfung herausgenommen (siehe 5.6, Schritt 2), muss es wieder hinein.
+
+**Prüfen ohne Server-Zugriff:** das Impressum öffnen
+(`https://photographic.alae.app/impressum`), Abschnitt **„Zahlung“**. Dort steht,
+welche Zahlungsarten das Backend gerade anbietet:
+
+| Das Impressum nennt | Bedeutung | Zu tun |
+|---|---|---|
+| „… mit Kredit- und Debitkarte, Apple Pay, Google Pay, TWINT“ | alles richtig | nichts |
+| „… mit Kredit- und Debitkarte, Apple Pay, Google Pay“ (ohne TWINT) | `twint` fehlt in `STRIPE_PAYMENT_METHODS` | `.env` anpassen (s. u.) |
+| keine Zahlungsarten | `STRIPE_PAYMENT_METHODS` ist leer – dann entscheidet das Stripe-Dashboard, und es erscheint alles, was dort aktiv ist | für genau diese vier Zahlungsarten `.env` anpassen (s. u.) |
+
+`.env` auf dem QNAP (neben der `docker-compose.yml`):
+
+```ini
+CURRENCY=chf
+STRIPE_PAYMENT_METHODS=card,twint,apple_pay,google_pay
+```
+
+Fehlt die Zeile `STRIPE_PAYMENT_METHODS` ganz, gilt derselbe Standard. Nach
+einer Änderung den Container **neu erstellen**, damit er die `.env` neu einliest
+– ein blosser Neustart (`docker compose restart`, Watchtower) übernimmt
+geänderte Werte nicht:
+
+```bash
+docker compose up -d backend
+```
+
+Im **Stripe-Dashboard (Live-Modus)** unter Einstellungen → Zahlungsmethoden
+müssen Karten, Apple Pay, Google Pay und TWINT aktiviert sein. Auf der
+Bezahlseite erscheinen Apple Pay und Google Pay nur auf Geräten und in Browsern,
+die sie unterstützen und auf denen eine Karte im Wallet hinterlegt ist (siehe
+5.2a); TWINT erscheint unabhängig vom Gerät. Ein Echttest wie in
+[5.6, Schritt 7](#schritt-7--echttest-mit-einer-richtigen-karte), einmal mit
+TWINT bezahlt und danach zurückerstattet, bestätigt den ganzen Ablauf.
 
 ## 5.3 Testmodus (Sandbox)
 
@@ -211,9 +263,11 @@ der Sandbox wird *nicht* übernommen):
 
 - **Karte** (aktiviert Apple Pay und Google Pay gleich mit, siehe 5.2a),
 - **TWINT** – braucht ein Schweizer Konto und **CHF**; Stripe schaltet TWINT
-  teils erst nach einer kurzen Prüfung frei. Solange TWINT nicht freigegeben
-  ist, lehnt Stripe den Checkout mit `payment_method_types: twint` ab – dann
-  TWINT vorübergehend aus `STRIPE_PAYMENT_METHODS` nehmen,
+  erst nach einer Prüfung der Website frei (5.2b) – ✅ bei dir freigeschaltet.
+  Solange TWINT nicht freigegeben ist, lehnt Stripe den Checkout mit
+  `payment_method_types: twint` ab – dann TWINT vorübergehend aus
+  `STRIPE_PAYMENT_METHODS` nehmen und nach der Freischaltung wieder ergänzen
+  (5.2c),
 - **Apple Pay / Google Pay** – im Live-Modus einmal aktivieren.
 
 ### Schritt 3 – Live-Schlüssel holen

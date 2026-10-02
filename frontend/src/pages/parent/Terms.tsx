@@ -58,7 +58,7 @@ export default function Terms() {
           Kindergärten entstanden sind: digitale Downloads sowie gedruckte Produkte (Fotoabzüge,
           Sticker-Bogen, Magnete-Sets). Bei Fotoabzügen ist die digitale Datei desselben Fotos
           inbegriffen. Das aktuelle Sortiment mit Preisen steht auf der{' '}
-          <Link to="/">Startseite</Link>.
+          <Link to="/#preise">Startseite</Link>.
         </p>
         <p>
           Sichtbar und bestellbar sind ausschliesslich Fotos, die der bestätigten E-Mail-Adresse der
