@@ -77,7 +77,7 @@ export default function Imprint() {
         <h2>Preise</h2>
         <p>
           Alle Preise verstehen sich in <strong>Schweizer Franken (CHF)</strong>. Die Preisliste steht
-          auf der <Link to="/">Startseite</Link>; die Preise werden zudem im Warenkorb sowie während des gesamten Bezahlvorgangs in CHF angezeigt. Massgebend ist der
+          auf der <Link to="/#preise">Startseite</Link>; die Preise werden zudem im Warenkorb sowie während des gesamten Bezahlvorgangs in CHF angezeigt. Massgebend ist der
           Preis, der zum Zeitpunkt der Bestellung im Warenkorb steht. Bei mehreren Stück desselben
           Produkts und Fotos gilt der ausgewiesene Preis für jedes weitere Stück.
         </p>

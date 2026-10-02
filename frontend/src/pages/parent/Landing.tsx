@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { useParentAuth } from '../../context/ParentAuth';
 import { Alert, TrustNote } from '../../components/common';
@@ -21,25 +21,47 @@ interface PublicProduct {
 }
 
 /**
- * Startseite. Neben der Anmeldung zeigt sie bewusst öffentlich, wer hier was zu
- * welchen Preisen verkauft: Zahlungsanbieter (u. a. TWINT über Stripe)
- * schalten eine Zahlungsart nur für Websites frei, die ohne Passwort erreichbar
- * sind und Anbieter, Angebot, CHF-Preise und Lieferung in die Schweiz
- * erkennen lassen. Geschützt bleiben nur die Fotos selbst – sie erscheinen
- * erst nach der Bestätigung der E-Mail-Adresse.
+ * Sprungmarke zur Preisliste. AGB und Impressum verlinken `/#preise`; dann sind
+ * die weiteren Informationen gleich aufgeklappt und die Preisliste im Blick.
+ */
+const PRICES_HASH = '#preise';
+
+/**
+ * Startseite: Anmeldung mit der E-Mail-Adresse. Ablauf, Preisliste, Zahlung &
+ * Lieferung und Anbieter stehen zugeklappt unter „Weitere Informationen“ –
+ * öffentlich erreichbar, wie es Zahlungsanbieter (u. a. TWINT über Stripe)
+ * verlangen, aber nicht im Vordergrund. Die Fotos selbst erscheinen erst nach
+ * der Bestätigung der E-Mail-Adresse.
  */
 export default function Landing() {
   const { verified, loading, next } = useParentAuth();
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const site = useSiteInfo();
+  const [showInfo, setShowInfo] = useState(() => hash === PRICES_HASH);
   const [products, setProducts] = useState<PublicProduct[] | null>(null);
   const [shippingFee, setShippingFee] = useState<number | null>(null);
+  const pricesRef = useRef<HTMLDivElement>(null);
 
+  // Angemeldete Personen landen auf ihrer Zielseite: offenes Einverständnis,
+  // Klassenseite der Lehrperson oder die Fotos.
   useEffect(() => {
+    if (!loading && verified) navigate(next || '/galerie', { replace: true });
+  }, [verified, loading, next, navigate]);
+
+  // Direktlink /#preise: einmal beim Aufruf zur Preisliste springen. Danach
+  // steuert allein der Knopf, damit erneutes Aufklappen nicht wieder springt.
+  useEffect(() => {
+    if (hash === PRICES_HASH) pricesRef.current?.scrollIntoView({ block: 'start' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Die Preisliste wird erst geladen, wenn jemand die weiteren Informationen öffnet.
+  useEffect(() => {
+    if (!showInfo || products !== null) return;
     let cancelled = false;
     api<{ products: PublicProduct[]; shipping_fee_cents: number }>('/api/parent/products')
       .then((res) => {
@@ -53,13 +75,7 @@ export default function Landing() {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  // Angemeldete Personen landen auf ihrer Zielseite: offenes Einverständnis,
-  // Klassenseite der Lehrperson oder die Fotos.
-  useEffect(() => {
-    if (!loading && verified) navigate(next || '/galerie', { replace: true });
-  }, [verified, loading, next, navigate]);
+  }, [showInfo, products]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,68 +112,103 @@ export default function Landing() {
     }
   };
 
+  return (
+    <div className="narrow-wide" style={{ margin: '0 auto' }}>
+      <div className="narrow" style={{ margin: '0 auto' }}>
+        <div className="hero">
+          <div className="lock-big">🔒</div>
+          <h1>Ihre Kinderfotos – sicher &amp; geschützt</h1>
+          <p className="soft">
+            Geben Sie Ihre E-Mail-Adresse ein. Wir senden Ihnen{' '}
+            {firebaseEnabled ? 'einen sicheren Anmeldelink' : 'einen Zugangscode'}, damit nur Sie Ihre
+            zugeordneten Fotos sehen können. Die Fotos sind sicher auf einem lokalen Schweizer Server
+            gespeichert.
+          </p>
+        </div>
+
+        <div className="card">
+          {message && <Alert kind="success">{message}</Alert>}
+          {error && <Alert kind="error">{error}</Alert>}
+          <form onSubmit={submit}>
+            <div className="field">
+              <label htmlFor="email">E-Mail-Adresse</label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                placeholder="name@beispiel.ch"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <button className="btn block" disabled={sending}>
+              {sending
+                ? 'Wird gesendet …'
+                : firebaseEnabled
+                  ? 'Anmeldelink anfordern'
+                  : 'Zugangscode anfordern'}
+            </button>
+          </form>
+          <p className="muted center" style={{ marginTop: 14, marginBottom: 0, fontSize: '0.85rem' }}>
+            {firebaseEnabled ? 'Schon einen Link erhalten?' : 'Schon einen Code?'}{' '}
+            <Link to="/verifizieren">Hier bestätigen</Link>
+          </p>
+        </div>
+
+        <div style={{ marginTop: 18 }}>
+          <TrustNote>
+            <strong>Warum eine Bestätigung?</strong> Zum Schutz Ihrer Fotos zeigen wir die Bilder erst
+            an, nachdem Ihre E-Mail-Adresse bestätigt wurde. Die Fotos sind genau dieser E-Mail-Adresse
+            zugeordnet und können nur nach erfolgreicher Bestätigung angezeigt werden.
+          </TrustNote>
+        </div>
+
+        <div className="center" style={{ marginTop: 18 }}>
+          <button
+            type="button"
+            className="btn secondary small"
+            aria-expanded={showInfo}
+            aria-controls="weitere-informationen"
+            onClick={() => setShowInfo((open) => !open)}
+          >
+            {showInfo ? 'Weitere Informationen ausblenden' : 'Weitere Informationen'}
+            <span aria-hidden="true">{showInfo ? '▴' : '▾'}</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="weitere-informationen">
+        {showInfo && (
+          <MoreInfo products={products} shippingFee={shippingFee} pricesRef={pricesRef} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Die aufgeklappten Kacheln unter „Weitere Informationen“: Ablauf der
+ * Bestellung, Preisliste in CHF (live aus dem Sortiment), Zahlung & Lieferung
+ * sowie Anbieter & Kontakt.
+ */
+function MoreInfo({
+  products,
+  shippingFee,
+  pricesRef,
+}: {
+  products: PublicProduct[] | null;
+  shippingFee: number | null;
+  pricesRef: RefObject<HTMLDivElement>;
+}) {
+  const site = useSiteInfo();
   const currency = (site?.currency ?? 'chf').toUpperCase();
   const fee = shippingFee ?? site?.shippingFeeCents ?? 0;
   const methods = paymentMethodLabels(site?.paymentMethods ?? []);
 
   return (
-    <div className="narrow-wide" style={{ margin: '0 auto' }}>
-      <div className="hero">
-        <div className="lock-big">🔒</div>
-        <h1>Ihre Kinderfotos – sicher &amp; geschützt</h1>
-        <p className="soft">
-          {BUSINESS.platform} ist die Bestellplattform von <strong>{BUSINESS_FULL_NAME}</strong>{' '}
-          für die Fotos, die bei Foto-Terminen in Schulen und Kindergärten entstanden sind.
-        </p>
-      </div>
-
-      <div className="card narrow" style={{ margin: '0 auto' }}>
-        <h2>Zu Ihren Fotos</h2>
-        <p className="soft">
-          Geben Sie Ihre E-Mail-Adresse ein. Wir senden Ihnen{' '}
-          {firebaseEnabled ? 'einen sicheren Anmeldelink' : 'einen Zugangscode'}, damit nur Sie Ihre
-          zugeordneten Fotos sehen können. Die Fotos sind sicher auf einem lokalen Schweizer Server
-          gespeichert.
-        </p>
-        {message && <Alert kind="success">{message}</Alert>}
-        {error && <Alert kind="error">{error}</Alert>}
-        <form onSubmit={submit}>
-          <div className="field">
-            <label htmlFor="email">E-Mail-Adresse</label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="name@beispiel.ch"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <button className="btn block" disabled={sending}>
-            {sending
-              ? 'Wird gesendet …'
-              : firebaseEnabled
-                ? 'Anmeldelink anfordern'
-                : 'Zugangscode anfordern'}
-          </button>
-        </form>
-        <p className="muted center" style={{ marginTop: 14, marginBottom: 0, fontSize: '0.85rem' }}>
-          {firebaseEnabled ? 'Schon einen Link erhalten?' : 'Schon einen Code?'}{' '}
-          <Link to="/verifizieren">Hier bestätigen</Link>
-        </p>
-      </div>
-
-      <div className="narrow" style={{ margin: '18px auto 0' }}>
-        <TrustNote>
-          <strong>Warum eine Bestätigung?</strong> Zum Schutz der Kinder zeigen wir die Bilder erst
-          an, nachdem Ihre E-Mail-Adresse bestätigt wurde. Die Fotos sind genau dieser E-Mail-Adresse
-          zugeordnet und können nur nach erfolgreicher Bestätigung angezeigt werden. Angebot, Preise
-          und Bedingungen finden Sie hier auf dieser Seite.
-        </TrustNote>
-      </div>
-
-      <div className="card" style={{ marginTop: 28 }}>
+    <div style={{ marginTop: 18 }}>
+      <div className="card">
         <h2>So funktioniert die Bestellung</h2>
         <ol>
           <li>
@@ -180,7 +231,8 @@ export default function Landing() {
         </ol>
       </div>
 
-      <div className="card">
+      {/* Unter der fixierten Kopfzeile (64px) bleibt die Überschrift sichtbar. */}
+      <div className="card" id="preise" ref={pricesRef} style={{ scrollMarginTop: 84 }}>
         <h2>Angebot &amp; Preise</h2>
         {products === null ? (
           <p className="muted">Preisliste wird geladen …</p>
