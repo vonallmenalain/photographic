@@ -36,6 +36,11 @@ export default function EventDetail() {
         navigate(`/admin/import?eventId=${id}`, { replace: true });
         return;
       }
+      // Gelöschte Aufträge stehen nur im Papierkorb der Übersicht.
+      if (res.event.status === 'deleted') {
+        navigate('/admin/events', { replace: true });
+        return;
+      }
       // Eine laufende Klassenerfassung hat ihre eigene Ansicht.
       if (res.event.status === 'collecting') {
         navigate(`/admin/events/${id}/erfassung`, { replace: true });
@@ -79,7 +84,7 @@ export default function EventDetail() {
   const deleteEvent = async () => {
     if (
       !confirm(
-        'Diesen Auftrag wirklich löschen? Alle Fotos, Kinder und Zuordnungen dieses Auftrags werden unwiderruflich entfernt.',
+        'Diesen Auftrag löschen? Er ist danach für Eltern und Lehrpersonen nicht mehr sichtbar. Unter „Aufträge“ → Filter „Gelöschte Aufträge“ kannst du ihn jederzeit wiederherstellen.',
       )
     )
       return;
@@ -125,8 +130,8 @@ export default function EventDetail() {
           <div>
             <h2 style={{ marginBottom: 4 }}>Auftrag löschen</h2>
             <p className="muted" style={{ fontSize: '0.82rem', margin: 0 }}>
-              Entfernt den Auftrag samt aller Fotos, Kinder und Zuordnungen. Dies kann nicht
-              rückgängig gemacht werden.
+              Verschiebt den Auftrag unter „Gelöschte Aufträge“: für Eltern sofort unsichtbar,
+              Fotos, Kinder und Bestellungen bleiben erhalten und lassen sich wiederherstellen.
             </p>
           </div>
           <button className="btn danger" onClick={deleteEvent}>

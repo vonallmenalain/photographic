@@ -911,6 +911,9 @@ tr.clickable-row { cursor: pointer; }
 /* Einladungsstand neben dem Status (eingeklappte Auftragszeile). */
 .order-row-invite { color: var(--text-muted); font-size: 0.8rem; white-space: nowrap; }
 .order-row-notice { padding: 0 18px; }
+/* Gelöschter Auftrag (Papierkorb): zurückgenommen dargestellt. */
+.order-row.is-deleted { background: var(--surface-2); box-shadow: none; }
+.order-row.is-deleted .order-row-title { color: var(--text-soft); }
 .order-row-notice .alert { margin-bottom: 14px; }
 
 /* ---- Einladungen & Erinnerungen ---------------------------------------- */

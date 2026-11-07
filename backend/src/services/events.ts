@@ -15,6 +15,21 @@ import { config } from '../config';
 export const EVENT_STATUSES = ['collecting', 'draft', 'published', 'archived'] as const;
 export type EventStatus = (typeof EVENT_STATUSES)[number];
 
+/**
+ * „Gelöscht“ (Papierkorb): Der Auftrag bleibt mit allen Fotos, Kindern und
+ * Zuordnungen erhalten, ist aber für Eltern und Lehrpersonen unsichtbar und
+ * erscheint im Adminbereich nur unter „Gelöschte Aufträge“. Von dort lässt er
+ * sich wiederherstellen (alter Status steht in `deleted_from_status`) oder
+ * endgültig entfernen. Bewusst nicht Teil von EVENT_STATUSES: Dieser Status
+ * wird nur über Löschen/Wiederherstellen gesetzt, nie über das Status-Feld.
+ */
+export const DELETED_STATUS = 'deleted';
+
+/** Archivierte und gelöschte Aufträge sind für Eltern und Lehrpersonen abgeschlossen. */
+export function isInactiveStatus(status: string | null | undefined): boolean {
+  return status === 'archived' || status === DELETED_STATUS;
+}
+
 /** Map statuses from earlier versions onto the simplified set. */
 const LEGACY_STATUS_MAP: Record<string, EventStatus> = {
   in_progress: 'draft',
@@ -64,7 +79,10 @@ export async function archiveExpiredEvents(): Promise<number> {
       const expired = ev.expires_at ? new Date(ev.expires_at).getTime() <= now : false;
       // Eine laufende Klassenerfassung hat noch keine Bestellfrist; ein altes
       // Enddatum darf sie nicht vorzeitig archivieren.
-      if (next !== 'archived' && next !== 'collecting' && expired) next = 'archived';
+      // Gelöschte Aufträge bleiben im Papierkorb und werden nicht archiviert.
+      if (next !== 'archived' && next !== 'collecting' && next !== DELETED_STATUS && expired) {
+        next = 'archived';
+      }
       if (next !== ev.status) {
         await updateById(COL.events, ev.id, { status: next, updated_at: nowIso() });
         changed += 1;

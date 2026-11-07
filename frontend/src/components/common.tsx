@@ -139,6 +139,7 @@ export function StatusBadge({ status }: { status: string }) {
     ready: { label: 'Bereit', cls: 'amber' },
     published: { label: 'Veröffentlicht', cls: 'green' },
     archived: { label: 'Archiviert', cls: 'gray' },
+    deleted: { label: 'Gelöscht', cls: 'red' },
     disabled: { label: 'Deaktiviert', cls: 'red' },
     // emails
     created: { label: 'Angelegt', cls: 'gray' },

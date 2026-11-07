@@ -6,6 +6,7 @@ import { requireParent } from '../middleware/parentAuth';
 import { consentLimiter } from '../middleware/rateLimit';
 import { parse } from '../lib/validation';
 import { config } from '../config';
+import { DELETED_STATUS } from '../services/events';
 import {
   type RegistrationEvent,
   isTeacherOf,
@@ -49,7 +50,10 @@ const TEACHER_REMIND_THROTTLE_MS = 24 * 60 * 60 * 1000;
 
 async function loadTeacherEvent(req: Request): Promise<RegistrationEvent> {
   const ev = await getById<RegistrationEvent>(COL.events, req.params.id);
-  if (!ev || !isTeacherOf(ev, req.parent!.email)) throw new ApiError(404, 'Klasse nicht gefunden.');
+  // Gelöschte Aufträge (Papierkorb) sind für die Lehrperson nicht mehr erreichbar.
+  if (!ev || ev.status === DELETED_STATUS || !isTeacherOf(ev, req.parent!.email)) {
+    throw new ApiError(404, 'Klasse nicht gefunden.');
+  }
   return ev;
 }
 
