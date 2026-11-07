@@ -518,7 +518,9 @@ input:focus, select:focus, textarea:focus {
 /* Lightbox */
 .lightbox {
   position: fixed; inset: 0; background: rgba(15, 23, 42, 0.82);
-  display: flex; z-index: 60; padding: 20px; overflow-y: auto;
+  /* Über den Admin-Popups (z-index 70), damit die Bildvorschau auch aus
+     „Auftrag bearbeiten“ heraus vorne liegt. */
+  display: flex; z-index: 80; padding: 20px; overflow-y: auto;
 }
 .lightbox .inner { max-width: 92vw; margin: auto; position: relative; }
 .lightbox img { display: block; max-width: 92vw; max-height: 70vh; border-radius: 10px; -webkit-user-drag: none; pointer-events: none; }
@@ -905,6 +907,153 @@ tr.clickable-row { cursor: pointer; }
   .order-row-stats { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
   .order-row-actions { width: 100%; }
 }
+
+/* Einladungsstand neben dem Status (eingeklappte Auftragszeile). */
+.order-row-invite { color: var(--text-muted); font-size: 0.8rem; white-space: nowrap; }
+.order-row-notice { padding: 0 18px; }
+.order-row-notice .alert { margin-bottom: 14px; }
+
+/* ---- Einladungen & Erinnerungen ---------------------------------------- */
+.invite-section { margin-bottom: 8px; }
+.section-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; margin-bottom: 12px;
+}
+.section-head h3 { margin: 0; }
+.sub-head {
+  margin: 0 0 8px; font-size: 0.78rem; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-muted);
+}
+.invite-grid {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px;
+  align-items: start;
+}
+@media (max-width: 860px) { .invite-grid { grid-template-columns: 1fr; } }
+
+/* Verlauf der versendeten E-Mails (senkrechte Zeitleiste). */
+.dispatch-timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+.dispatch-timeline::before {
+  content: ''; position: absolute; left: 13px; top: 8px; bottom: 8px;
+  width: 2px; background: var(--border);
+}
+.dispatch-timeline li {
+  position: relative; display: flex; align-items: flex-start; gap: 12px;
+  padding: 6px 0; font-size: 0.88rem;
+}
+.dispatch-timeline .tl-icon {
+  position: relative; z-index: 1; flex: none; width: 28px; height: 28px;
+  border-radius: 999px; display: grid; place-items: center; font-size: 0.9rem;
+  background: var(--surface-2); color: var(--text-soft); border: 2px solid var(--surface);
+}
+.dispatch-timeline .tl-inv .tl-icon { background: #e7f6ee; color: #1b7a52; }
+.dispatch-timeline .tl-rem .tl-icon { background: #f8e8fb; color: #a21caf; }
+.dispatch-timeline .tl-con .tl-icon { background: #fdf3e0; color: #9a6c00; }
+.dispatch-timeline .tl-body { flex: 1; min-width: 0; line-height: 1.4; }
+.dispatch-timeline .tl-when { color: var(--text-muted); font-size: 0.78rem; }
+.dispatch-timeline .tl-planned .tl-icon {
+  background: var(--surface); border: 2px dashed var(--border); color: var(--text-muted);
+}
+.dispatch-timeline .tl-planned .tl-body { color: var(--text-soft); }
+.dispatch-timeline .tl-remove {
+  background: none; border: none; cursor: pointer; color: var(--text-muted);
+  font-size: 1.05rem; line-height: 1; padding: 2px 4px;
+}
+.timeline-empty { font-size: 0.85rem; margin: 0; }
+
+/* Automatische Erinnerung */
+.auto-reminder {
+  background: var(--surface-2); border-radius: var(--radius-sm); padding: 12px 14px;
+  font-size: 0.88rem;
+}
+.auto-reminder-text { margin: 6px 0 0; line-height: 1.9; color: var(--text-soft); }
+.auto-reminder-text input { width: 64px; padding: 4px 8px; display: inline-block; }
+.auto-reminder-state { margin: 6px 0 0; }
+.auto-reminder .alert { margin: 8px 0 0; }
+.ok-text { color: #1b7a52; font-weight: 600; }
+.warn-text { color: #9a6c00; }
+
+/* Häkchen mit Text daneben (Versandoptionen). */
+.check-line {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px;
+  margin: 0; font-weight: 400; font-size: 0.88rem; color: var(--text); cursor: pointer;
+}
+.check-line input { width: auto; margin: 0; }
+
+/* Versand: Schnellauswahl, Liste, Optionen. */
+.quick-select { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; font-size: 0.85rem; }
+.quick-select .muted { margin-right: 4px; }
+.dispatch-scroll {
+  max-height: 360px; overflow: auto;
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.dispatch-options { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.dispatch-options .field select { max-width: 560px; }
+.dispatch-options label.check-line + label { margin-top: 0; }
+.dispatch-summary { margin: 12px 0 0; font-size: 0.88rem; font-weight: 600; color: var(--text-soft); }
+.cell-note { font-size: 0.78rem; }
+
+/* Filter der Elternliste (mit Anzahl je Gruppe). */
+.filter-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 0.82rem;
+  padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-soft); cursor: pointer;
+}
+.filter-chip:hover { background: var(--surface-2); }
+.filter-chip-count {
+  min-width: 20px; padding: 0 6px; border-radius: 999px; font-size: 0.74rem; font-weight: 700;
+  background: var(--surface-2); color: var(--text-soft); text-align: center;
+}
+.filter-chip.green .filter-chip-count { background: #e7f6ee; color: #1b7a52; }
+.filter-chip.blue .filter-chip-count { background: #eaf1fd; color: #234a9b; }
+.filter-chip.amber .filter-chip-count { background: #fdf3e0; color: #9a6c00; }
+.filter-chip.active { border-color: var(--primary); color: var(--primary); background: #eaf1fd; }
+
+/* Umschalter (Varianten der Vorschau, HTML/Text). */
+.seg-tabs {
+  display: inline-flex; gap: 2px; padding: 3px; margin-bottom: 12px;
+  background: var(--surface-2); border-radius: 999px;
+}
+.seg-tabs button {
+  font: inherit; font-size: 0.85rem; font-weight: 600; border: none; cursor: pointer;
+  padding: 6px 14px; border-radius: 999px; background: transparent; color: var(--text-soft);
+}
+.seg-tabs button.active { background: var(--surface); color: var(--primary); box-shadow: var(--shadow-sm); }
+.seg-tabs.small { margin-bottom: 0; }
+.seg-tabs.small button { font-size: 0.78rem; padding: 4px 10px; }
+
+/* E-Mail-Vorschau */
+.preview-meta {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px;
+  margin: 0; padding: 12px 14px; font-size: 0.86rem;
+  background: var(--surface-2); border-radius: var(--radius-sm);
+}
+.preview-meta dt { color: var(--text-muted); }
+.preview-meta dd { margin: 0; overflow-wrap: anywhere; }
+.preview-frame {
+  display: block; width: 100%; height: min(68vh, 680px);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: #f4f5f7;
+}
+.preview-text {
+  margin: 0; padding: 14px; max-height: min(68vh, 680px); overflow: auto;
+  white-space: pre-wrap; font-size: 0.85rem; line-height: 1.55;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2);
+}
+
+/* Einverständniserklärung im aufgeklappten Auftrag – standardmässig zu. */
+.consent-details {
+  margin-top: 22px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.consent-details summary {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer;
+  font-weight: 600; list-style: none;
+}
+.consent-details summary::-webkit-details-marker { display: none; }
+.consent-details summary::before { content: '▸'; color: var(--text-muted); width: 12px; }
+.consent-details[open] summary::before { content: '▾'; }
+.consent-details summary .muted { font-weight: 400; font-size: 0.85rem; margin-left: auto; }
+.consent-details-body { padding: 4px 14px 14px; }
+.chart-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.78rem; margin-top: 4px; }
 
 .muted { color: var(--text-muted); }
 .soft { color: var(--text-soft); }

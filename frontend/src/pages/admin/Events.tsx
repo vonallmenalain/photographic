@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
-import { formatPrice } from '../../lib/format';
+import { formatDateShort, formatPrice } from '../../lib/format';
 import {
   EventAnalyticsPanel,
   OrderableUntilStat,
@@ -10,15 +10,16 @@ import {
   type EventAnalytics,
 } from './EventAnalyticsPanel';
 import { EventEditModal } from './EventEditModal';
+import { InvitationDispatch } from './invitations';
 
 // Note: new orders are no longer created here. Capturing a new Auftrag (data
-// import → photos → publish) happens in the guided "Aufträge erfassen" wizard.
-// This page lists the existing orders as full-width, expandable rows: collapsed
-// they show the key figures, a "Bearbeiten" button (photos of the Auftrag:
-// add, re-assign, deactivate, delete – at any time, also after publishing),
-// a status dropdown and, while "In Bearbeitung", an "Erfassung fortsetzen"
-// button that re-opens the capture wizard; expanded they reveal the full
-// evaluation (the former "Auswertung").
+// import → photos → publish → invite) happens in the guided "Aufträge erfassen"
+// wizard. This page lists the existing orders as full-width, expandable rows.
+// Collapsed a row is a single line: name, status, where the invitations stand
+// and all buttons (Einladung/Erinnerung versenden, Bearbeiten = photos, status
+// dropdown, Erfassung öffnen/fortsetzen, Löschen). Expanded it shows the key
+// figures, „Einladungen & Erinnerungen“ (history, automatic reminder, list of
+// parents), the revenue chart and – folded away – the consent form.
 
 interface EventRow {
   id: string;
@@ -32,6 +33,9 @@ interface EventRow {
   revenue_cents: number;
   // Summe aller versendeten Einladungen + Erinnerungen (reminders-Sammlung).
   reminder_count: number;
+  // Letzte Einladung bzw. letzte (auch automatische) Erinnerung an die Eltern.
+  last_invited_at?: string | null;
+  last_reminded_at?: string | null;
   expires_at: string | null;
   created_at: string;
   // Vom Backend vorberechneter Freitext-Index (Auftragsname + Kindernamen +
@@ -63,7 +67,14 @@ type SortKey =
   | 'orderable_asc'
   | 'revenue_desc';
 
-type FilterKey = 'all' | 'collecting' | 'published' | 'draft' | 'archived' | 'reminders';
+type FilterKey =
+  | 'all'
+  | 'collecting'
+  | 'published'
+  | 'not_invited'
+  | 'draft'
+  | 'archived'
+  | 'reminders';
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'created_desc', label: 'Erfassungsdatum (neueste zuerst)' },
@@ -77,6 +88,7 @@ const FILTER_OPTIONS: { value: FilterKey; label: string }[] = [
   { value: 'all', label: 'Alle Aufträge' },
   { value: 'collecting', label: 'Nur in Erfassung' },
   { value: 'published', label: 'Nur veröffentlichte' },
+  { value: 'not_invited', label: 'Veröffentlicht, noch nicht eingeladen' },
   { value: 'draft', label: 'Nur pendente' },
   { value: 'archived', label: 'Nur archivierte' },
   { value: 'reminders', label: 'Nur mit Erinnerungen' },
@@ -121,6 +133,7 @@ export default function Events() {
       // Statusfilter / Erinnerungsfilter.
       if (filter === 'collecting' && ev.status !== 'collecting') return false;
       if (filter === 'published' && ev.status !== 'published') return false;
+      if (filter === 'not_invited' && (ev.status !== 'published' || ev.last_invited_at)) return false;
       if (filter === 'draft' && ev.status !== 'draft') return false;
       if (filter === 'archived' && ev.status !== 'archived') return false;
       if (filter === 'reminders' && ev.reminder_count <= 0) return false;
@@ -274,6 +287,8 @@ function EventCard({
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [notice, setNotice] = useState('');
 
   const loadDetail = async () => {
     setLoadingDetail(true);
@@ -364,6 +379,8 @@ function EventCard({
     }
   };
 
+  const invited = !!ev.last_invited_at;
+
   return (
     <div className={`order-row${expanded ? ' expanded' : ''}`}>
       <div
@@ -383,11 +400,56 @@ function EventCard({
               {ev.name}
             </span>
             <StatusBadge status={ev.status} />
+            {ev.status === 'published' && <InviteState ev={ev} />}
           </span>
 
           <div className="order-row-actions" onClick={(e) => e.stopPropagation()}>
+            {ev.status === 'published' && (
+              <button
+                className={`btn small${invited ? ' secondary' : ''}`}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setNotice('');
+                  setShowInvite(true);
+                }}
+                disabled={busy}
+                title={
+                  invited
+                    ? 'Erinnerung an die Eltern – wer noch nicht eingeladen ist, erhält die Einladung'
+                    : 'Einladung „Ihre Fotos sind bereit“ an die Eltern versenden'
+                }
+              >
+                {invited ? 'Erinnerung versenden' : 'Einladung versenden'}
+              </button>
+            )}
+            {ev.status === 'collecting' && (
+              <button
+                className="btn secondary small"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/admin/events/${ev.id}/erfassung`);
+                }}
+                disabled={busy}
+                title="Klassenliste, Einverständnisse, Lehrperson und Klassenlink"
+              >
+                Erfassung öffnen
+              </button>
+            )}
+            {ev.status === 'draft' && (
+              <button
+                className="btn secondary small"
+                type="button"
+                onClick={edit}
+                disabled={busy}
+                title="Den Auftrag im Assistenten „Aufträge erfassen“ weiter erfassen"
+              >
+                Erfassung fortsetzen
+              </button>
+            )}
             <button
-              className="btn secondary order-row-photos-btn"
+              className="btn secondary small"
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
@@ -415,49 +477,6 @@ function EventCard({
                 </option>
               ))}
             </select>
-            {ev.status === 'collecting' && (
-              <button
-                className="btn secondary small"
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/admin/events/${ev.id}/erfassung`);
-                }}
-                disabled={busy}
-                title="Klassenliste, Einverständnisse, Lehrperson und Klassenlink"
-              >
-                Erfassung öffnen
-              </button>
-            )}
-            {ev.status !== 'collecting' && ev.registration && (
-              <button
-                className="btn ghost small"
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/admin/events/${ev.id}/erfassung`);
-                }}
-                disabled={busy}
-                title={
-                  ev.registration.consent_only
-                    ? 'Stand der Einverständniserklärungen ansehen'
-                    : 'Klassenliste und Einverständnisse der Klassenerfassung ansehen'
-                }
-              >
-                Einverständnisse
-              </button>
-            )}
-            {ev.status === 'draft' && (
-              <button
-                className="btn secondary small"
-                type="button"
-                onClick={edit}
-                disabled={busy}
-                title="Den Auftrag im Assistenten „Aufträge erfassen“ weiter erfassen"
-              >
-                Erfassung fortsetzen
-              </button>
-            )}
             <button
               className="btn ghost small"
               type="button"
@@ -469,49 +488,73 @@ function EventCard({
             </button>
           </div>
         </div>
-
-        <div className="order-row-stats">
-          <SummaryStat label="Kinder" value={String(ev.child_count)} />
-          {ev.consent_summary && ev.registration?.consent_required && (
-            <SummaryStat
-              label="Einverständnisse"
-              value={`${ev.consent_summary.answered} von ${ev.consent_summary.children}${ev.consent_summary.none ? ` (${ev.consent_summary.none}× Nein)` : ''}`}
-            />
-          )}
-          <SummaryStat label="Bestellungen" value={String(ev.order_count)} />
-          <SummaryStat
-            label="Verifizierte E-Mails"
-            value={`${ev.email_verified} von ${ev.email_count}`}
-          />
-          <SummaryStat label="Umsatz" value={formatPrice(ev.revenue_cents, currency)} />
-          <SummaryStat label="Einladungen + Erinnerungen" value={String(ev.reminder_count)} />
-          <OrderableUntilStat
-            eventId={ev.id}
-            status={ev.status}
-            expiresAt={ev.expires_at}
-            onReload={() => {
-              void onChanged();
-              if (expanded) void loadDetail();
-            }}
-          />
-        </div>
       </div>
+
+      {notice && (
+        <div className="order-row-notice">
+          <Alert kind="success">{notice}</Alert>
+        </div>
+      )}
 
       {expanded && (
         <div className="order-row-detail">
+          <div className="analytics-summary" style={{ marginTop: 0, marginBottom: 18 }}>
+            <SummaryStat label="Kinder" value={String(ev.child_count)} />
+            {ev.consent_summary && ev.registration?.consent_required && (
+              <SummaryStat
+                label="Einverständnisse"
+                value={`${ev.consent_summary.answered} von ${ev.consent_summary.children}${ev.consent_summary.none ? ` (${ev.consent_summary.none}× Nein)` : ''}`}
+              />
+            )}
+            <SummaryStat label="Bestellungen" value={String(ev.order_count)} />
+            <SummaryStat
+              label="Verifizierte E-Mails"
+              value={`${ev.email_verified} von ${ev.email_count}`}
+            />
+            <SummaryStat label="Umsatz" value={formatPrice(ev.revenue_cents, currency)} />
+            <OrderableUntilStat
+              eventId={ev.id}
+              status={ev.status}
+              expiresAt={ev.expires_at}
+              onReload={() => {
+                void onChanged();
+                void loadDetail();
+              }}
+            />
+          </div>
           {loadingDetail && !analytics ? (
             <Spinner />
           ) : analytics ? (
             <EventAnalyticsPanel
               ev={analytics}
               currency={detailCurrency}
-              onReload={loadDetail}
+              onReload={() => {
+                void loadDetail();
+                void onChanged();
+              }}
               showSummary={false}
             />
           ) : (
             <p className="muted">Auswertung konnte nicht geladen werden.</p>
           )}
         </div>
+      )}
+
+      {showInvite && (
+        <InvitationDispatch
+          eventId={ev.id}
+          variant="modal"
+          onClose={() => setShowInvite(false)}
+          onSent={(message) => {
+            setShowInvite(false);
+            setNotice(message);
+            void onChanged();
+            // Eingeklappt: zwischengespeicherte Auswertung verwerfen, damit der
+            // Verlauf beim nächsten Aufklappen frisch geladen wird.
+            if (expanded) void loadDetail();
+            else setAnalytics(null);
+          }}
+        />
       )}
 
       {showEdit && (
@@ -528,4 +571,19 @@ function EventCard({
       )}
     </div>
   );
+}
+
+/**
+ * Kurzer Einladungsstand neben dem Status eines veröffentlichten Auftrags:
+ * „Noch nicht eingeladen“ fällt auf, sonst Datum der Einladung und der letzten
+ * Erinnerung.
+ */
+function InviteState({ ev }: { ev: EventRow }) {
+  if (!ev.last_invited_at && !ev.last_reminded_at) {
+    return <span className="badge amber">Noch nicht eingeladen</span>;
+  }
+  const parts: string[] = [];
+  if (ev.last_invited_at) parts.push(`Eingeladen ${formatDateShort(ev.last_invited_at)}`);
+  if (ev.last_reminded_at) parts.push(`erinnert ${formatDateShort(ev.last_reminded_at)}`);
+  return <span className="order-row-invite">{parts.join(' · ')}</span>;
 }

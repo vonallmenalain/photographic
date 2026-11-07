@@ -6,6 +6,7 @@ import { parseFile, parseDelimited } from '../../lib/tabular';
 import { PhotoManager, type ManagedChild, type ManagedPhoto } from './PhotoManager';
 import EventEmails from './EventEmails';
 import AdminRegistrationCreate from './AdminRegistrationCreate';
+import { AutoOrderReminder, InvitationDispatch, formatDay } from './invitations';
 
 // ---------------------------------------------------------------------------
 // "Aufträge erfassen" – guided wizard that takes a new order from raw data to a
@@ -14,10 +15,10 @@ import AdminRegistrationCreate from './AdminRegistrationCreate';
 //   2. Fotos hochladen           – upload photos (auto-assign by file name)
 //   3. Zuordnung prüfen          – review the photo↔child assignment & confirm
 //   4. Veröffentlichen           – make the gallery visible to parents
-// Each step turns green once completed. Steps 2–4 unlock once step 1 produced
-// (or selected) a target order. Inviting the parents is intentionally NOT part
-// of the capture wizard – it happens later from the Auftrag (E-Mail-Adressen
-// → „Einladung per E-Mail senden“).
+//   5. Einladungen versenden     – invite the parents (later: remind them),
+//                                  right after publishing, as a normal page
+// Each step turns green once completed. Steps 2–5 unlock once step 1 produced
+// (or selected) a target order; step 5 sends only once the order is published.
 // ---------------------------------------------------------------------------
 
 interface WizardEvent {
@@ -26,6 +27,11 @@ interface WizardEvent {
   status: string;
   expires_at: string | null;
   photos_confirmed_at?: string | null;
+  /** Zeitpunkt der letzten Einladung an die Eltern (Schritt 5). */
+  invited_at?: string | null;
+  auto_order_reminder?: boolean;
+  auto_order_reminder_days?: number;
+  auto_order_reminder_sent_at?: string | null;
   /** Gesetzt, wenn der Auftrag über die Klassenerfassung entstanden ist. */
   registration?: { open: boolean } | null;
 }
@@ -35,6 +41,7 @@ const STEP_LABELS = [
   'Fotos hochladen',
   'Zuordnung prüfen',
   'Veröffentlichen',
+  'Einladungen versenden',
 ];
 
 export default function AuftraegeErfassen() {
@@ -93,7 +100,8 @@ export default function AuftraegeErfassen() {
   const step2Done = !!eventId && photoCount > 0;
   const step3Done = !!event?.photos_confirmed_at;
   const step4Done = event?.status === 'published';
-  const doneFlags = [step1Done, step2Done, step3Done, step4Done];
+  const step5Done = !!event?.invited_at;
+  const doneFlags = [step1Done, step2Done, step3Done, step4Done, step5Done];
 
   // Step n (>1) is reachable once a target order exists.
   const canGoTo = (step: number) => step === 1 || !!eventId;
@@ -176,6 +184,8 @@ export default function AuftraegeErfassen() {
         body: { status: 'published' },
       });
       await loadEvent(eventId);
+      // Nach dem Veröffentlichen geht es direkt weiter zu den Einladungen.
+      setActiveStep(5);
     } catch (err) {
       setStepError(err instanceof ApiError ? err.message : 'Veröffentlichen fehlgeschlagen.');
     } finally {
@@ -378,6 +388,9 @@ export default function AuftraegeErfassen() {
                   Der Auftrag ist veröffentlicht – Schritt 4 ist abgeschlossen.
                 </Alert>
                 <div className="row" style={{ marginTop: 8 }}>
+                  <button className="btn" type="button" onClick={() => setActiveStep(5)}>
+                    Weiter zu Einladungen versenden
+                  </button>
                   <button className="btn ghost" type="button" onClick={unpublish} disabled={busy}>
                     Auf „In Bearbeitung“ zurücksetzen
                   </button>
@@ -391,6 +404,57 @@ export default function AuftraegeErfassen() {
               </div>
             )}
           </div>
+        ) : (
+          <NeedsOrderHint onBack={() => setActiveStep(1)} />
+        ))}
+
+      {activeStep === 5 &&
+        (event && eventId ? (
+          event.status !== 'published' ? (
+            <div className="card mb">
+              <h2 style={{ marginTop: 0 }}>Einladungen versenden</h2>
+              <p className="muted" style={{ fontSize: '0.85rem' }}>
+                Die Einladungen gehen erst raus, wenn der Auftrag veröffentlicht ist – sonst sehen die
+                Eltern nach dem Klick noch keine Fotos.
+              </p>
+              <button className="btn secondary" type="button" onClick={() => setActiveStep(4)}>
+                Zu Schritt 4 (Veröffentlichen)
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="card mb">
+                <h2 style={{ marginTop: 0 }}>Einladungen versenden</h2>
+                {step5Done && event.invited_at && (
+                  <Alert kind="success">
+                    Die Einladung wurde am {formatDay(event.invited_at)} versendet – Schritt 5 ist
+                    abgeschlossen. Erinnerungen kannst du jederzeit hier oder unter{' '}
+                    <Link to="/admin/events">Aufträge</Link> versenden.
+                  </Alert>
+                )}
+                <InvitationDispatch
+                  eventId={eventId}
+                  variant="inline"
+                  onSent={() => {
+                    void loadEvent(eventId);
+                  }}
+                />
+              </div>
+              <div className="card mb">
+                <AutoOrderReminder
+                  eventId={eventId}
+                  enabled={event.auto_order_reminder === true}
+                  days={Math.max(1, event.auto_order_reminder_days ?? 7)}
+                  sentAt={event.auto_order_reminder_sent_at ?? null}
+                  expiresAt={event.expires_at}
+                  status={event.status}
+                  onChanged={() => {
+                    void loadEvent(eventId);
+                  }}
+                />
+              </div>
+            </>
+          )
         ) : (
           <NeedsOrderHint onBack={() => setActiveStep(1)} />
         ))}

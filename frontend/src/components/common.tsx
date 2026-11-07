@@ -1,4 +1,9 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
+
+// Offene Modals in Öffnungsreihenfolge: Escape schliesst nur das oberste – z. B.
+// die E-Mail-Vorschau, ohne das Versand-Popup darunter mitzuschliessen.
+const modalStack: number[] = [];
+let modalSeq = 0;
 
 /**
  * Lightweight, accessible modal dialog used for short admin forms
@@ -17,13 +22,22 @@ export function Modal({
   footer?: ReactNode;
   width?: number;
 }) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
   useEffect(() => {
+    const id = ++modalSeq;
+    modalStack.push(id);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && modalStack[modalStack.length - 1] === id) closeRef.current();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      const i = modalStack.indexOf(id);
+      if (i >= 0) modalStack.splice(i, 1);
+    };
+  }, []);
 
   return (
     <div className="modal-overlay" onClick={onClose}>

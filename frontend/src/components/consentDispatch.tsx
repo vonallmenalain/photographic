@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { Alert, DeliveryProblemBadge, Modal, type DeliveryProblemInfo } from './common';
 import { formatDateShort } from '../lib/format';
+import { EmailPreviewModal } from './emailPreview';
 
 /**
  * Versand-Popup „Einverständniserklärung versenden“.
@@ -53,6 +54,7 @@ export function ConsentDispatchModal({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
 
   // Eine Zeile pro E-Mail-Adresse (eine Adresse kann mehreren Kindern gehören).
   const allEmails = useMemo(() => {
@@ -134,136 +136,158 @@ export function ConsentDispatchModal({
 
   const canSend = !loading && !busy && selected.size > 0;
 
+  // Vorschau mit den Kindernamen der ersten ausgewählten Adresse.
+  const previewEmailId = allEmails.find((e) => selected.has(e.id))?.id ?? selectable[0]?.id;
+
   return (
-    <Modal
-      title="Einverständniserklärung versenden"
-      width={780}
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
-            Abbrechen
-          </button>
-          <button type="button" className="btn" onClick={send} disabled={!canSend}>
-            {busy ? 'Wird gesendet …' : 'Jetzt senden'}
-          </button>
-        </>
-      }
-    >
-      {error && <Alert kind="error">{error}</Alert>}
-      <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
-        Die Eltern erhalten eine E-Mail mit einem persönlichen Link auf das Formular. Dort wählen sie
-        pro Kind, ob und wie es fotografiert werden darf. Vorausgewählt sind alle E-Mail-Adressen, von
-        denen noch <strong>keine vollständige Antwort</strong> vorliegt – bereits beantwortete Adressen
-        kannst du zusätzlich anhaken, sie können ihre Antwort dann ändern.
-      </p>
-      {loading ? (
-        <p className="muted">Empfänger werden ermittelt …</p>
-      ) : allEmails.length === 0 ? (
-        <Alert kind="error">Diesem Auftrag sind noch keine (aktiven) E-Mail-Adressen zugeordnet.</Alert>
-      ) : (
-        <>
-          <div className="row between" style={{ marginBottom: 6 }}>
-            <strong style={{ fontSize: '0.85rem' }}>
-              {selected.size} von {selectable.length} ausgewählt
-            </strong>
-            <button type="button" className="btn ghost small" onClick={toggleAll}>
-              {allChecked ? 'Alle abwählen' : 'Alle auswählen'}
+    <>
+      <Modal
+        title="Einverständniserklärung versenden"
+        width={780}
+        onClose={onClose}
+        footer={
+          <>
+            <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
+              Abbrechen
             </button>
-          </div>
-          <div
-            style={{
-              maxHeight: 340,
-              overflow: 'auto',
-              border: '1px solid var(--border)',
-              borderRadius: 10,
-            }}
-          >
-            <table className="dispatch-table">
-              <thead>
-                <tr>
-                  <th>E-Mail-Adresse</th>
-                  <th style={{ textAlign: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={allChecked}
-                      onChange={toggleAll}
-                      aria-label="Alle auswählen"
-                      style={{ width: 'auto', margin: 0 }}
-                    />
-                  </th>
-                  <th>Status</th>
-                  <th>Einverständnis</th>
-                  <th>Versendet</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allEmails.map((e) => (
-                  <tr
-                    key={e.id}
-                    onClick={() => toggle(e)}
-                    style={{
-                      cursor: e.consentChildren > 0 ? 'pointer' : 'default',
-                      opacity: e.consentChildren > 0 ? 1 : 0.55,
-                    }}
-                  >
-                    <td className="dispatch-email">{e.email}</td>
-                    <td style={{ textAlign: 'center' }}>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setShowPreview(true)}
+              disabled={loading}
+              title="So sieht die E-Mail aus, die die Eltern erhalten"
+            >
+              Vorschau
+            </button>
+            <button type="button" className="btn" onClick={send} disabled={!canSend}>
+              {busy ? 'Wird gesendet …' : 'Jetzt senden'}
+            </button>
+          </>
+        }
+      >
+        {error && <Alert kind="error">{error}</Alert>}
+        <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
+          Die Eltern erhalten eine E-Mail mit einem persönlichen Link auf das Formular. Dort wählen sie
+          pro Kind, ob und wie es fotografiert werden darf. Vorausgewählt sind alle E-Mail-Adressen, von
+          denen noch <strong>keine vollständige Antwort</strong> vorliegt – bereits beantwortete Adressen
+          kannst du zusätzlich anhaken, sie können ihre Antwort dann ändern.
+        </p>
+        {loading ? (
+          <p className="muted">Empfänger werden ermittelt …</p>
+        ) : allEmails.length === 0 ? (
+          <Alert kind="error">Diesem Auftrag sind noch keine (aktiven) E-Mail-Adressen zugeordnet.</Alert>
+        ) : (
+          <>
+            <div className="row between" style={{ marginBottom: 6 }}>
+              <strong style={{ fontSize: '0.85rem' }}>
+                {selected.size} von {selectable.length} ausgewählt
+              </strong>
+              <button type="button" className="btn ghost small" onClick={toggleAll}>
+                {allChecked ? 'Alle abwählen' : 'Alle auswählen'}
+              </button>
+            </div>
+            <div
+              style={{
+                maxHeight: 340,
+                overflow: 'auto',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+              }}
+            >
+              <table className="dispatch-table">
+                <thead>
+                  <tr>
+                    <th>E-Mail-Adresse</th>
+                    <th style={{ textAlign: 'center' }}>
                       <input
                         type="checkbox"
-                        checked={selected.has(e.id)}
-                        disabled={e.consentChildren === 0}
-                        onChange={() => toggle(e)}
-                        onClick={(ev) => ev.stopPropagation()}
+                        checked={allChecked}
+                        onChange={toggleAll}
+                        aria-label="Alle auswählen"
                         style={{ width: 'auto', margin: 0 }}
                       />
-                    </td>
-                    <td>
-                      <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
-                        {e.verified ? (
-                          <span className="badge green">Bestätigt</span>
-                        ) : (
-                          <span className="badge amber">Nicht bestätigt</span>
-                        )}
-                        <DeliveryProblemBadge problem={e.deliveryProblem} />
-                      </span>
-                    </td>
-                    <td>
-                      {e.consentChildren === 0 ? (
-                        <span className="badge gray">Kein Kind zugeordnet</span>
-                      ) : e.consentDecisionLabel ? (
-                        <span
-                          className={`badge ${e.consentDecision === 'none' ? 'red' : 'green'}`}
-                          title={e.consentPending ? 'Für ein weiteres Kind fehlt noch die Antwort.' : ''}
-                        >
-                          {e.consentDecisionLabel}
-                          {e.consentPending ? ' · teilweise' : ''}
-                        </span>
-                      ) : (
-                        <span className="badge amber">Offen</span>
-                      )}
-                    </td>
-                    <td>
-                      {e.consentSentAt ? (
-                        <span className="badge green">{formatDateShort(e.consentSentAt)}</span>
-                      ) : (
-                        <span className="badge gray">Noch nicht</span>
-                      )}
-                    </td>
+                    </th>
+                    <th>Status</th>
+                    <th>Einverständnis</th>
+                    <th>Versendet</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="muted" style={{ fontSize: '0.8rem', marginTop: 10, marginBottom: 0 }}>
-            Der Link in dieser E-Mail gilt nur für die jeweilige Adresse und ist einmalig einlösbar –
-            eine Kopie an dich selbst wäre deshalb nicht verwendbar.
-            {data?.devLogOnly
-              ? ' Achtung: Kein SMTP konfiguriert – die E-Mails landen nur im Server-Log.'
-              : ''}
-          </p>
-        </>
+                </thead>
+                <tbody>
+                  {allEmails.map((e) => (
+                    <tr
+                      key={e.id}
+                      onClick={() => toggle(e)}
+                      style={{
+                        cursor: e.consentChildren > 0 ? 'pointer' : 'default',
+                        opacity: e.consentChildren > 0 ? 1 : 0.55,
+                      }}
+                    >
+                      <td className="dispatch-email">{e.email}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(e.id)}
+                          disabled={e.consentChildren === 0}
+                          onChange={() => toggle(e)}
+                          onClick={(ev) => ev.stopPropagation()}
+                          style={{ width: 'auto', margin: 0 }}
+                        />
+                      </td>
+                      <td>
+                        <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                          {e.verified ? (
+                            <span className="badge green">Bestätigt</span>
+                          ) : (
+                            <span className="badge amber">Nicht bestätigt</span>
+                          )}
+                          <DeliveryProblemBadge problem={e.deliveryProblem} />
+                        </span>
+                      </td>
+                      <td>
+                        {e.consentChildren === 0 ? (
+                          <span className="badge gray">Kein Kind zugeordnet</span>
+                        ) : e.consentDecisionLabel ? (
+                          <span
+                            className={`badge ${e.consentDecision === 'none' ? 'red' : 'green'}`}
+                            title={e.consentPending ? 'Für ein weiteres Kind fehlt noch die Antwort.' : ''}
+                          >
+                            {e.consentDecisionLabel}
+                            {e.consentPending ? ' · teilweise' : ''}
+                          </span>
+                        ) : (
+                          <span className="badge amber">Offen</span>
+                        )}
+                      </td>
+                      <td>
+                        {e.consentSentAt ? (
+                          <span className="badge green">{formatDateShort(e.consentSentAt)}</span>
+                        ) : (
+                          <span className="badge gray">Noch nicht</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="muted" style={{ fontSize: '0.8rem', marginTop: 10, marginBottom: 0 }}>
+              Der Link in dieser E-Mail gilt nur für die jeweilige Adresse und ist einmalig einlösbar –
+              eine Kopie an dich selbst wäre deshalb nicht verwendbar.
+              {data?.devLogOnly
+                ? ' Achtung: Kein SMTP konfiguriert – die E-Mails landen nur im Server-Log.'
+                : ''}
+            </p>
+          </>
+        )}
+      </Modal>
+      {showPreview && (
+        <EmailPreviewModal
+          eventId={eventId}
+          types={['consent']}
+          emailId={previewEmailId}
+          onClose={() => setShowPreview(false)}
+        />
       )}
-    </Modal>
+    </>
   );
 }

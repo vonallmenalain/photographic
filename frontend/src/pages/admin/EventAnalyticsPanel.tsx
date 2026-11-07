@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import {
-  Alert,
-  DeliveryProblemBadge,
-  Modal,
-  SendToSelfCheckbox,
-  type DeliveryProblemInfo,
-} from '../../components/common';
+import { Alert, Modal } from '../../components/common';
 import { ConsentDispatchModal } from '../../components/consentDispatch';
 import { formatPrice, formatDateShort } from '../../lib/format';
+import {
+  DISPATCH_META,
+  DispatchTimeline,
+  InvitationSection,
+  type DispatchEntry,
+  type DispatchKind,
+} from './invitations';
 
 export interface Buyer {
   email_id: string;
@@ -19,11 +20,7 @@ export interface Buyer {
   order_count: number;
   revenue_cents: number;
 }
-export interface ReminderRow {
-  id: string;
-  sent_at: string;
-  note: string;
-}
+export type ReminderRow = DispatchEntry;
 export interface DailyPoint {
   date: string;
   revenue_cents: number;
@@ -39,6 +36,13 @@ export interface EventAnalytics {
   auto_order_reminder?: boolean;
   auto_order_reminder_days?: number;
   auto_order_reminder_sent_at?: string | null;
+  /** Einverständnis (Klassenerfassung oder nachträglich eingeholt), sonst null. */
+  registration?: {
+    consent_required: boolean;
+    consent_only?: boolean;
+    open: boolean;
+  } | null;
+  consent_summary?: { children: number; answered: number; none: number } | null;
   revenue_cents: number;
   order_count: number;
   email_total: number;
@@ -49,9 +53,10 @@ export interface EventAnalytics {
 }
 
 /**
- * Read-only evaluation panel for a single finished Auftrag: revenue, who bought
- * how much, the daily revenue chart with reminder markers and the reminder
- * tooling. Used inside the Auftrag detail view (the former "Auswertung").
+ * Inhalt eines aufgeklappten Auftrags (bzw. der Detailseite): zuerst
+ * „Einladungen & Erinnerungen“ mit Verlauf, automatischer Erinnerung und der
+ * Elternliste, danach der Umsatzverlauf und – eingeklappt, weil selten
+ * gebraucht – die Einverständniserklärung.
  */
 export function EventAnalyticsPanel({
   ev,
@@ -62,22 +67,20 @@ export function EventAnalyticsPanel({
   ev: EventAnalytics;
   currency: string;
   onReload: () => void;
-  // Die grauen Kennzahl-Kacheln werden in der Aufträge-Übersicht bereits in der
-  // eingeklappten Zeile gezeigt; im ausgeklappten Bereich blenden wir sie aus,
-  // um Redundanz zu vermeiden. Die eigenständige Detailseite zeigt sie weiterhin.
+  // Die Aufträge-Übersicht zeigt ihre eigenen Kennzahl-Kacheln (mit Kindern und
+  // Einverständnissen); die eigenständige Detailseite nutzt diese hier.
   showSummary?: boolean;
 }) {
   return (
     <div>
       {showSummary && (
-        <div className="analytics-summary">
+        <div className="analytics-summary" style={{ marginTop: 0, marginBottom: 18 }}>
           <SummaryStat label="Umsatz" value={formatPrice(ev.revenue_cents, currency)} />
           <SummaryStat label="Bestellungen" value={String(ev.order_count)} />
           <SummaryStat
             label="Verifizierte E-Mails"
             value={`${ev.email_verified} von ${ev.email_total}`}
           />
-          <SummaryStat label="Erinnerungen" value={String(ev.reminders.length)} />
           <OrderableUntilStat
             eventId={ev.id}
             status={ev.status}
@@ -87,47 +90,81 @@ export function EventAnalyticsPanel({
         </div>
       )}
 
-      <h3 style={{ marginTop: showSummary ? 20 : 0, marginBottom: 8 }}>Umsatzverlauf</h3>
+      <InvitationSection event={ev} currency={currency} onChanged={onReload} />
+
+      <h3 style={{ marginTop: 24, marginBottom: 8 }}>Umsatzverlauf</h3>
       <RevenueChart daily={ev.daily} reminders={ev.reminders} currency={currency} />
 
-      <ReminderManager event={ev} onReload={onReload} />
-
-      <h3 style={{ marginTop: 20, marginBottom: 8 }}>Wer hat wie viel bestellt</h3>
-      {ev.buyers.length === 0 ? (
-        <p className="muted">Noch keine Bestellungen in diesem Auftrag.</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>E-Mail</th>
-              <th>Status</th>
-              <th>Bestellungen</th>
-              <th>Umsatz</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {ev.buyers.map((b) => (
-              <tr key={b.email_id}>
-                <td>{b.email}</td>
-                <td>
-                  {b.verified ? (
-                    <span className="badge green">Verifiziert</span>
-                  ) : (
-                    <span className="badge amber">Nicht verifiziert</span>
-                  )}
-                </td>
-                <td>{b.order_count}</td>
-                <td>{formatPrice(b.revenue_cents, currency)}</td>
-                <td>
-                  <Link to={`/admin/emails/${b.email_id}`}>Verwalten</Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <ConsentSection ev={ev} onReload={onReload} />
     </div>
+  );
+}
+
+/**
+ * Einverständniserklärung – eingeklappt, weil sie nur selten gebraucht wird.
+ * Zeigt den Stand, den Versand-Verlauf und die Knöpfe zum Ansehen bzw. Einholen.
+ */
+function ConsentSection({ ev, onReload }: { ev: EventAnalytics; onReload: () => void }) {
+  const [showDispatch, setShowDispatch] = useState(false);
+  const [msg, setMsg] = useState('');
+  const reg = ev.registration ?? null;
+  // Nachträglich einholen geht auch ohne Klassenerfassung (z. B. Excel-Import);
+  // in der laufenden Erfassung macht das die Erfassungsansicht, im Archiv ist es zu spät.
+  const canSend = ev.status !== 'collecting' && ev.status !== 'archived';
+  if (!reg && !canSend) return null;
+
+  const sum = ev.consent_summary;
+  const status =
+    reg && reg.consent_required && sum
+      ? `${sum.answered} von ${sum.children} beantwortet${sum.none ? ` · ${sum.none}× Nein` : ''}`
+      : 'nicht eingeholt';
+
+  return (
+    <details className="consent-details">
+      <summary>
+        <span>Einverständniserklärung</span>
+        <span className="muted">{status}</span>
+      </summary>
+      <div className="consent-details-body">
+        {msg && <Alert kind="success">{msg}</Alert>}
+        <DispatchTimeline
+          entries={ev.reminders}
+          kinds={['consent', 'consent_reminder']}
+          emptyText="Noch keine Einverständniserklärung versendet."
+        />
+        <div className="row" style={{ marginTop: 10 }}>
+          {reg && (
+            <Link className="btn secondary small" to={`/admin/events/${ev.id}/erfassung`}>
+              {reg.consent_only ? 'Antworten ansehen' : 'Klassenliste & Einverständnisse'}
+            </Link>
+          )}
+          {canSend && (
+            <button
+              type="button"
+              className="btn secondary small"
+              onClick={() => {
+                setMsg('');
+                setShowDispatch(true);
+              }}
+              title="Die Eltern auffordern, die Einverständniserklärung auszufüllen"
+            >
+              Einverständniserklärung versenden
+            </button>
+          )}
+        </div>
+      </div>
+      {showDispatch && (
+        <ConsentDispatchModal
+          eventId={ev.id}
+          onClose={() => setShowDispatch(false)}
+          onSent={(message) => {
+            setShowDispatch(false);
+            setMsg(message);
+            onReload();
+          }}
+        />
+      )}
+    </details>
   );
 }
 
@@ -285,536 +322,6 @@ function OrderableUntilEditor({
   );
 }
 
-function ReminderManager({ event, onReload }: { event: EventAnalytics; onReload: () => void }) {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [dispatchMode, setDispatchMode] = useState<'invitation' | 'reminder' | null>(null);
-  const [showConsent, setShowConsent] = useState(false);
-  const [msg, setMsg] = useState('');
-
-  // Eine Einladung lässt sich jederzeit (erneut) versenden. Erst wenn bereits eine
-  // Einladung raus ist (invited_at gesetzt), steht zusätzlich der Erinnerungs-Versand
-  // mit dem passenden Erinnerungstext zur Verfügung.
-  const canSendReminder = !!event.invited_at;
-  // Die Einverständniserklärung lässt sich auch bei Aufträgen nachholen, die
-  // nicht über die Klassenerfassung entstanden sind (z. B. Excel-Import). In der
-  // laufenden Erfassung macht das die Erfassungsansicht, im Archiv ist es zu spät.
-  const canSendConsent = event.status !== 'collecting' && event.status !== 'archived';
-
-  const add = async () => {
-    setError('');
-    setBusy(true);
-    try {
-      await api(`/api/admin/events/${event.id}/reminders`, {
-        method: 'POST',
-        admin: true,
-        body: { sent_at: new Date(date).toISOString(), note },
-      });
-      setNote('');
-      onReload();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Eintrag konnte nicht gespeichert werden.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const remove = async (id: string) => {
-    await api(`/api/admin/reminders/${id}`, { method: 'DELETE', admin: true });
-    onReload();
-  };
-
-  return (
-    <div className="card" style={{ marginTop: 14, background: 'var(--surface-2)' }}>
-      <strong>Einladungen &amp; Erinnerungen</strong>
-
-      {event.reminders.length > 0 ? (
-        <div style={{ marginTop: 10 }}>
-          {event.reminders.map((r) => (
-            <span className="chip" key={r.id}>
-              {formatDateShort(r.sent_at)}
-              {r.note ? ` · ${r.note}` : ''}
-              <button onClick={() => remove(r.id)} title="Entfernen">
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      ) : (
-        <p className="muted" style={{ fontSize: '0.82rem', marginTop: 6, marginBottom: 0 }}>
-          Noch keine Einladung oder Erinnerung verschickt.
-        </p>
-      )}
-
-      {error && <Alert kind="error">{error}</Alert>}
-      {msg && <Alert kind="success">{msg}</Alert>}
-
-      <div className="row" style={{ alignItems: 'flex-end', marginTop: 14 }}>
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label style={{ fontSize: '0.8rem' }}>Datum</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </div>
-        <div className="field" style={{ flex: 1, minWidth: 180, marginBottom: 0 }}>
-          <label style={{ fontSize: '0.8rem' }}>Notiz (optional)</label>
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="z. B. Erinnerung an alle Eltern"
-          />
-        </div>
-        <button className="btn small" disabled={busy} onClick={add} type="button">
-          + Protokollieren
-        </button>
-        <button
-          className="btn secondary small"
-          type="button"
-          onClick={() => {
-            setMsg('');
-            setDispatchMode('invitation');
-          }}
-        >
-          Einladung versenden
-        </button>
-        {canSendReminder && (
-          <button
-            className="btn secondary small"
-            type="button"
-            onClick={() => {
-              setMsg('');
-              setDispatchMode('reminder');
-            }}
-          >
-            Erinnerung versenden
-          </button>
-        )}
-        {canSendConsent && (
-          <button
-            className="btn secondary small"
-            type="button"
-            onClick={() => {
-              setMsg('');
-              setShowConsent(true);
-            }}
-            title="Die Eltern auffordern, die Einverständniserklärung auszufüllen"
-          >
-            Einverständniserklärung versenden
-          </button>
-        )}
-      </div>
-
-      {dispatchMode && (
-        <EmailDispatchModal
-          eventId={event.id}
-          mode={dispatchMode}
-          expiresAt={event.expires_at}
-          onClose={() => setDispatchMode(null)}
-          onSent={(message) => {
-            setDispatchMode(null);
-            setMsg(message);
-            setError('');
-            onReload();
-          }}
-        />
-      )}
-
-      {showConsent && (
-        <ConsentDispatchModal
-          eventId={event.id}
-          onClose={() => setShowConsent(false)}
-          onSent={(message) => {
-            setShowConsent(false);
-            setMsg(message);
-            setError('');
-            onReload();
-          }}
-        />
-      )}
-
-      <AutoOrderReminder event={event} onReload={onReload} />
-    </div>
-  );
-}
-
-/**
- * Automatische Erinnerung an alle Eltern des Auftrags, die noch nichts bestellt
- * haben – einmalig, X Tage vor Ablauf der Bestellfrist. Standardmässig aus.
- */
-function AutoOrderReminder({ event, onReload }: { event: EventAnalytics; onReload: () => void }) {
-  const [enabled, setEnabled] = useState(event.auto_order_reminder === true);
-  const [days, setDays] = useState(String(event.auto_order_reminder_days ?? 7));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    setEnabled(event.auto_order_reminder === true);
-    setDays(String(event.auto_order_reminder_days ?? 7));
-  }, [event.auto_order_reminder, event.auto_order_reminder_days]);
-
-  const save = async (nextEnabled: boolean, nextDays: string) => {
-    setBusy(true);
-    setError('');
-    try {
-      await api(`/api/admin/events/${event.id}`, {
-        method: 'PATCH',
-        admin: true,
-        body: {
-          auto_order_reminder: nextEnabled,
-          auto_order_reminder_days: Math.max(1, Math.min(60, parseInt(nextDays, 10) || 7)),
-        },
-      });
-      onReload();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Einstellung konnte nicht gespeichert werden.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-      <div className="row" style={{ alignItems: 'center', gap: 8 }}>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '0.9rem' }}>
-          <input
-            type="checkbox"
-            checked={enabled}
-            disabled={busy}
-            style={{ width: 'auto' }}
-            onChange={(e) => {
-              setEnabled(e.target.checked);
-              void save(e.target.checked, days);
-            }}
-          />
-          Automatische Erinnerung an Eltern ohne Bestellung
-        </label>
-        <input
-          type="number"
-          min={1}
-          max={60}
-          value={days}
-          disabled={!enabled || busy}
-          onChange={(e) => setDays(e.target.value)}
-          onBlur={() => enabled && void save(enabled, days)}
-          style={{ width: 70 }}
-        />
-        <span className="muted" style={{ fontSize: '0.85rem' }}>
-          Tage vor „Bestellbar bis“, einmalig
-          {event.auto_order_reminder_sent_at
-            ? ` · verschickt am ${formatDateShort(event.auto_order_reminder_sent_at)}`
-            : event.auto_order_reminder
-              ? ' · noch nicht verschickt'
-              : ''}
-        </span>
-      </div>
-      {error && <Alert kind="error">{error}</Alert>}
-    </div>
-  );
-}
-
-interface ReminderEmail {
-  id: string;
-  email: string;
-  name: string;
-  status: string;
-  verified: boolean;
-  hasOrdered: boolean;
-  // Zeitpunkt des letzten erfolgreichen Einladungs-Versands an diese E-Mail-Adresse
-  // (null = es wurde noch keine Einladung verschickt).
-  invitedAt: string | null;
-  // Letzte E-Mail an diese E-Mail-Adresse kam nicht an (Resend-Webhook / SMTP-Fehler).
-  deliveryProblem?: DeliveryProblemInfo | null;
-}
-interface ReminderChild {
-  id: string;
-  name: string;
-  emails: ReminderEmail[];
-}
-interface ReminderRecipients {
-  children: ReminderChild[];
-  otherEmails: ReminderEmail[];
-  adminEmail: string;
-  devLogOnly: boolean;
-  retentionDays: number;
-  daysLeft: number | null;
-}
-
-/**
- * Versand-Popup für Einladung bzw. Erinnerung. Zeigt alle aktiven Eltern-
- * E-Mail-Adressen des Auftrags als kompakte Liste – eine Zeile pro Adresse, ohne
- * Zeilenumbrüche, bei Bedarf horizontal scrollbar. Spalten: E-Mail-Adresse,
- * Auswahl-Häkchen, Bestätigungs-Status, Bestell-Status und ob (bzw. wann) die
- * Einladung bereits versendet wurde. Bei der Einladung sind standardmässig alle
- * E-Mail-Adressen ausgewählt, bei der Erinnerung nur jene, die noch keine Bestellung
- * erfasst haben. Optional geht eine Kopie an das eigene Admin-Konto.
- */
-function EmailDispatchModal({
-  eventId,
-  mode,
-  expiresAt,
-  onClose,
-  onSent,
-}: {
-  eventId: string;
-  mode: 'invitation' | 'reminder';
-  expiresAt: string | null;
-  onClose: () => void;
-  onSent: (msg: string) => void;
-}) {
-  const isReminder = mode === 'reminder';
-  const noun = isReminder ? 'Erinnerung' : 'Einladung';
-
-  const [data, setData] = useState<ReminderRecipients | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [sendToSelf, setSendToSelf] = useState(false);
-  const [mentionExtension, setMentionExtension] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  // Eine deduplizierte, alphabetisch sortierte Liste aller E-Mail-Adressen (eine
-  // Zeile pro Adresse – eine Adresse kann mehreren Kindern zugeordnet sein).
-  const allEmails = useMemo(() => {
-    if (!data) return [] as ReminderEmail[];
-    const byId = new Map<string, ReminderEmail>();
-    for (const c of data.children) for (const e of c.emails) byId.set(e.id, e);
-    for (const e of data.otherEmails) byId.set(e.id, e);
-    return Array.from(byId.values()).sort((a, b) => a.email.localeCompare(b.email));
-  }, [data]);
-
-  useEffect(() => {
-    api<ReminderRecipients>(`/api/admin/events/${eventId}/reminder-recipients`, { admin: true })
-      .then((r) => {
-        setData(r);
-        const ids = new Set<string>();
-        // Einladung: alle vorausgewählt. Erinnerung: nur Nicht-Besteller.
-        for (const c of r.children)
-          for (const e of c.emails) if (!isReminder || !e.hasOrdered) ids.add(e.id);
-        for (const e of r.otherEmails) if (!isReminder || !e.hasOrdered) ids.add(e.id);
-        setSelected(ids);
-      })
-      .catch((err) =>
-        setError(err instanceof ApiError ? err.message : 'Empfänger konnten nicht ermittelt werden.'),
-      )
-      .finally(() => setLoading(false));
-  }, [eventId, isReminder]);
-
-  const toggle = (id: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const allChecked = allEmails.length > 0 && selected.size === allEmails.length;
-  const toggleAll = () =>
-    setSelected(allChecked ? new Set() : new Set(allEmails.map((e) => e.id)));
-
-  const send = async () => {
-    setBusy(true);
-    setError('');
-    try {
-      const endpoint = isReminder
-        ? `/api/admin/events/${eventId}/send-reminder`
-        : `/api/admin/events/${eventId}/notify`;
-      const res = await api<{
-        sent: number;
-        failed: number;
-        failedEmails?: string[];
-        total: number;
-        sentToSelf: boolean;
-        devLogOnly: boolean;
-      }>(endpoint, {
-        method: 'POST',
-        admin: true,
-        body: {
-          emailIds: Array.from(selected),
-          sendToSelf,
-          ...(isReminder ? { mentionExtension } : {}),
-        },
-      });
-      const extra =
-        res.failed > 0
-          ? ` ${res.failed} konnten nicht gesendet werden${
-              res.failedEmails?.length ? ` (${res.failedEmails.join(', ')})` : ''
-            } – Details unter „Meldungen“.`
-          : '';
-      const self = res.sentToSelf ? ' Eine Kopie wurde an dich gesendet.' : '';
-      const note = res.devLogOnly
-        ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
-        : '';
-      onSent(`${noun} an ${res.sent} von ${res.total} E-Mail-Adresse(n) gesendet.${extra}${self}${note}`);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Versand fehlgeschlagen.');
-      setBusy(false);
-    }
-  };
-
-  const canSend = !loading && !busy && (selected.size > 0 || sendToSelf);
-  const hasAny = allEmails.length > 0;
-
-  return (
-    <Modal
-      title={`${noun} versenden`}
-      width={780}
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
-            Abbrechen
-          </button>
-          <button type="button" className="btn" onClick={send} disabled={!canSend}>
-            {busy ? 'Wird gesendet …' : 'Jetzt senden'}
-          </button>
-        </>
-      }
-    >
-      {error && <Alert kind="error">{error}</Alert>}
-      <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
-        {isReminder ? (
-          <>
-            Die Erinnerung enthält den Link zur App und die Hinweise zu den Fotos
-            {data?.daysLeft != null ? ` („noch ${data.daysLeft} Tage verfügbar“)` : ''}.
-            Standardmässig sind nur E-Mail-Adressen ausgewählt, die noch{' '}
-            <strong>keine Bestellung</strong> erfasst haben.
-          </>
-        ) : (
-          <>
-            Die Einladung enthält den Link zur App, eine Kurzanleitung zur Verifizierung sowie die
-            Hinweise zum Schutz der Fotos. Standardmässig sind alle E-Mail-Adressen ausgewählt.
-          </>
-        )}
-      </p>
-      {loading ? (
-        <p className="muted">Empfänger werden ermittelt …</p>
-      ) : !hasAny ? (
-        <Alert kind="error">Diesem Auftrag sind noch keine (aktiven) E-Mail-Adressen zugeordnet.</Alert>
-      ) : data ? (
-        <>
-          <div className="row between" style={{ marginBottom: 6 }}>
-            <strong style={{ fontSize: '0.85rem' }}>
-              {selected.size} von {allEmails.length} ausgewählt
-            </strong>
-            <button type="button" className="btn ghost small" onClick={toggleAll}>
-              {allChecked ? 'Alle abwählen' : 'Alle auswählen'}
-            </button>
-          </div>
-          <div
-            style={{
-              maxHeight: 340,
-              overflow: 'auto',
-              border: '1px solid var(--border)',
-              borderRadius: 10,
-            }}
-          >
-            <table className="dispatch-table">
-              <thead>
-                <tr>
-                  <th>E-Mail-Adresse</th>
-                  <th style={{ textAlign: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={allChecked}
-                      onChange={toggleAll}
-                      aria-label="Alle auswählen"
-                      style={{ width: 'auto', margin: 0 }}
-                    />
-                  </th>
-                  <th>Status</th>
-                  <th>Bestellung</th>
-                  <th>Einladung</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allEmails.map((e) => (
-                  <tr key={e.id} onClick={() => toggle(e.id)} style={{ cursor: 'pointer' }}>
-                    <td className="dispatch-email">{e.email}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(e.id)}
-                        onChange={() => toggle(e.id)}
-                        onClick={(ev) => ev.stopPropagation()}
-                        style={{ width: 'auto', margin: 0 }}
-                      />
-                    </td>
-                    <td>
-                      <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
-                        {e.verified ? (
-                          <span className="badge green">Bestätigt</span>
-                        ) : (
-                          <span className="badge amber">Nicht bestätigt</span>
-                        )}
-                        <DeliveryProblemBadge problem={e.deliveryProblem} />
-                      </span>
-                    </td>
-                    <td>
-                      {e.hasOrdered ? (
-                        <span className="badge green">Bestellung</span>
-                      ) : (
-                        <span className="badge gray">Keine Bestellung</span>
-                      )}
-                    </td>
-                    <td>
-                      {e.invitedAt ? (
-                        <span className="badge green" title={`Einladung versendet am ${formatDateShort(e.invitedAt)}`}>
-                          Versendet · {formatDateShort(e.invitedAt)}
-                        </span>
-                      ) : (
-                        <span className="badge gray">Noch nicht</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {isReminder && (
-            <label
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'auto minmax(0, 1fr)',
-                alignItems: 'center',
-                gap: 10,
-                marginTop: 12,
-                fontSize: '0.88rem',
-                cursor: 'pointer',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={mentionExtension}
-                onChange={(e) => setMentionExtension(e.target.checked)}
-                style={{ width: 'auto', margin: 0 }}
-              />
-              <span>
-                Info über Verlängerung Bestellzeitraum integrieren
-                {mentionExtension && expiresAt && (
-                  <span className="muted" style={{ display: 'block', fontSize: '0.8rem' }}>
-                    Die Erinnerung weist darauf hin, dass bis zum {formatDateShort(expiresAt)} bestellt
-                    werden kann.
-                  </span>
-                )}
-              </span>
-            </label>
-          )}
-          <SendToSelfCheckbox
-            checked={sendToSelf}
-            onChange={setSendToSelf}
-            adminEmail={data.adminEmail}
-          />
-          {data.devLogOnly && (
-            <p className="muted" style={{ fontSize: '0.8rem', marginTop: 8, marginBottom: 0 }}>
-              Achtung: Kein SMTP konfiguriert – die E-Mails landen nur im Server-Log.
-            </p>
-          )}
-        </>
-      ) : null}
-    </Modal>
-  );
-}
-
 /** Compact SVG bar chart of daily revenue with reminder markers. */
 function RevenueChart({
   daily,
@@ -878,6 +385,8 @@ function RevenueChart({
 
         {reminderMarks.map((r) => {
           const cx = padL + r.idx * slot + slot / 2;
+          const kind = r.kind ?? 'manual';
+          const color = MARK_COLORS[kind];
           return (
             <g key={r.id}>
               <line
@@ -885,15 +394,17 @@ function RevenueChart({
                 y1={padT}
                 x2={cx}
                 y2={padT + chartH}
-                stroke="#c026d3"
+                stroke={color}
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
               />
               <polygon
                 points={`${cx - 5},${padT} ${cx + 5},${padT} ${cx},${padT + 8}`}
-                fill="#c026d3"
+                fill={color}
               />
-              <title>{`Erinnerung ${formatDateShort(r.sent_at)}${r.note ? ` – ${r.note}` : ''}`}</title>
+              <title>{`${DISPATCH_META[kind].label} ${formatDateShort(r.sent_at)}${
+                r.count != null ? ` – an ${r.count} E-Mail-Adresse(n)` : r.note ? ` – ${r.note}` : ''
+              }`}</title>
             </g>
           );
         })}
@@ -936,13 +447,33 @@ function RevenueChart({
         />
       </svg>
       {reminderMarks.length > 0 && (
-        <p className="muted" style={{ fontSize: '0.78rem', marginTop: 4 }}>
-          <span style={{ color: '#c026d3' }}>▮</span> = protokollierte Erinnerung
+        <p className="muted chart-legend">
+          {LEGEND.filter((l) => reminderMarks.some((m) => l.kinds.includes(m.kind ?? 'manual'))).map((l) => (
+            <span key={l.label}>
+              <span style={{ color: MARK_COLORS[l.kinds[0]] }}>▮</span> {l.label}
+            </span>
+          ))}
         </p>
       )}
     </div>
   );
 }
+
+// Farben der Markierungen in der Umsatzgrafik je Versandart.
+const MARK_COLORS: Record<DispatchKind, string> = {
+  invitation: '#1b7a52',
+  reminder: '#c026d3',
+  auto_reminder: '#c026d3',
+  consent: '#c98a00',
+  consent_reminder: '#c98a00',
+  manual: '#7b8794',
+};
+const LEGEND: { label: string; kinds: DispatchKind[] }[] = [
+  { label: 'Einladung', kinds: ['invitation'] },
+  { label: 'Erinnerung', kinds: ['reminder', 'auto_reminder'] },
+  { label: 'Einverständnis', kinds: ['consent', 'consent_reminder'] },
+  { label: 'Protokolliert', kinds: ['manual'] },
+];
 
 function shortDay(iso: string): string {
   const d = new Date(iso);

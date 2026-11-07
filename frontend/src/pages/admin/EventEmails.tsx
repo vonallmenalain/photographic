@@ -1,14 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
-import {
-  Alert,
-  DeliveryProblemBadge,
-  Modal,
-  StatusBadge,
-  SendToSelfCheckbox,
-  type DeliveryProblemInfo,
-} from '../../components/common';
+import { Alert, Modal, StatusBadge } from '../../components/common';
 import { ConsentDispatchModal } from '../../components/consentDispatch';
 
 interface EventRef {
@@ -38,7 +31,8 @@ interface ChildRef {
  * die frühere globale E-Mail-Liste, aber auf diesen Auftrag gefiltert: anlegen
  * (optional direkt einem Kind dieses Auftrags zuweisen), suchen, verwalten und
  * löschen. Die Freitextsuche findet sowohl die E-Mail/den Namen als auch das
- * verknüpfte Kind.
+ * verknüpfte Kind. Die Einladung an die Eltern folgt im Assistenten erst in
+ * Schritt 5 („Einladungen versenden“), nach dem Veröffentlichen.
  */
 export default function EventEmails({
   eventId,
@@ -58,7 +52,6 @@ export default function EventEmails({
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [showNotify, setShowNotify] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
@@ -103,9 +96,6 @@ export default function EventEmails({
       <div className="row between">
         <h2 style={{ marginBottom: 0 }}>E-Mail-Adressen</h2>
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn small" onClick={() => setShowNotify(true)}>
-            Einladung per E-Mail senden
-          </button>
           {/* Auch ohne Klassenerfassung (z. B. Excel-Import) lässt sich die
               Einverständniserklärung nachträglich bei den Eltern einholen. */}
           {eventStatus !== 'collecting' && eventStatus !== 'archived' && (
@@ -216,18 +206,6 @@ export default function EventEmails({
         />
       )}
 
-      {showNotify && (
-        <NotifyAllModal
-          eventId={eventId}
-          onClose={() => setShowNotify(false)}
-          onSent={(message) => {
-            setShowNotify(false);
-            setMsg(message);
-            setError('');
-          }}
-        />
-      )}
-
       {showConsent && (
         <ConsentDispatchModal
           eventId={eventId}
@@ -239,206 +217,6 @@ export default function EventEmails({
           }}
         />
       )}
-    </div>
-  );
-}
-
-interface NotifyRecipient {
-  id: string;
-  email: string;
-  name: string;
-  status: string;
-  deliveryProblem?: DeliveryProblemInfo | null;
-}
-interface NotifyInfo {
-  recipientCount: number;
-  recipients: NotifyRecipient[];
-  adminEmail: string;
-  devLogOnly: boolean;
-}
-
-/**
- * Dialog für die Sammel-Einladung an die E-Mail-Adressen des Auftrags. Zeigt die
- * komplette Empfängerliste mit Häkchen (standardmässig alle ausgewählt), sodass
- * der Admin einzelne E-Mail-Adressen abwählen kann. Zusätzlich lässt sich „E-Mail an
- * mich senden“ aktivieren, um eine Kopie an das angemeldete Admin-Konto zu
- * schicken.
- */
-export function NotifyAllModal({
-  eventId,
-  onClose,
-  onSent,
-}: {
-  eventId: string;
-  onClose: () => void;
-  onSent: (msg: string) => void;
-}) {
-  const [info, setInfo] = useState<NotifyInfo | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [sendToSelf, setSendToSelf] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    api<NotifyInfo>(`/api/admin/events/${eventId}/notify`, { admin: true })
-      .then((r) => {
-        setInfo(r);
-        // Default: alle E-Mail-Adressen ausgewählt.
-        setSelected(new Set(r.recipients.map((x) => x.id)));
-      })
-      .catch((err) =>
-        setError(err instanceof ApiError ? err.message : 'Empfänger konnten nicht ermittelt werden.'),
-      )
-      .finally(() => setLoading(false));
-  }, [eventId]);
-
-  const toggle = (id: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const allChecked = !!info && info.recipients.length > 0 && selected.size === info.recipients.length;
-  const toggleAll = () => {
-    if (!info) return;
-    setSelected(allChecked ? new Set() : new Set(info.recipients.map((x) => x.id)));
-  };
-
-  const send = async () => {
-    setBusy(true);
-    setError('');
-    try {
-      const res = await api<{
-        sent: number;
-        failed: number;
-        failedEmails?: string[];
-        total: number;
-        sentToSelf: boolean;
-        devLogOnly: boolean;
-      }>(`/api/admin/events/${eventId}/notify`, {
-        method: 'POST',
-        admin: true,
-        body: { emailIds: Array.from(selected), sendToSelf },
-      });
-      const extra =
-        res.failed > 0
-          ? ` ${res.failed} konnten nicht gesendet werden${
-              res.failedEmails?.length ? ` (${res.failedEmails.join(', ')})` : ''
-            } – Details unter „Meldungen“.`
-          : '';
-      const self = res.sentToSelf ? ' Eine Kopie wurde an dich gesendet.' : '';
-      const note = res.devLogOnly
-        ? ' Hinweis: Kein SMTP konfiguriert – die E-Mails wurden nur ins Server-Log geschrieben.'
-        : '';
-      onSent(`Einladung an ${res.sent} von ${res.total} E-Mail-Adresse(n) gesendet.${extra}${self}${note}`);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Versand fehlgeschlagen.');
-      setBusy(false);
-    }
-  };
-
-  const canSend = !loading && !busy && (selected.size > 0 || sendToSelf);
-
-  return (
-    <Modal
-      title="Einladung per E-Mail senden"
-      width={680}
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
-            Abbrechen
-          </button>
-          <button type="button" className="btn" onClick={send} disabled={!canSend}>
-            {busy ? 'Wird gesendet …' : 'Jetzt senden'}
-          </button>
-        </>
-      }
-    >
-      {error && <Alert kind="error">{error}</Alert>}
-      <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
-        Die Einladung enthält den Link zur App, eine Kurzanleitung zur Verifizierung sowie die
-        Hinweise zum Schutz der Fotos und zur Aufbewahrungsfrist. Wähle aus, an welche E-Mail-Adressen sie
-        gesendet werden soll – standardmässig sind alle ausgewählt.
-      </p>
-      {loading ? (
-        <p className="muted">Empfänger werden ermittelt …</p>
-      ) : info && info.recipients.length === 0 ? (
-        <Alert kind="error">
-          Diesem Auftrag sind noch keine (aktiven) E-Mail-Adressen zugeordnet.
-        </Alert>
-      ) : info ? (
-        <>
-          <div className="row between" style={{ marginBottom: 6 }}>
-            <strong style={{ fontSize: '0.85rem' }}>
-              {selected.size} von {info.recipients.length} ausgewählt
-            </strong>
-            <button type="button" className="btn ghost small" onClick={toggleAll}>
-              {allChecked ? 'Alle abwählen' : 'Alle auswählen'}
-            </button>
-          </div>
-          <RecipientCheckboxList>
-            {info.recipients.map((r) => (
-              <label key={r.id} style={recipientRowStyle}>
-                <input
-                  type="checkbox"
-                  checked={selected.has(r.id)}
-                  onChange={() => toggle(r.id)}
-                  style={{ width: 'auto', margin: 0 }}
-                />
-                <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-                  {r.email}
-                  {r.name ? <span className="muted"> · {r.name}</span> : null}
-                </span>
-                <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
-                  <StatusBadge status={r.status === 'verified' ? 'verified' : 'not_verified'} />
-                  <DeliveryProblemBadge problem={r.deliveryProblem} />
-                </span>
-              </label>
-            ))}
-          </RecipientCheckboxList>
-          <SendToSelfCheckbox
-            checked={sendToSelf}
-            onChange={setSendToSelf}
-            adminEmail={info.adminEmail}
-          />
-          {info.devLogOnly && (
-            <p className="muted" style={{ fontSize: '0.8rem', marginTop: 8, marginBottom: 0 }}>
-              Achtung: Kein SMTP konfiguriert – die E-Mails landen nur im Server-Log.
-            </p>
-          )}
-        </>
-      ) : null}
-    </Modal>
-  );
-}
-
-const recipientRowStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'auto minmax(0, 1fr) auto',
-  alignItems: 'center',
-  gap: 10,
-  padding: '8px 12px',
-  borderBottom: '1px solid var(--border)',
-  fontSize: '0.85rem',
-  cursor: 'pointer',
-};
-
-/** Scrollbarer Rahmen für die Empfängerliste mit Häkchen. */
-function RecipientCheckboxList({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        maxHeight: 280,
-        overflowY: 'auto',
-        border: '1px solid var(--border)',
-        borderRadius: 10,
-      }}
-    >
-      {children}
     </div>
   );
 }
