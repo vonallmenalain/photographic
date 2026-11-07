@@ -170,6 +170,16 @@ function DateCell({ at, count }: { at: string | null; count?: number }) {
 // --- Versand (Einladung + Erinnerung in einem) --------------------------------
 
 type Mode = 'auto' | 'invitation' | 'reminder';
+
+const MODE_OPTIONS: { value: Mode; title: string; hint: string }[] = [
+  {
+    value: 'auto',
+    title: 'Automatisch (empfohlen)',
+    hint: 'Einladung beim ersten Mal, danach Erinnerung',
+  },
+  { value: 'invitation', title: 'Allen die Einladung', hint: '„Ihre Fotos sind bereit“' },
+  { value: 'reminder', title: 'Allen die Erinnerung', hint: '„Ihre Fotos sind noch verfügbar“' },
+];
 type QuickFilter = 'all' | 'open' | 'not_contacted' | 'not_logged_in' | 'none';
 
 interface SendResult {
@@ -470,16 +480,26 @@ export function InvitationDispatch({
           </div>
 
           <div className="dispatch-options">
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: '0.8rem' }}>Inhalt der E-Mail</label>
-              <select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-                <option value="auto">
-                  Automatisch – Einladung beim ersten Mal, danach Erinnerung (empfohlen)
-                </option>
-                <option value="invitation">Allen die Einladung („Ihre Fotos sind bereit“)</option>
-                <option value="reminder">Allen die Erinnerung („Ihre Fotos sind noch verfügbar“)</option>
-              </select>
-            </div>
+            {/* Auswahlfelder statt Dropdown: Die Erklärungen sind zu lang für
+                ein Auswahlfeld und wurden dort abgeschnitten. */}
+            <fieldset className="mode-options">
+              <legend>Inhalt der E-Mail</legend>
+              {MODE_OPTIONS.map((o) => (
+                <label key={o.value} className={`mode-option${mode === o.value ? ' active' : ''}`}>
+                  <input
+                    type="radio"
+                    name={`mode-${eventId}`}
+                    value={o.value}
+                    checked={mode === o.value}
+                    onChange={() => setMode(o.value)}
+                  />
+                  <span>
+                    <strong>{o.title}</strong>
+                    <span className="mode-option-hint">{o.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             {nRem > 0 && (
               <label className="check-line">
                 <input
