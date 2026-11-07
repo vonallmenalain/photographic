@@ -46,6 +46,11 @@ export function isProblemStatus(status: string): boolean {
 export interface DeliveryDoc {
   provider: 'resend' | 'smtp';
   provider_email_id: string | null;
+  /**
+   * Absenderadresse der E-Mail (normalisiert), wie Resend sie meldet. Fehlt bei
+   * Einträgen, die vor der Absender-Prüfung entstanden sind.
+   */
+  from?: string | null;
   /** Empfängeradresse (normalisiert). */
   to: string;
   subject: string;
@@ -119,6 +124,8 @@ export interface ApplyDeliveryInput {
   id: string;
   provider: 'resend' | 'smtp';
   providerEmailId: string | null;
+  /** Absenderadresse (nur Resend-Ereignisse). */
+  from?: string | null;
   to: string;
   subject: string;
   status: DeliveryStatus;
@@ -174,6 +181,7 @@ export async function applyDeliveryEvent(input: ApplyDeliveryInput): Promise<App
   const doc: DeliveryDoc = {
     provider: input.provider,
     provider_email_id: input.providerEmailId ?? existing?.provider_email_id ?? null,
+    from: input.from ?? existing?.from ?? null,
     to,
     subject: input.subject || existing?.subject || '',
     status,

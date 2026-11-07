@@ -9,7 +9,7 @@ import {
   type DeliveryStatus,
 } from '../lib/mailLog';
 import { sendDeliveryProblemEmail } from '../lib/email';
-import { getAppSettings, resendWebhookSecret } from './settings';
+import { getAppSettings, mailFrom, parseMailFrom, resendWebhookSecret } from './settings';
 
 /**
  * Verarbeitung der Resend-Webhook-Ereignisse und alles, was der Adminbereich
@@ -20,6 +20,13 @@ import { getAppSettings, resendWebhookSecret } from './settings';
  * `email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`,
  * `email.complained` und `email.failed`. Öffnungen/Klicks werden bewusst nicht
  * ausgewertet.
+ *
+ * Wichtig: Ein Resend-Webhook meldet die Ereignisse ALLER E-Mails des
+ * Resend-Kontos – auch die anderer Apps, die über dasselbe Konto verschicken.
+ * Übernommen werden deshalb nur Ereignisse, deren Absender („from“) der
+ * Absender dieser App ist (Einstellungen → Absender bzw. MAIL_FROM). Alle
+ * anderen werden quittiert (200, damit Resend nicht erneut zustellt), aber
+ * weder gespeichert noch gemeldet.
  */
 
 const STATUS_BY_EVENT: Record<string, DeliveryStatus> = {
@@ -56,6 +63,62 @@ function firstRecipient(to: string[] | string | undefined): string {
   return '';
 }
 
+/** „Name <adresse@domain>“ oder „adresse@domain“ → normalisierte Adresse. */
+export function senderAddress(from: string | undefined | null): string {
+  const raw = String(from ?? '').trim();
+  if (!raw) return '';
+  const angle = /<([^>]+)>/.exec(raw);
+  return normalizeEmail(angle ? angle[1] : raw);
+}
+
+/**
+ * Absenderadressen dieser App: der in den Einstellungen hinterlegte Absender
+ * und – für E-Mails, die vor einer Änderung der Einstellungen verschickt
+ * wurden – der Startwert aus MAIL_FROM.
+ */
+export async function ownSenderAddresses(): Promise<Set<string>> {
+  const out = new Set<string>();
+  try {
+    const from = await mailFrom();
+    if (from.address) out.add(normalizeEmail(from.address));
+  } catch {
+    /* Einstellungen nicht lesbar – unten bleibt MAIL_FROM */
+  }
+  const envFrom = parseMailFrom(config.mail.from).email;
+  if (envFrom) out.add(normalizeEmail(envFrom));
+  return out;
+}
+
+/**
+ * Betreffzeilen der E-Mails dieser App (lib/email.ts). Dient nur dazu, alte
+ * Protokolleinträge ohne gespeicherten Absender zuzuordnen: Vor der
+ * Absender-Prüfung hat der Webhook auch E-Mails anderer Apps desselben
+ * Resend-Kontos protokolliert; die werden in der Liste ausgeblendet.
+ */
+const OWN_SUBJECTS: RegExp[] = [
+  /^Ihr Zugangscode für die Foto-Galerie$/,
+  /^Passwort zurücksetzen – Adminbereich$/,
+  /^Ihre Fotos sind bereit$/,
+  /^Erinnerung: Ihre Fotos sind noch /,
+  /^Ihre Bestellung ist bestätigt/,
+  /^Ihre Fotos sind unterwegs$/,
+  /^Neue Meldung: /,
+  /^E-Mail nicht zustellbar: /,
+  /Schulfotografie/,
+  /^Klassenerfassung abgeschlossen: /,
+];
+
+/**
+ * Gehört ein Protokolleintrag zu dieser App? SMTP-Fehler stammen immer aus dem
+ * eigenen Versand; Resend-Einträge mit Absender werden daran gemessen, ältere
+ * ohne Absender an ihrem Betreff.
+ */
+export function isOwnDelivery(doc: Pick<DeliveryDoc, 'provider' | 'from' | 'subject'>, own: Set<string>): boolean {
+  if (doc.provider !== 'resend') return true;
+  if (doc.from) return own.has(normalizeEmail(doc.from));
+  return OWN_SUBJECTS.some((re) => re.test(String(doc.subject ?? '')));
+}
+
 function isoOrNow(value: string | undefined): string {
   if (!value) return nowIso();
   const d = new Date(value);
@@ -69,12 +132,19 @@ function isoOrNow(value: string | undefined): string {
 export async function recordResendEvent(raw: unknown): Promise<{ handled: boolean; status?: DeliveryStatus }> {
   const event = (raw ?? {}) as ResendEvent;
   const type = String(event.type ?? '');
+  const data = event.data ?? {};
+
+  // Nur E-Mails dieser App: Der Webhook gilt für das ganze Resend-Konto.
+  const from = senderAddress(data.from);
+  if (type.startsWith('email.') && !(await ownSenderAddresses()).has(from)) {
+    await touchWebhookState(type, from || '(ohne Absender)');
+    return { handled: false };
+  }
   await touchWebhookState(type);
 
   const status = STATUS_BY_EVENT[type];
   if (!status) return { handled: false };
 
-  const data = event.data ?? {};
   const to = firstRecipient(data.to);
   const emailId = String(data.email_id ?? '').trim();
   if (!to || !emailId) return { handled: false };
@@ -100,6 +170,7 @@ export async function recordResendEvent(raw: unknown): Promise<{ handled: boolea
     id: `res_${emailId.replace(/[^A-Za-z0-9_-]/g, '_')}`,
     provider: 'resend',
     providerEmailId: emailId,
+    from,
     to,
     subject: String(data.subject ?? '').slice(0, 300),
     status,
@@ -118,16 +189,26 @@ export async function recordResendEvent(raw: unknown): Promise<{ handled: boolea
   return { handled: true, status };
 }
 
-async function touchWebhookState(eventType: string): Promise<void> {
+/**
+ * Hält den Stand des Webhooks fest. Mit `foreignSender` zählt das Ereignis als
+ * ignoriert (E-Mail einer anderen App desselben Resend-Kontos).
+ */
+async function touchWebhookState(eventType: string, foreignSender?: string): Promise<void> {
   try {
     await col(COL.settings)
       .doc(WEBHOOK_STATE_ID)
       .set(
-        {
-          last_event_at: nowIso(),
-          last_event_type: eventType,
-          events_total: admin.firestore.FieldValue.increment(1),
-        },
+        foreignSender
+          ? {
+              ignored_total: admin.firestore.FieldValue.increment(1),
+              last_ignored_at: nowIso(),
+              last_ignored_from: foreignSender.slice(0, 200),
+            }
+          : {
+              last_event_at: nowIso(),
+              last_event_type: eventType,
+              events_total: admin.firestore.FieldValue.increment(1),
+            },
         { merge: true },
       );
   } catch (err) {
@@ -197,8 +278,9 @@ export async function listDeliveries(opts: { problemsOnly: boolean; limit?: numb
   const query = opts.problemsOnly
     ? col(COL.emailDeliveries).where('open_problem', '==', 1)
     : col(COL.emailDeliveries);
-  const rows = await runQuery<DeliveryDoc>(query);
+  const [rows, own] = await Promise.all([runQuery<DeliveryDoc>(query), ownSenderAddresses()]);
   return rows
+    .filter((d) => isOwnDelivery(d, own))
     .sort((a, b) => String(b.status_at).localeCompare(String(a.status_at)))
     .slice(0, opts.limit ?? 200);
 }
@@ -222,17 +304,28 @@ export interface DeliveryOverview {
   lastEventAt: string | null;
   lastEventType: string | null;
   eventsTotal: number;
+  /** Ereignisse anderer Absender (andere Apps im selben Resend-Konto), nicht übernommen. */
+  ignoredTotal: number;
+  lastIgnoredAt: string | null;
+  lastIgnoredFrom: string | null;
+  /** Absenderadresse(n), deren Ereignisse übernommen werden. */
+  ownSenders: string[];
   openProblems: number;
   devLogOnly: boolean;
 }
 
 export async function deliveryOverview(): Promise<DeliveryOverview> {
-  const [state, openProblems] = await Promise.all([
-    getById<{ last_event_at?: string; last_event_type?: string; events_total?: number }>(
-      COL.settings,
-      WEBHOOK_STATE_ID,
-    ),
+  const [state, openProblems, own] = await Promise.all([
+    getById<{
+      last_event_at?: string;
+      last_event_type?: string;
+      events_total?: number;
+      ignored_total?: number;
+      last_ignored_at?: string;
+      last_ignored_from?: string;
+    }>(COL.settings, WEBHOOK_STATE_ID),
     countOpenProblems(),
+    ownSenderAddresses(),
   ]);
   return {
     webhookConfigured: !!(await resendWebhookSecret()),
@@ -240,14 +333,23 @@ export async function deliveryOverview(): Promise<DeliveryOverview> {
     lastEventAt: state?.last_event_at ?? null,
     lastEventType: state?.last_event_type ?? null,
     eventsTotal: Number(state?.events_total ?? 0),
+    ignoredTotal: Number(state?.ignored_total ?? 0),
+    lastIgnoredAt: state?.last_ignored_at ?? null,
+    lastIgnoredFrom: state?.last_ignored_from ?? null,
+    ownSenders: Array.from(own),
     openProblems,
     devLogOnly: config.mail.devLogOnly,
   };
 }
 
 export async function countOpenProblems(): Promise<number> {
-  const snap = await col(COL.emailDeliveries).where('open_problem', '==', 1).count().get();
-  return snap.data().count;
+  // Offene Probleme sind wenige – lesen statt zählen, damit Einträge anderer
+  // Apps (aus der Zeit vor der Absender-Prüfung) nicht mitgezählt werden.
+  const [rows, own] = await Promise.all([
+    runQuery<DeliveryDoc>(col(COL.emailDeliveries).where('open_problem', '==', 1)),
+    ownSenderAddresses(),
+  ]);
+  return rows.filter((d) => isOwnDelivery(d, own)).length;
 }
 
 /**

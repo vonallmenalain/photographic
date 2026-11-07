@@ -109,6 +109,21 @@ Versand** meldet (z. B. eine syntaktisch unmögliche Adresse). Einrichtung:
 5. Das Secret in der App hinterlegen – **nicht im Adminbereich**, sondern wie
    im nächsten Abschnitt beschrieben.
 
+> **Mehrere Apps im selben Resend-Konto:** Ein Resend-Webhook meldet die
+> Ereignisse **aller** E-Mails des Kontos – auch die anderer Apps (z. B. Hüeti),
+> die über dasselbe Konto verschicken. Die App übernimmt deshalb nur Ereignisse,
+> deren **Absender** ihr eigener ist (Adminbereich → Einstellungen → Absender
+> bzw. `MAIL_FROM`). Alle anderen quittiert sie, speichert sie aber nicht und
+> meldet sie nicht; ihre Anzahl steht unter „Nicht zustellbare E-Mails“
+> („… Ereignisse anderer Absender wurden ignoriert“). Voraussetzung: Jede App
+> verschickt mit einer **eigenen Absenderadresse** – teilen sich zwei Apps
+> denselben Absender, lassen sich ihre E-Mails nicht unterscheiden. Einträge
+> anderer Apps aus der Zeit vor dieser Prüfung blendet die Liste aus (erkannt
+> am Betreff); sie verschwinden mit der automatischen Bereinigung nach 90 Tagen.
+> Umgekehrt gilt dasselbe: Hat eine andere App einen eigenen Resend-Webhook,
+> bekommt sie auch die Ereignisse dieser App und muss ebenfalls nach Absender
+> filtern.
+
 Ob der Webhook läuft, steht im Adminbereich unter **Einstellungen → Nicht
 zustellbare E-Mails**: dort werden der Status und der Zeitpunkt des letzten
 Ereignisses angezeigt. Nach der nächsten verschickten E-Mail muss ein Eintrag
