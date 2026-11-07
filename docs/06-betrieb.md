@@ -114,6 +114,18 @@ also sofort.
 - Mehrdeutige Treffer (z. B. ein Vorname, der auf **mehrere Kinder** passt, oder
   nur ein gemeinsamer Nachname) bleiben **bewusst unzugeordnet** und müssen
   manuell gesetzt werden.
+- **Gruppen-/Klassenfotos am Dateinamen:** Fotos werden automatisch als
+  Gruppen-/Klassenfoto (für die ganze Klasse sichtbar) markiert, wenn der
+  Dateiname eines dieser Wörter enthält – Gross-/Kleinschreibung, Umlaute,
+  Trennzeichen und laufende Nummern sind egal:
+  - **immer:** Gruppenfoto, Gruppenbild, Gruppenaufnahme, Klassenfoto,
+    Klassenbild, Klassenspiegel, Klassenaufnahme, Klassenporträt – z. B.
+    `Gruppenbild1.jpg`, `Gruppen-Bild_2.jpg`, `Klassenbild2.jpg`;
+  - **allein stehend „Gruppe“/„Gruppen“/„Klasse“** (z. B. `Gruppe.jpg`,
+    `Gruppe1.jpg`, `Klasse 3b.jpg`) nur, wenn im Dateinamen **kein Kind**
+    erkannt wird – `Gruppe Sonnenschein Lena 1.jpg` bleibt also ein Foto von Lena.
+  - „Vorhandene Fotos automatisch zuordnen“ ändert bereits zugeordnete Fotos
+    nicht – auch nicht zu Gruppenfotos.
 - Wurden Kinder erst **nach** dem Upload importiert (oder der Dateiname enthielt
   zunächst nur den Vornamen): im Event den Button **„Vorhandene Fotos
   automatisch zuordnen (nach Dateiname)“** nutzen. Die Rückmeldung zeigt, wie

@@ -1905,8 +1905,10 @@ router.post(
         throw new ApiError(404, 'Kind nicht gefunden.');
       }
     }
+    // Kinderliste auch ohne automatische Zuordnung laden: Die Gruppenfoto-Erkennung
+    // braucht sie, um „Gruppe“/„Klasse“ neben einem Kindernamen nicht falsch zu deuten.
     const children =
-      autoAssign && !targetChildId && !forceGroup
+      !targetChildId && !forceGroup
         ? await runQuery<{ name: string }>(col(COL.children).where('event_id', '==', req.params.id))
         : [];
 
@@ -1939,12 +1941,13 @@ router.post(
       const id = newId('pho');
       const ext = (path.extname(file.originalname).replace('.', '').toLowerCase() || 'jpg').slice(0, 5);
       const storageKey = `${req.params.id}/${id}`;
-      // File names like "Gruppenfoto", "Klassenfoto" or "Klassenspiegel" mark a
-      // photo for the whole class: tick "Gruppen-/Klassenfoto" and make it
+      // File names like "Gruppenfoto", "Gruppenbild1", "Klassenbild" or
+      // "Klassenspiegel" (or a bare "Gruppe"/"Klasse" without a child's name)
+      // mark a photo for the whole class: tick "Gruppen-/Klassenfoto" and make it
       // visible to everyone in the Auftrag. These never get assigned to a single
       // child, so we skip the per-child filename matching for them.
       const isGroupPhoto =
-        forceGroup || (!targetChildId && isGroupPhotoFilename(file.originalname));
+        forceGroup || (!targetChildId && isGroupPhotoFilename(file.originalname, children));
       // Try to recognise the child from the file name (tolerant matching) –
       // unless the admin picked the target child explicitly.
       const match =
@@ -2039,9 +2042,13 @@ router.post(
     const details: { id: string; filename: string; childName: string }[] = [];
     for (const p of photos) {
       if (p.is_class_photo) continue;
-      // File names like "Gruppenfoto"/"Klassenfoto"/"Klassenspiegel" mark a photo
-      // for the whole class instead of a single child.
-      if (isGroupPhotoFilename(p.original_filename)) {
+      // Bereits einem Kind zugeordnete Fotos (auch von Hand) bleiben unangetastet –
+      // weder als Gruppenfoto noch einem anderen Kind –, ausser mit `overwrite`.
+      if (p.child_id && !overwrite) continue;
+      // File names like "Gruppenfoto"/"Gruppenbild"/"Klassenbild"/"Klassenspiegel"
+      // (or a bare "Gruppe"/"Klasse" without a child's name) mark a photo for the
+      // whole class instead of a single child.
+      if (isGroupPhotoFilename(p.original_filename, children)) {
         await updateById(COL.photos, p.id, {
           is_class_photo: 1,
           visible_to_event: 1,
@@ -2051,7 +2058,6 @@ router.post(
         groupPhotos += 1;
         continue;
       }
-      if (p.child_id && !overwrite) continue;
       const match = matchChildByFilename(p.original_filename, children);
       if (!match) {
         unmatched += 1;

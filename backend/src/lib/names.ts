@@ -84,21 +84,41 @@ export function stripExtension(filename: string): string {
 }
 
 /**
- * Keywords that mark a photo as a group/class photo via its file name. A photo
- * whose file name contains any of these is treated as a "Gruppen-/Klassenfoto"
- * that is visible to the whole class. Matched tolerantly (case-insensitive,
- * umlaut/accent-insensitive) against the normalised file name.
+ * Gruppen-/Klassenfotos am Dateinamen erkennen. Verglichen wird mit dem
+ * normalisierten Dateinamen (Kleinschreibung, ohne Umlaut-/Akzentzeichen, ohne
+ * Dateiendung), Trennzeichen und laufende Nummern sind egal.
+ *
+ * Eindeutige Wörter – zählen immer als Gruppenfoto, auch zusammengesetzt mit
+ * Nummer oder Trennzeichen: „Gruppenfoto“, „Gruppenbild1“, „Gruppen-Bild_2“,
+ * „Gruppenaufnahme“, „Klassenfoto“, „Klassenbild2“, „Klassenspiegel“,
+ * „Klassenaufnahme“, „Klassenporträt“ …
  */
-const GROUP_PHOTO_KEYWORDS = ['gruppenfoto', 'klassenfoto', 'klassenspiegel'];
+const GROUP_PHOTO_STRONG =
+  /(gruppen?|klassen?)[\s_.-]*(foto|bild|aufnahme|portrat|portrait|spiegel)/;
 
 /**
- * Returns true when a photo's file name marks it as a group/class photo, i.e.
- * it contains one of the well-known keywords ("Gruppenfoto", "Klassenfoto",
- * "Klassenspiegel"). The extension is ignored so "Gruppenfoto.jpg" matches.
+ * Allein stehendes „Gruppe“/„Gruppen“/„Klasse“ (auch „Gruppe1“, „Gruppe_2“,
+ * „Klasse 3b“). Solche Wörter kommen auch in Dateinamen von Einzelfotos vor
+ * (z. B. „Gruppe Sonnenschein – Lena 1.jpg“), deshalb zählen sie nur, wenn im
+ * Dateinamen kein Kind erkannt wird.
  */
-export function isGroupPhotoFilename(filename: string): boolean {
+const GROUP_PHOTO_WEAK = /(^|[^a-z])(gruppen?|klassen?)(?=[^a-z]|$)/;
+
+/**
+ * Returns true when a photo's file name marks it as a group/class photo.
+ *  - Eindeutige Wörter („Gruppenfoto“, „Gruppenbild“, „Klassenfoto“,
+ *    „Klassenbild“, „Klassenspiegel“, … – auch mit Nummer) → immer.
+ *  - Allein stehendes „Gruppe“/„Klasse“ (auch mit Nummer) → nur, wenn der
+ *    Dateiname zu keinem der übergebenen Kinder passt. Ohne Kinderliste zählt
+ *    das Wort allein.
+ * The extension is ignored so "Gruppenfoto.jpg" matches.
+ */
+export function isGroupPhotoFilename(filename: string, children: ChildLike[] = []): boolean {
   const normalized = normalizeName(stripExtension(filename));
-  return GROUP_PHOTO_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  if (GROUP_PHOTO_STRONG.test(normalized)) return true;
+  if (!GROUP_PHOTO_WEAK.test(normalized)) return false;
+  // Ein erkannter Kindername (auch mehrdeutig) heisst: Einzelfoto, kein Gruppenfoto.
+  return !matchChildByFilename(filename, children);
 }
 
 /**
