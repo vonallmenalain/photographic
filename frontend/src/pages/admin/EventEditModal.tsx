@@ -125,8 +125,39 @@ export function EventEditModal({
     value: string;
   } | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
+  // Umbenennen des Auftrags direkt im Titel.
+  const [name, setName] = useState(eventName);
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [nameBusy, setNameBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dirtyRef = useRef(false);
+
+  const saveName = async () => {
+    if (nameDraft === null) return;
+    const next = nameDraft.replace(/\s+/g, ' ').trim();
+    if (!next) {
+      setError('Bitte einen Namen für den Auftrag eingeben.');
+      return;
+    }
+    if (next === name) {
+      setNameDraft(null);
+      return;
+    }
+    setNameBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await api(`/api/admin/events/${eventId}`, { method: 'PATCH', admin: true, body: { name: next } });
+      setName(next);
+      setNameDraft(null);
+      dirtyRef.current = true;
+      setNotice(`Auftrag umbenannt in „${next}“.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Der Name konnte nicht gespeichert werden.');
+    } finally {
+      setNameBusy(false);
+    }
+  };
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -453,7 +484,64 @@ export function EventEditModal({
   );
 
   return (
-    <Modal title={`Auftrag bearbeiten – ${eventName}`} onClose={close} width={1080}>
+    <Modal
+      title={
+        nameDraft === null ? (
+          <span className="event-edit-title">
+            <span>Auftrag bearbeiten – {name}</span>
+            <button
+              type="button"
+              className="btn ghost small event-edit-rename"
+              onClick={() => {
+                setError('');
+                setNameDraft(name);
+              }}
+              title="Namen des Auftrags ändern"
+            >
+              ✎ Umbenennen
+            </button>
+          </span>
+        ) : (
+          <form
+            className="event-edit-title"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveName();
+            }}
+          >
+            <span>Auftrag bearbeiten –</span>
+            <input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                // Escape bricht nur das Umbenennen ab, nicht das ganze Popup.
+                if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  setNameDraft(null);
+                }
+              }}
+              maxLength={200}
+              autoFocus
+              aria-label="Name des Auftrags"
+              disabled={nameBusy}
+            />
+            <button type="submit" className="btn small" disabled={nameBusy || !nameDraft.trim()}>
+              {nameBusy ? 'Wird gespeichert …' : 'Speichern'}
+            </button>
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => setNameDraft(null)}
+              disabled={nameBusy}
+            >
+              Abbrechen
+            </button>
+          </form>
+        )
+      }
+      onClose={close}
+      width={1080}
+    >
       {loading ? (
         <p className="muted">Auftrag wird geladen …</p>
       ) : error && !data ? (

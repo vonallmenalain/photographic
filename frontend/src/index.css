@@ -550,7 +550,7 @@ input:focus, select:focus, textarea:focus {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 18px 22px; border-bottom: 1px solid var(--border);
 }
-.modal-head h2 { margin: 0; font-size: 1.15rem; }
+.modal-head h2 { margin: 0; font-size: 1.15rem; flex: 1 1 auto; min-width: 0; }
 .modal-close {
   background: var(--surface-2); border: none; cursor: pointer;
   width: 32px; height: 32px; border-radius: 999px; font-size: 20px; line-height: 1;
@@ -1941,6 +1941,13 @@ input.input-error,
    löschen) – Kacheln mit Vorschau, Plaketten und Bedienelementen.
    ========================================================================== */
 .event-edit-intro { margin: 0 0 12px; font-size: 0.85rem; }
+/* Titel „Auftrag bearbeiten – Name“ mit Umbenennen direkt daneben. */
+.event-edit-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.event-edit-title input {
+  flex: 1 1 240px; width: auto; min-width: 0; padding: 7px 10px;
+  font: inherit; font-size: 1rem; font-weight: 600;
+}
+.event-edit-rename { font-size: 0.8rem; padding: 5px 10px; }
 .event-edit-upload { margin-bottom: 18px; }
 .event-edit-upload-target {
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px;
