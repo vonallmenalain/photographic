@@ -44,7 +44,12 @@ import {
   type GalleryMailOptions,
 } from '../lib/email';
 import { requestVerification } from '../services/verification';
-import { EVENT_STATUSES, archiveExpiredEvents, retentionExpiry } from '../services/events';
+import {
+  EVENT_STATUSES,
+  DELETED_STATUS,
+  archiveExpiredEvents,
+  retentionExpiry,
+} from '../services/events';
 import { matchChildByFilename, isGroupPhotoFilename } from '../lib/names';
 import {
   detectMapping,
@@ -803,10 +808,13 @@ async function eventRevenueTotals(): Promise<{
 // --- Events --------------------------------------------------------------
 router.get(
   '/events',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     // Keep statuses current (auto-archive expired galleries) before listing.
     await archiveExpiredEvents();
-    const [events, children, emailLinks, totals, reminders, parentEmails] = await Promise.all([
+    // Gelöschte Aufträge (Papierkorb) erscheinen nur auf ausdrücklichen Wunsch
+    // (?deleted=1) – und dann ausschliesslich sie.
+    const wantDeleted = req.query.deleted === '1' || req.query.deleted === 'true';
+    const [allEvents, children, emailLinks, totals, reminders, parentEmails] = await Promise.all([
       runQuery<Record<string, unknown>>(col(COL.events)),
       runQuery<{ id: string; event_id: string; name?: string; consent_status?: ConsentDecision | null }>(
         col(COL.children),
@@ -816,6 +824,7 @@ router.get(
       runQuery<{ event_id: string; kind?: string; note?: string; sent_at?: string }>(col(COL.reminders)),
       runQuery<{ id: string; status: string; email?: string; name?: string }>(col(COL.parentEmails)),
     ]);
+    const events = allEvents.filter((e) => (e.status === DELETED_STATUS) === wantDeleted);
     const verifiedEmailIds = new Set(
       parentEmails.filter((e) => e.status === 'verified').map((e) => e.id),
     );
@@ -1015,6 +1024,9 @@ router.patch(
       registration?: unknown;
     }>(COL.events, req.params.id);
     if (!event) throw new ApiError(404, 'Event nicht gefunden.');
+    if (event.status === DELETED_STATUS) {
+      throw new ApiError(400, 'Dieser Auftrag ist gelöscht. Bitte zuerst wiederherstellen.');
+    }
     const updates: Record<string, unknown> = { ...data };
     // Status „Erfassung“ gibt es nur für Aufträge mit Klassenerfassung. Wer die
     // Erfassung über das Status-Feld verlässt, schliesst sie damit (Klassenlink
@@ -1060,9 +1072,66 @@ router.patch(
   }),
 );
 
+// „Löschen“ verschiebt einen Auftrag in den Papierkorb („Gelöschte Aufträge“):
+// Status „deleted“, alter Status bleibt für das Wiederherstellen erhalten. Fotos,
+// Kinder, Zuordnungen und Bestellungen bleiben unangetastet. Für Eltern und
+// Lehrpersonen ist der Auftrag damit sofort unsichtbar (nicht veröffentlicht,
+// Klassenlink und Einverständnis-Formular zu).
 router.delete(
   '/events/:id',
   asyncHandler(async (req, res) => {
+    const event = await getById<{ status: string }>(COL.events, req.params.id);
+    if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
+    if (event.status !== DELETED_STATUS) {
+      await updateById(COL.events, req.params.id, {
+        status: DELETED_STATUS,
+        deleted_from_status: event.status,
+        deleted_at: nowIso(),
+        updated_at: nowIso(),
+      });
+      await audit('event.trash', `${req.params.id} (vorher ${event.status})`);
+    }
+    res.json({ ok: true });
+  }),
+);
+
+// Gelöschten Auftrag wiederherstellen – mit dem Status von vor dem Löschen.
+router.post(
+  '/events/:id/restore',
+  asyncHandler(async (req, res) => {
+    const event = await getById<{ status: string; deleted_from_status?: string | null }>(
+      COL.events,
+      req.params.id,
+    );
+    if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
+    if (event.status !== DELETED_STATUS) throw new ApiError(400, 'Dieser Auftrag ist nicht gelöscht.');
+    const previous = (EVENT_STATUSES as readonly string[]).includes(String(event.deleted_from_status))
+      ? String(event.deleted_from_status)
+      : 'draft';
+    await updateById(COL.events, req.params.id, {
+      status: previous,
+      deleted_from_status: null,
+      deleted_at: null,
+      updated_at: nowIso(),
+    });
+    await audit('event.restore', `${req.params.id} -> ${previous}`);
+    // Ein inzwischen abgelaufener, veröffentlichter Auftrag wird sofort archiviert.
+    await archiveExpiredEvents();
+    const after = await getById<{ status: string }>(COL.events, req.params.id);
+    res.json({ ok: true, status: after?.status ?? previous });
+  }),
+);
+
+// Endgültig löschen – nur aus dem Papierkorb heraus. Entfernt alle Fotos (inkl.
+// Dateien), Kinder, Zuordnungen, Verlauf und Einverständnisse unwiderruflich.
+router.delete(
+  '/events/:id/permanent',
+  asyncHandler(async (req, res) => {
+    const event = await getById<{ status: string }>(COL.events, req.params.id);
+    if (!event) throw new ApiError(404, 'Auftrag nicht gefunden.');
+    if (event.status !== DELETED_STATUS) {
+      throw new ApiError(400, 'Endgültig löschen geht nur bei Aufträgen unter „Gelöschte Aufträge“.');
+    }
     const photos = await runQuery<{ storage_key: string; ext: string }>(
       col(COL.photos).where('event_id', '==', req.params.id),
     );

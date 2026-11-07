@@ -32,6 +32,7 @@ import { issueLinkToken, revokeLinkTokens, type RegistrationPayload } from './ve
 import { getAppSettings } from './settings';
 import { allAdminEmails } from './mailDelivery';
 import { recordInvitationsSent, invitationsSentForEvent, logDispatch } from './reminders';
+import { DELETED_STATUS, isInactiveStatus } from './events';
 import {
   CONSENT_LABELS,
   CONSENT_SHORT_LABELS,
@@ -172,7 +173,7 @@ export function registrationOpen(ev: RegistrationEvent | null | undefined): bool
   if (!reg || reg.closed_at) return false;
   // Nachträglich eingeholtes Einverständnis: Der Auftrag ist bereits erfasst und
   // bleibt „In Bearbeitung“ bzw. veröffentlicht – das Formular ist trotzdem offen.
-  if (reg.consent_only) return ev.status !== 'archived';
+  if (reg.consent_only) return !isInactiveStatus(ev.status);
   return ev.status === 'collecting';
 }
 
@@ -479,6 +480,8 @@ export async function findEventByParentToken(token: string): Promise<Registratio
     col(COL.events).where('registration.parent_link_token', '==', token),
   );
   if (!ev || !ev.registration?.parent_link_enabled) return null;
+  // Gelöschter Auftrag: Der Klassenlink führt ins Leere.
+  if (ev.status === DELETED_STATUS) return null;
   return ev;
 }
 
@@ -966,8 +969,11 @@ export async function ensureConsentRegistration(
   ev: RegistrationEvent,
   actor: string,
 ): Promise<RegistrationEvent> {
-  if (ev.status === 'archived') {
-    throw new ApiError(400, 'Für einen archivierten Auftrag kann kein Einverständnis eingeholt werden.');
+  if (isInactiveStatus(ev.status)) {
+    throw new ApiError(
+      400,
+      'Für einen archivierten oder gelöschten Auftrag kann kein Einverständnis eingeholt werden.',
+    );
   }
   const reg = registrationOf(ev);
   if (!reg) {
@@ -1311,7 +1317,7 @@ export async function consentRequestsForEmail(emailId: string): Promise<ConsentR
   const children = await getManyById<ChildDoc>(COL.children, links.map((l) => l.child_id));
   const eventIds = [...new Set([...children.values()].map((c) => c.event_id))];
   const events = await getManyById<RegistrationEvent>(COL.events, eventIds);
-  const relevant = [...events.values()].filter((ev) => !!ev.registration && ev.status !== 'archived');
+  const relevant = [...events.values()].filter((ev) => !!ev.registration && !isInactiveStatus(ev.status));
   if (relevant.length === 0) return [];
 
   const ownConsents = (
@@ -1638,7 +1644,7 @@ export async function teacherEventsForEmail(email: string): Promise<Registration
     col(COL.events).where('registration.teacher_email', '==', normalized),
   );
   return rows
-    .filter((ev) => ev.status !== 'archived')
+    .filter((ev) => !isInactiveStatus(ev.status))
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 }
 

@@ -174,7 +174,9 @@ selbst keinen Auftrag; er wird aus den bestellten Fotos abgeleitet.
 - Suche, Auftragsauswahl, Sortierung und eingeklappte Kacheln bleiben für die
   Dauer der Sitzung erhalten.
 - Bestellungen, deren Fotos zu keinem Auftrag mehr gehören (z. B. nach dem
-  Löschen eines Auftrags), sammelt die Kachel **„Ohne Auftrag“** am Schluss.
+  **endgültigen** Löschen eines Auftrags), sammelt die Kachel **„Ohne Auftrag“**
+  am Schluss. Bestellungen eines nur gelöschten Auftrags (Papierkorb, 6.13)
+  bleiben unter seinem Namen stehen.
 - **Bestellung löschen:** Rechts bei jeder Bestellung steht **„Löschen“**. Damit
   verschwindet sie endgültig – aus der Übersicht, aus dem Umsatz und aus den
   Auswertungen. Gedacht ist das vor allem für Testbestellungen, die nach dem
@@ -215,10 +217,12 @@ selbst keinen Auftrag; er wird aus den bestellten Fotos abgeleitet.
   über `GALLERY_RETENTION_DAYS` global steuerbar, pro Event editierbar).
 - Nach Ablauf sind die Fotos für Eltern **nicht mehr sichtbar/kaufbar**
   (`expires_at` wird in der Zugriffslogik geprüft).
-- Endgültiges Löschen (Datensparsamkeit): Event im Adminbereich löschen – das
-  entfernt Fotos **inklusive aller Varianten** vom QNAP. Für ein automatisiertes
-  Löschen kannst du einen QNAP-Cronjob anlegen, der alte Events per API entfernt
-  (oder du löschst manuell nach Ablauf).
+- Endgültiges Löschen (Datensparsamkeit): Auftrag unter **Aufträge** löschen
+  (landet unter „Gelöschte Aufträge“) und dort **„Endgültig löschen“** – erst das
+  entfernt die Fotos **inklusive aller Varianten** vom QNAP (siehe 6.13). Für ein
+  automatisiertes Löschen kannst du einen QNAP-Cronjob anlegen, der alte Aufträge
+  per API entfernt (`DELETE /api/admin/events/:id`, danach
+  `DELETE /api/admin/events/:id/permanent`), oder du löschst manuell nach Ablauf.
 
 ## 6.5 Backups
 
@@ -461,6 +465,24 @@ hervorgehoben) bzw. **„Erinnerung versenden“**, „Erfassung öffnen“ (Sta
 Erfassung), „Erfassung fortsetzen“ (In Bearbeitung), **„Bearbeiten“** (Fotos),
 die Status-Auswahl und „Löschen“. Der Filter **„Veröffentlicht, noch nicht
 eingeladen“** findet vergessene Einladungen.
+
+**Löschen und Wiederherstellen (Papierkorb):** „Löschen“ entfernt einen Auftrag
+nicht mehr sofort, sondern verschiebt ihn unter **„Gelöschte Aufträge“** (ganz
+unten in der Filter-Auswahl, abgesetzt). Ein gelöschter Auftrag ist für Eltern
+und Lehrpersonen sofort unsichtbar: Die Galerie ist zu, Klassenlink und
+Einverständnis-Formular funktionieren nicht mehr, automatische Erinnerungen
+gehen nicht raus, und ein Import mit demselben Auftragsnamen legt einen neuen
+Auftrag an. Fotos, Kinder, E-Mail-Adressen und Bestellungen bleiben erhalten.
+
+- Unter „Alle Aufträge“ und den übrigen Filtern erscheinen gelöschte Aufträge
+  **nie** – nur wenn „Gelöschte Aufträge“ ausdrücklich gewählt ist.
+- Direkt nach dem Löschen bietet der Hinweis oben **„Rückgängig“** an.
+- **„Wiederherstellen“** setzt den Auftrag auf den Status von vor dem Löschen
+  zurück (ein veröffentlichter Auftrag ist danach wieder für die Eltern
+  sichtbar; ist seine Bestellfrist inzwischen abgelaufen, wird er archiviert).
+- **„Endgültig löschen“** gibt es nur im Papierkorb. Erst das entfernt Fotos
+  (inkl. Dateien auf dem QNAP), Kinder, Zuordnungen und den Versand-Verlauf
+  unwiderruflich.
 
 Ein Klick auf die Zeile klappt den Auftrag auf. Dort stehen der Reihe nach:
 

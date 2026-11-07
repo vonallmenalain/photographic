@@ -11,7 +11,7 @@ import {
 } from '../db';
 import { newId } from '../lib/ids';
 import { normalizeName, splitNames } from '../lib/names';
-import { retentionExpiry } from './events';
+import { DELETED_STATUS, retentionExpiry } from './events';
 
 /**
  * Bulk import of parents (e-mail addresses), children and their links from a
@@ -358,6 +358,7 @@ export interface CommitResult {
 interface EventLike {
   id: string;
   name: string;
+  status?: string;
 }
 
 async function createEvent(name: string): Promise<string> {
@@ -406,7 +407,12 @@ export async function commitImport(
   // Resolve events by (normalized) name so per-row event columns can be reused.
   const allEvents = await runQuery<EventLike>(col(COL.events));
   const eventByName = new Map<string, string>();
-  for (const e of allEvents) eventByName.set(normalizeName(e.name), e.id);
+  // Gelöschte Aufträge (Papierkorb) nicht wiederverwenden – sonst landeten neu
+  // importierte Kinder in einem Auftrag, den niemand mehr sieht.
+  for (const e of allEvents) {
+    if (e.status === DELETED_STATUS) continue;
+    eventByName.set(normalizeName(e.name), e.id);
+  }
 
   let defaultEventId = options.defaultEventId || '';
   if (!defaultEventId && options.defaultEventName && options.defaultEventName.trim()) {

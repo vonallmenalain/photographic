@@ -38,6 +38,9 @@ interface EventRow {
   last_reminded_at?: string | null;
   expires_at: string | null;
   created_at: string;
+  // Papierkorb: wann gelöscht und welcher Status beim Wiederherstellen gilt.
+  deleted_at?: string | null;
+  deleted_from_status?: string | null;
   // Vom Backend vorberechneter Freitext-Index (Auftragsname + Kindernamen +
   // zugeordnete E-Mail-Adressen), alles in Kleinbuchstaben.
   search_text?: string;
@@ -74,7 +77,8 @@ type FilterKey =
   | 'not_invited'
   | 'draft'
   | 'archived'
-  | 'reminders';
+  | 'reminders'
+  | 'deleted';
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'created_desc', label: 'Erfassungsdatum (neueste zuerst)' },
@@ -94,6 +98,17 @@ const FILTER_OPTIONS: { value: FilterKey; label: string }[] = [
   { value: 'reminders', label: 'Nur mit Erinnerungen' },
 ];
 
+// Steht abgesetzt unter den übrigen Filtern: Gelöschte Aufträge erscheinen nie
+// unter „Alle Aufträge“, sondern nur hier – mit „Wiederherstellen“.
+const DELETED_FILTER = { value: 'deleted' as const, label: 'Gelöschte Aufträge' };
+
+const STATUS_LABELS: Record<string, string> = {
+  collecting: 'Erfassung',
+  draft: 'In Bearbeitung',
+  published: 'Veröffentlicht',
+  archived: 'Archiviert',
+};
+
 // Hilfswert für die Sortierung nach "Bestellbar bis": Aufträge ohne Enddatum
 // werden ans Ende gestellt (bei beiden Sortierrichtungen sinnvoll behandelt).
 function orderableTime(ev: EventRow): number {
@@ -111,6 +126,11 @@ export default function Events() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('created_desc');
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [deletedEvents, setDeletedEvents] = useState<EventRow[] | null>(null);
+  const [notice, setNotice] = useState<{ text: string; undo?: { id: string; name: string } } | null>(
+    null,
+  );
+  const showDeleted = filter === 'deleted';
 
   const load = () =>
     api<{ events: EventRow[]; currency: string }>('/api/admin/events', { admin: true })
@@ -120,16 +140,68 @@ export default function Events() {
       })
       .finally(() => setLoading(false));
 
+  const loadDeleted = () =>
+    api<{ events: EventRow[]; currency: string }>('/api/admin/events?deleted=1', { admin: true })
+      .then((r) => setDeletedEvents(r.events))
+      .catch((err) =>
+        setError(err instanceof ApiError ? err.message : 'Gelöschte Aufträge konnten nicht geladen werden.'),
+      );
+
   useEffect(() => {
     load();
   }, []);
+
+  // Die gelöschten Aufträge erst laden, wenn der Filter sie verlangt.
+  useEffect(() => {
+    if (showDeleted) void loadDeleted();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDeleted]);
+
+  // Aus dem Papierkorb zurückholen (auch als „Rückgängig“ direkt nach dem Löschen).
+  const restore = async (ev: { id: string; name: string }) => {
+    setError('');
+    try {
+      const res = await api<{ status: string }>(`/api/admin/events/${ev.id}/restore`, {
+        method: 'POST',
+        admin: true,
+      });
+      await load();
+      if (showDeleted) await loadDeleted();
+      const label = STATUS_LABELS[res.status] ?? res.status;
+      setNotice({
+        text: `Auftrag „${ev.name}“ wiederhergestellt – Status: ${label}.${
+          res.status === 'published' ? ' Er ist für die Eltern wieder sichtbar.' : ''
+        }`,
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Wiederherstellen fehlgeschlagen.');
+    }
+  };
+
+  const purge = async (ev: EventRow) => {
+    if (
+      !confirm(
+        `Auftrag „${ev.name}“ ENDGÜLTIG löschen?\n\nAlle Fotos, Kinder, Zuordnungen und der Versand-Verlauf werden unwiderruflich entfernt. Das kann nicht rückgängig gemacht werden.`,
+      )
+    )
+      return;
+    setError('');
+    try {
+      await api(`/api/admin/events/${ev.id}/permanent`, { method: 'DELETE', admin: true });
+      await loadDeleted();
+      setNotice({ text: `Auftrag „${ev.name}“ wurde endgültig gelöscht.` });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Endgültig löschen fehlgeschlagen.');
+    }
+  };
 
   const visibleEvents = useMemo(() => {
     // Suchbegriff in einzelne Wörter zerlegen: So findet z. B. „müller anna“
     // auch das Kind „Anna Müller“, unabhängig von der Reihenfolge. Jedes Wort
     // muss im (vom Backend vorberechneten) Freitext-Index vorkommen.
     const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    let list = events.filter((ev) => {
+    const base = showDeleted ? deletedEvents ?? [] : events;
+    let list = base.filter((ev) => {
       // Statusfilter / Erinnerungsfilter.
       if (filter === 'collecting' && ev.status !== 'collecting') return false;
       if (filter === 'published' && ev.status !== 'published') return false;
@@ -167,7 +239,7 @@ export default function Events() {
       }
     });
     return list;
-  }, [events, search, sort, filter]);
+  }, [events, deletedEvents, showDeleted, search, sort, filter]);
 
   if (loading) return <Spinner />;
 
@@ -177,7 +249,7 @@ export default function Events() {
     <div>
       <div className="orders-toolbar">
         <h1 className="orders-toolbar-title">Aufträge</h1>
-        {events.length > 0 && (
+        {(events.length > 0 || showDeleted) && (
           <div className="orders-toolbar-controls">
             <input
               type="search"
@@ -210,14 +282,63 @@ export default function Events() {
                   {o.label}
                 </option>
               ))}
+              <option disabled>──────────</option>
+              <option value={DELETED_FILTER.value}>{DELETED_FILTER.label}</option>
             </select>
           </div>
         )}
       </div>
 
       {error && <Alert kind="error">{error}</Alert>}
+      {notice && (
+        <div className="alert success row between" style={{ gap: 10 }}>
+          <span>{notice.text}</span>
+          <span className="row" style={{ gap: 6 }}>
+            {notice.undo && (
+              <button
+                type="button"
+                className="btn secondary small"
+                onClick={() => notice.undo && void restore(notice.undo)}
+              >
+                Rückgängig
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn ghost small"
+              style={{ fontSize: '1.1rem', lineHeight: 1, padding: '4px 10px' }}
+              onClick={() => setNotice(null)}
+              aria-label="Hinweis schliessen"
+            >
+              ×
+            </button>
+          </span>
+        </div>
+      )}
 
-      {events.length === 0 ? (
+      {showDeleted ? (
+        deletedEvents === null ? (
+          <Spinner />
+        ) : visibleEvents.length === 0 ? (
+          <p className="muted">
+            {deletedEvents.length === 0
+              ? 'Keine gelöschten Aufträge.'
+              : 'Keine gelöschten Aufträge für diese Suche.'}
+          </p>
+        ) : (
+          <>
+            <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
+              Gelöschte Aufträge sind für Eltern und Lehrpersonen unsichtbar. Fotos, Kinder und
+              Bestellungen bleiben erhalten, bis du einen Auftrag endgültig löschst.
+            </p>
+            <div className="order-list">
+              {visibleEvents.map((ev) => (
+                <DeletedEventCard key={ev.id} ev={ev} onRestore={restore} onPurge={purge} />
+              ))}
+            </div>
+          </>
+        )
+      ) : events.length === 0 ? (
         <p className="muted">
           Noch keine Aufträge. Erfasse deinen ersten Auftrag über{' '}
           <Link to="/admin/import">Aufträge erfassen</Link>.
@@ -252,6 +373,12 @@ export default function Events() {
               onToggle={() => setExpandedId((cur) => (cur === ev.id ? null : ev.id))}
               onChanged={load}
               onError={setError}
+              onDeleted={(deleted) => {
+                setNotice({
+                  text: `Auftrag „${deleted.name}“ gelöscht. Du findest ihn unter „Gelöschte Aufträge“ und kannst ihn dort wiederherstellen.`,
+                  undo: { id: deleted.id, name: deleted.name },
+                });
+              }}
             />
           ))}
         </div>
@@ -273,6 +400,7 @@ function EventCard({
   onToggle,
   onChanged,
   onError,
+  onDeleted,
 }: {
   ev: EventRow;
   currency: string;
@@ -280,6 +408,7 @@ function EventCard({
   onToggle: () => void;
   onChanged: () => Promise<void>;
   onError: (msg: string) => void;
+  onDeleted: (ev: EventRow) => void;
 }) {
   const navigate = useNavigate();
   const [analytics, setAnalytics] = useState<EventAnalytics | null>(null);
@@ -353,7 +482,7 @@ function EventCard({
     e.stopPropagation();
     if (
       !confirm(
-        `Auftrag „${ev.name}“ wirklich löschen? Alle Fotos, Kinder und Zuordnungen werden unwiderruflich entfernt.`,
+        `Auftrag „${ev.name}“ löschen?\n\nEr ist danach für Eltern und Lehrpersonen nicht mehr sichtbar. Fotos, Kinder und Bestellungen bleiben erhalten – unter „Gelöschte Aufträge“ kannst du ihn jederzeit wiederherstellen.`,
       )
     )
       return;
@@ -361,6 +490,7 @@ function EventCard({
     try {
       await api(`/api/admin/events/${ev.id}`, { method: 'DELETE', admin: true });
       await onChanged();
+      onDeleted(ev);
     } catch (err) {
       onError(err instanceof ApiError ? err.message : 'Auftrag konnte nicht gelöscht werden.');
     }
@@ -586,4 +716,81 @@ function InviteState({ ev }: { ev: EventRow }) {
   if (ev.last_invited_at) parts.push(`Eingeladen ${formatDateShort(ev.last_invited_at)}`);
   if (ev.last_reminded_at) parts.push(`erinnert ${formatDateShort(ev.last_reminded_at)}`);
   return <span className="order-row-invite">{parts.join(' · ')}</span>;
+}
+
+/**
+ * Zeile eines gelöschten Auftrags (Filter „Gelöschte Aufträge“): Name, wann
+ * gelöscht, Status vor dem Löschen und die wichtigsten Zahlen – dazu
+ * „Wiederherstellen“ und, abgesetzt, „Endgültig löschen“.
+ */
+function DeletedEventCard({
+  ev,
+  onRestore,
+  onPurge,
+}: {
+  ev: EventRow;
+  onRestore: (ev: EventRow) => Promise<void>;
+  onPurge: (ev: EventRow) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const before = ev.deleted_from_status ? STATUS_LABELS[ev.deleted_from_status] : '';
+  const facts = [
+    ev.deleted_at ? `Gelöscht am ${formatDateShort(ev.deleted_at)}` : 'Gelöscht',
+    before ? `vorher: ${before}` : '',
+    `${ev.child_count} Kinder`,
+    `${ev.photo_count} Fotos`,
+    `${ev.order_count} Bestellungen`,
+  ].filter(Boolean);
+  const run = async (fn: (ev: EventRow) => Promise<void>) => {
+    setBusy(true);
+    try {
+      await fn(ev);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="order-row is-deleted">
+      <div className="order-row-head" style={{ cursor: 'default' }}>
+        <div className="order-row-bar">
+          <span className="order-row-toggle">
+            <span className="order-row-title" title={ev.name}>
+              {ev.name}
+            </span>
+            <StatusBadge status="deleted" />
+            <span className="order-row-invite">{facts.join(' · ')}</span>
+          </span>
+          <div className="order-row-actions">
+            <button
+              className="btn small"
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (
+                  ev.deleted_from_status === 'published' &&
+                  !confirm(
+                    `Auftrag „${ev.name}“ wiederherstellen? Er war veröffentlicht und ist danach für die Eltern wieder sichtbar.`,
+                  )
+                )
+                  return;
+                void run(onRestore);
+              }}
+            >
+              Wiederherstellen
+            </button>
+            <button
+              className="btn ghost small"
+              type="button"
+              style={{ color: 'var(--danger)' }}
+              disabled={busy}
+              onClick={() => void run(onPurge)}
+              title="Auftrag samt Fotos, Kindern und Zuordnungen unwiderruflich entfernen"
+            >
+              Endgültig löschen
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
