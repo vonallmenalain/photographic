@@ -987,7 +987,26 @@ tr.clickable-row { cursor: pointer; }
   border: 1px solid var(--border); border-radius: 10px;
 }
 .dispatch-options { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
-.dispatch-options .field select { max-width: 560px; }
+/* „Inhalt der E-Mail“: drei Auswahlkarten nebeneinander (schmal: untereinander). */
+.mode-options {
+  border: none; margin: 0; padding: 0; min-width: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px;
+}
+.mode-options legend {
+  padding: 0; margin-bottom: 6px; font-weight: 600; font-size: 0.8rem; color: var(--text-soft);
+}
+.mode-option {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px;
+  margin: 0; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  font-weight: 400; font-size: 0.88rem; color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+}
+.mode-option:hover { background: var(--surface-2); }
+.mode-option.active { border-color: var(--primary); background: #eaf1fd; }
+.mode-option input { width: auto; margin: 3px 0 0; }
+.mode-option strong { display: block; font-weight: 600; }
+.mode-option-hint { display: block; color: var(--text-muted); font-size: 0.8rem; margin-top: 2px; }
 .dispatch-options label.check-line + label { margin-top: 0; }
 .dispatch-summary { margin: 12px 0 0; font-size: 0.88rem; font-weight: 600; color: var(--text-soft); }
 .cell-note { font-size: 0.78rem; }
