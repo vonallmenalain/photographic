@@ -277,7 +277,7 @@ export function EventEditModal({
         ? ' Die Einladung wurde an diese E-Mail-Adresse gesendet.'
         : sendInvitation
           ? ' Die Einladung wurde nicht gesendet (Auftrag nicht veröffentlicht oder Versand fehlgeschlagen).'
-          : ' Die Einladung kannst du über „Einladung per E-Mail senden“ gezielt an diese E-Mail-Adresse schicken.';
+          : ' Die Einladung kannst du unter „Aufträge“ über „Einladung versenden“ gezielt an diese E-Mail-Adresse schicken.';
       setNotice(`E-Mail-Adresse ${res.email} ${what}${link}.${invite}`);
       setEmailFormChildId(null);
       await load(true);

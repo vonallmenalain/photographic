@@ -1,9 +1,14 @@
-import { COL, col, runQuery, getManyById, setById, updateById, nowIso } from '../db';
+import { COL, col, runQuery, getManyById, updateById, nowIso } from '../db';
 import { config } from '../config';
-import { newId } from '../lib/ids';
 import { audit } from '../lib/audit';
 import { sendGalleryReadyEmail } from '../lib/email';
-import { eventEmailIds, orderedEmailIdsForEvent, daysLeftUntil } from './reminders';
+import {
+  eventEmailIds,
+  orderedEmailIdsForEvent,
+  daysLeftUntil,
+  recordInvitationsSent,
+  logDispatch,
+} from './reminders';
 import { remindPendingConsents, registrationOpen, type RegistrationEvent } from './registration';
 
 /**
@@ -107,13 +112,19 @@ async function sendOrderReminder(ev: AutoEvent): Promise<number> {
   const sent = results.filter((r) => r.status === 'fulfilled').length;
   // Auch ohne Empfänger als erledigt markieren, sonst prüft der Lauf ewig nach.
   await updateById(COL.events, ev.id, { auto_order_reminder_sent_at: nowIso(), updated_at: nowIso() });
+  // Je Adresse festhalten, dass sie erinnert wurde (Elternliste im Adminbereich).
+  await recordInvitationsSent(
+    ev.id,
+    recipients.filter((_, i) => results[i]?.status === 'fulfilled').map((r) => r.id),
+    { kind: 'reminder' },
+  );
   if (sent > 0) {
-    await setById(COL.reminders, newId('rem'), {
-      event_id: ev.id,
-      sent_at: nowIso(),
-      note: `Automatische Erinnerung an ${sent} E-Mail-Adresse(n) ohne Bestellung`,
-      created_at: nowIso(),
-    });
+    await logDispatch(
+      ev.id,
+      'auto_reminder',
+      sent,
+      `Automatische Erinnerung an ${sent} E-Mail-Adresse(n) ohne Bestellung`,
+    );
   }
   await audit('event.reminder.auto', `${ev.id}: ${sent} sent, ${results.length - sent} failed`, 'system');
   return sent;

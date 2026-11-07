@@ -26,13 +26,16 @@
    – nach E-Mail-Verifizierung – für Eltern sichtbar. (Foto sichtbar = Event
    published **und** Foto nicht gesperrt **und** Zuordnung vorhanden **und**
    E-Mail verifiziert.) Ein eigenes Veröffentlichen je Foto gibt es nicht mehr.
-6. **Eltern benachrichtigen**, sobald alles bereit ist: in der Kachel
-   „E-Mail-Adressen“ auf **„E-Mail an alle senden“** klicken. Das verschickt an
-   **alle erfassten Adressen des Auftrags** eine E-Mail mit Link zur App
-   (`photographic.alae.app`), einer Kurzanleitung zur Verifizierung sowie den Hinweisen
-   zum Schutz der Fotos und zur Aufbewahrungsfrist (30 Tage). Voraussetzung ist
-   ein konfigurierter SMTP-Versand (siehe [docs/04-email-smtp.md](04-email-smtp.md));
-   ohne SMTP landen die E-Mails nur im Server-Log.
+6. **Eltern einladen**, sobald alles bereit ist: Im Assistenten **„Aufträge
+   erfassen“** folgt auf „Veröffentlichen“ direkt **Schritt 5 „Einladungen
+   versenden“** (später auch unter **Aufträge → „Einladung versenden“** bzw.
+   „Erinnerung versenden“). Die E-Mail enthält den Link zur App
+   (`photographic.alae.app`), eine Kurzanleitung zur Verifizierung sowie die Hinweise
+   zum Schutz der Fotos und zur Aufbewahrungsfrist (30 Tage). Ablauf und
+   Erinnerungen im Detail: [6.13](#613-aufträge-übersicht-einladungen--erinnerungen).
+   Voraussetzung ist ein konfigurierter SMTP-Versand (siehe
+   [docs/04-email-smtp.md](04-email-smtp.md)); ohne SMTP landen die E-Mails nur
+   im Server-Log.
 
 ## 6.1a Schnell-Import & automatische Zuordnung
 
@@ -121,7 +124,11 @@ also sofort.
 
 ### Prüfschritt vor Veröffentlichung (empfohlen)
 Bevor du ein Event auf „published“ setzt:
-- Stimmt jede Zuordnung (Kind ↔ Foto, E-Mail ↔ Kind)?
+- Stimmt jede Zuordnung (Kind ↔ Foto, E-Mail ↔ Kind)? Im Assistenten (Schritt 3
+  „Zuordnung prüfen“) steht bei jedem Foto, ob es **zugeordnet** (grün) oder
+  **nicht zugeordnet** (gelb) ist; Gruppen-/Klassenfotos sind grün „Verarbeitet“.
+  Wird das Häkchen „Gruppen-/Klassenfoto“ wieder entfernt, ist das Foto keinem
+  Kind mehr zugeordnet und erscheint gelb und unter dem Filter „Unzugeordnet“.
 - Sind nur die gewünschten Fotos im Event (nicht gewünschte löschen/deaktivieren)?
 - Sind Previews korrekt mit Wasserzeichen erzeugt (Thumbnails im Admin sichtbar)?
 
@@ -432,14 +439,83 @@ Einstellungen. Der Wortlaut der Einverständniserklärung steht unter
 
 Bei einem Auftrag, der **ohne** Klassenerfassung entstanden ist (Excel-Import,
 Kinder von Hand), lässt sich das Einverständnis nachträglich einholen:
-**„Einverständniserklärung versenden“** neben „Einladung per E-Mail senden“
-(Assistent → E-Mail-Adressen) bzw. unter „Einladungen & Erinnerungen“. Das Popup
-zeigt vor dem Versand alle Empfänger-Adressen samt bisheriger Antwort; der
+**„Einverständniserklärung versenden“** in der Kachel „E-Mail-Adressen“
+(Assistent, Schritt 1) bzw. im aufgeklappten Auftrag unter dem eingeklappten
+Bereich **„Einverständniserklärung“**. Das Popup zeigt vor dem Versand alle
+Empfänger-Adressen samt bisheriger Antwort, **„Vorschau“** zeigt die E-Mail; der
 Auftrag bleibt dabei in seinem Status.
 
 Automatische Erinnerungen (je Auftrag, standardmässig aus): an Eltern ohne
-Antwort X Tage vor der Rückmeldefrist und an Eltern ohne Bestellung X Tage vor
-Ablauf der Bestellfrist (Auftrag aufklappen → „Einladungen & Erinnerungen“).
+Antwort X Tage vor der Rückmeldefrist (Erfassungsansicht) und an Eltern ohne
+Bestellung X Tage vor Ablauf der Bestellfrist (siehe 6.13).
+
+## 6.13 Aufträge-Übersicht, Einladungen & Erinnerungen
+
+### Übersicht „Aufträge“
+
+Eingeklappt ist jeder Auftrag **eine Zeile**: Name, Status und – bei
+veröffentlichten Aufträgen – der Einladungsstand („Noch nicht eingeladen“ bzw.
+„Eingeladen … · erinnert …“). Rechts stehen alle Knöpfe auf derselben Höhe:
+**„Einladung versenden“** (solange noch niemand eingeladen ist, blau
+hervorgehoben) bzw. **„Erinnerung versenden“**, „Erfassung öffnen“ (Status
+Erfassung), „Erfassung fortsetzen“ (In Bearbeitung), **„Bearbeiten“** (Fotos),
+die Status-Auswahl und „Löschen“. Der Filter **„Veröffentlicht, noch nicht
+eingeladen“** findet vergessene Einladungen.
+
+Ein Klick auf die Zeile klappt den Auftrag auf. Dort stehen der Reihe nach:
+
+1. **Kennzahlen** (Kinder, Einverständnisse, Bestellungen, verifizierte
+   E-Mail-Adressen, Umsatz, „Bestellbar bis“ mit ✎ zum Anpassen).
+2. **Einladungen & Erinnerungen**
+   - **Verlauf:** jede versendete Einladung und Erinnerung mit Datum, Uhrzeit
+     und Anzahl Empfänger; eine geplante automatische Erinnerung erscheint
+     gestrichelt mit ihrem Datum.
+   - **Automatisch erinnern:** einmalig an alle Eltern ohne Bestellung, X Tage
+     vor Ablauf der Bestellfrist. Darunter steht, wann sie rausgeht bzw.
+     rausging.
+   - **Eltern:** alle E-Mail-Adressen des Auftrags mit Kind, Anmeldung
+     („Angemeldet“ mit letzter Aktivität, „Noch nie angemeldet“ oder „Seit
+     Einladung nicht angemeldet“), Datum der Einladung und der letzten
+     Erinnerung (mit Anzahl) sowie Bestellungen samt Umsatz. Die Filter oben
+     („Bestellt“, „Angemeldet, nicht bestellt“, „Nicht angemeldet“, „Noch nicht
+     eingeladen“) zeigen die Anzahl je Gruppe; mit **„Diese erinnern“** geht
+     das Versand-Popup direkt mit genau diesen Eltern auf.
+3. **Umsatzverlauf** – die farbigen Markierungen zeigen Einladungen (grün),
+   Erinnerungen (violett) und Einverständnis-Aufforderungen (orange).
+4. **Einverständniserklärung** – eingeklappt, weil selten gebraucht: Stand der
+   Antworten, Versand-Verlauf, „Antworten ansehen“ und „Einverständniserklärung
+   versenden“.
+
+### Einladung und Erinnerung in einem Versand
+
+Eine Erinnerung ist nichts anderes als eine zweite Einladung – deshalb gibt es
+nur noch **einen** Versand:
+
+- Adressen, die in diesem Auftrag **noch nie eingeladen** wurden, erhalten die
+  **Einladung** („Ihre Fotos sind bereit“).
+- Alle anderen erhalten die **Erinnerung** („Ihre Fotos sind noch X Tage
+  verfügbar“), auf Wunsch mit dem Hinweis auf einen verlängerten
+  Bestellzeitraum.
+- Die Spalte **„Erhält“** zeigt pro Adresse, welche Variante rausgeht; unter
+  „Inhalt der E-Mail“ lässt sich das für alle übersteuern („Allen die
+  Einladung“ / „Allen die Erinnerung“).
+- Vorausgewählt sind alle Adressen, solange noch niemand eingeladen ist,
+  danach alle **ohne Bestellung**. Die Schnellauswahl („Alle“, „Ohne
+  Bestellung“, „Noch nicht eingeladen“, „Nicht angemeldet“) setzt die Häkchen
+  mit einem Klick.
+- **„Vorschau“** zeigt vor dem Senden genau die E-Mail, die die Eltern
+  erhalten (Absender, Betreff, gestaltete und reine Textversion; bei gemischter
+  Auswahl umschaltbar zwischen Einladung und Erinnerung). Die Vorschau gibt es
+  ebenso beim Versand der Einverständniserklärung.
+- Versendet werden kann nur ein **veröffentlichter** Auftrag.
+
+Im Assistenten ist derselbe Versand **Schritt 5 „Einladungen versenden“** – als
+normale Seite statt als Popup, gleich nach dem Veröffentlichen. Der Schritt ist
+erledigt (grün), sobald die Einladung einmal rausging; Erinnerungen lassen sich
+dort oder unter „Aufträge“ jederzeit nachschicken. Der frühere Knopf
+„+ Protokollieren“ (Einträge von Hand) ist entfallen – der Verlauf entsteht
+beim Versand automatisch; ältere, von Hand protokollierte Einträge lassen sich
+im Verlauf mit × entfernen.
 
 ## 6.9 Sicherheits-Checkliste (vor Go-Live)
 

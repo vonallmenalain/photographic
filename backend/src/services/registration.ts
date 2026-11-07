@@ -31,7 +31,7 @@ import {
 import { issueLinkToken, revokeLinkTokens, type RegistrationPayload } from './verification';
 import { getAppSettings } from './settings';
 import { allAdminEmails } from './mailDelivery';
-import { recordInvitationsSent, invitationsSentForEvent } from './reminders';
+import { recordInvitationsSent, invitationsSentForEvent, logDispatch } from './reminders';
 import {
   CONSENT_LABELS,
   CONSENT_SHORT_LABELS,
@@ -868,7 +868,9 @@ async function sendConsentInvitationTo(
     reminder,
     consentRequired: reg?.consent_required ?? true,
   });
-  await recordInvitationsSent(ev.id, [emailId], { consent: reg?.consent_required !== false });
+  await recordInvitationsSent(ev.id, [emailId], {
+    kind: reg?.consent_required !== false ? 'consent' : 'registration',
+  });
 }
 
 export async function inviteParents(
@@ -1114,12 +1116,12 @@ export async function sendConsentRequests(
   }
   if (result.sent > 0) {
     await patchRegistration(ev.id, { last_reminder_at: nowIso() });
-    await setById(COL.reminders, newId('rem'), {
-      event_id: ev.id,
-      sent_at: nowIso(),
-      note: `${opts.reminder ? 'Erinnerung' : 'Aufforderung'} Einverständniserklärung an ${result.sent} E-Mail-Adresse(n)`,
-      created_at: nowIso(),
-    });
+    await logDispatch(
+      ev.id,
+      opts.reminder ? 'consent_reminder' : 'consent',
+      result.sent,
+      `${opts.reminder ? 'Erinnerung' : 'Aufforderung'} Einverständniserklärung an ${result.sent} E-Mail-Adresse(n)`,
+    );
   }
   await audit(
     'registration.consent_request',
@@ -1540,12 +1542,12 @@ export async function remindPendingConsents(
     ...(opts.auto ? { auto_consent_reminder_sent_at: nowIso() } : {}),
   });
   if (result.sent > 0) {
-    await setById(COL.reminders, newId('rem'), {
-      event_id: ev.id,
-      sent_at: nowIso(),
-      note: `${opts.auto ? 'Automatische Erinnerung' : 'Erinnerung'} Einverständnis an ${result.sent} E-Mail-Adresse(n)`,
-      created_at: nowIso(),
-    });
+    await logDispatch(
+      ev.id,
+      'consent_reminder',
+      result.sent,
+      `${opts.auto ? 'Automatische Erinnerung' : 'Erinnerung'} Einverständnis an ${result.sent} E-Mail-Adresse(n)`,
+    );
   }
   await audit(
     'registration.remind',

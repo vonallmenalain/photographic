@@ -101,6 +101,18 @@ async function contactAddress(): Promise<string> {
 }
 
 /**
+ * Absender und Antwortadresse, wie sie `sendMail` setzt – für die E-Mail-Vorschau
+ * im Adminbereich („Von“ / „Antwort an“).
+ */
+export async function mailEnvelope(): Promise<{ from: string; replyTo: string }> {
+  const [from, contact] = await Promise.all([mailFrom(), contactAddress()]);
+  return {
+    from: from.name ? `${from.name} <${from.address}>` : from.address,
+    replyTo: contact && contact !== from.address ? contact : '',
+  };
+}
+
+/**
  * Fusszeile für alle E-Mails an Eltern: Hinweis auf die Kontaktadresse, damit
  * Rückfragen einen klaren Weg haben. Ohne konfigurierte Kontaktadresse bleibt sie leer.
  */
@@ -186,18 +198,32 @@ export async function sendPasswordResetEmail(to: string, username: string, link:
  * Archivierung; fehlt sie, wird auf die Standard-Aufbewahrungsdauer zurück-
  * gegriffen.
  */
-export async function sendGalleryReadyEmail(
-  to: string,
-  link: string,
-  opts: {
-    retentionDays?: number;
-    reminder?: boolean;
-    daysLeft?: number | null;
-    // Wenn gesetzt, weist die Erinnerung zusätzlich darauf hin, dass der
-    // Bestellzeitraum bis zu diesem Datum verlängert wurde.
-    extendedUntil?: string | null;
-  } = {},
-) {
+export interface GalleryMailOptions {
+  retentionDays?: number;
+  reminder?: boolean;
+  daysLeft?: number | null;
+  // Wenn gesetzt, weist die Erinnerung zusätzlich darauf hin, dass der
+  // Bestellzeitraum bis zu diesem Datum verlängert wurde.
+  extendedUntil?: string | null;
+}
+
+/** Fertig aufgebaute E-Mail (Betreff, HTML und Textversion) – für Versand und Vorschau. */
+export interface BuiltMail {
+  subject: string;
+  html: string;
+  text: string;
+}
+
+export async function sendGalleryReadyEmail(to: string, link: string, opts: GalleryMailOptions = {}) {
+  await sendMail({ to, ...(await buildGalleryReadyEmail(link, opts)) });
+}
+
+/**
+ * Baut die Einladung bzw. Erinnerung auf, ohne sie zu versenden. Der Versand
+ * und die Vorschau im Adminbereich nutzen dieselbe Funktion, die Vorschau
+ * zeigt also genau die E-Mail, die die Eltern erhalten.
+ */
+export async function buildGalleryReadyEmail(link: string, opts: GalleryMailOptions = {}): Promise<BuiltMail> {
   const retentionDays = opts.retentionDays ?? config.retentionDaysDefault;
   const reminder = opts.reminder ?? false;
   const footer = await contactFooter();
@@ -282,7 +308,7 @@ Informationen zu den Fotos:
 - ${availabilityText}
 - Die Vorschaubilder sind mit einem Wasserzeichen versehen. Die Originaldateien erhalten Sie nach dem Kauf.
 - Alle Fotos werden auf einem lokalen Server in der Schweiz gespeichert.${footer.text}`;
-  await sendMail({ to, subject, html, text });
+  return { subject, html, text };
 }
 
 export interface OrderConfirmationAddress {
@@ -612,6 +638,11 @@ export interface ConsentInviteMailInfo extends ClassMailInfo {
  * Mit `reminder` als Erinnerung formuliert.
  */
 export async function sendConsentInviteEmail(to: string, info: ConsentInviteMailInfo) {
+  await sendMail({ to, ...(await buildConsentInviteEmail(info)) });
+}
+
+/** Baut die Einladung zum Einverständnis auf (Versand und Vorschau im Adminbereich). */
+export async function buildConsentInviteEmail(info: ConsentInviteMailInfo): Promise<BuiltMail> {
   const kids = info.childNames.join(', ') || 'Ihr Kind';
   const subject = info.consentRequired
     ? info.reminder
@@ -651,7 +682,7 @@ ${facts.text}${deadlineText}
 ${buttonLabel}: ${info.link}
 
 Der Link ist einmalig gültig. Später können Sie sich jederzeit auf ${config.publicAppUrl} mit dieser E-Mail-Adresse anmelden und Ihre Antwort ansehen oder ändern.${footer.text}`;
-  await sendMail({ to, subject, html, text });
+  return { subject, html, text };
 }
 
 export interface RegistrationVerifyMailInfo extends ClassMailInfo {

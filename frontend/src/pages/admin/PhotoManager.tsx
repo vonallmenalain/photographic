@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, ApiError, fetchAdminImage } from '../../api/client';
 import { Alert, Modal, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
@@ -186,6 +187,13 @@ export function PhotoManager({
         if ('visible_to_event' in data) next.visible_to_event = data.visible_to_event ? 1 : 0;
         if ('child_id' in data) next.child_id = (data.child_id as string | null) ?? null;
         if ('status' in data) next.status = String(data.status);
+        // Wie im Backend: Der Status folgt der Zuordnung.
+        if (
+          ('child_id' in data || 'is_class_photo' in data) &&
+          (next.status === 'assigned' || next.status === 'processed')
+        ) {
+          next.status = next.child_id ? 'assigned' : 'processed';
+        }
         return next;
       }),
     );
@@ -433,15 +441,7 @@ export function PhotoManager({
                 <AdminThumb photoId={p.id} onClick={() => setZoomPhoto(p)} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    {/* Gruppen-/Klassenfotos werden keinem Kind zugeordnet und
-                        bleiben daher im Status „Verarbeitet“. Damit sie nicht
-                        wie offene Aufgaben (gelb) wirken, zeigen wir die Plakette
-                        grün – sie sind vollständig erfasst. */}
-                    {p.is_class_photo && p.status === 'processed' ? (
-                      <span className="badge green">Verarbeitet</span>
-                    ) : (
-                      <StatusBadge status={p.status} />
-                    )}
+                    <PhotoStateBadge photo={p} />
                     {p.is_class_photo ? <span className="badge class">Klassenfoto</span> : null}
                     {isDuplicateFilename(p) ? (
                       <span
@@ -604,14 +604,22 @@ export function AdminPhotoLightbox({ photo, onClose }: { photo: ManagedPhoto; on
   }, [photo.id]);
 
   useEffect(() => {
+    // In der Capture-Phase und mit stopPropagation: Escape schliesst nur die
+    // Bildvorschau, nicht auch das Popup „Auftrag bearbeiten“ dahinter.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      onClose();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
-  return (
+  // Per Portal direkt in <body>: Innerhalb eines Popups (z. B. „Auftrag
+  // bearbeiten“) wäre „position: fixed“ sonst an die Popup-Ebene gebunden
+  // (deren backdrop-filter bildet den Bezugsrahmen). Die Vorschau landete dann
+  // oben im gescrollten Popup-Inhalt – nach dem Herunterscrollen unsichtbar.
+  return createPortal(
     <div className="lightbox" onClick={onClose}>
       <div className="inner" onClick={(e) => e.stopPropagation()}>
         <button className="close" onClick={onClose} aria-label="Schließen">
@@ -634,7 +642,8 @@ export function AdminPhotoLightbox({ photo, onClose }: { photo: ManagedPhoto; on
           {photo.width ? ` · ${photo.width}×${photo.height}` : ''}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -810,4 +819,20 @@ export function PhotoEmailModal({
       </p>
     </Modal>
   );
+}
+
+/**
+ * Plakette eines Fotos – abgeleitet aus der tatsächlichen Zuordnung, nicht nur
+ * aus dem gespeicherten Status. So steht nie „Zugeordnet“ (grün) bei einem
+ * Foto, das keinem Kind gehört (z. B. nach „Klassenfoto“ an und wieder aus).
+ *  - Gruppen-/Klassenfotos gehören keinem Kind; sie sind trotzdem vollständig
+ *    erfasst und werden deshalb grün als „Verarbeitet“ gezeigt.
+ *  - Ein Foto ohne Kind ist gelb „Nicht zugeordnet“ – passend zum Filter
+ *    „Unzugeordnet“.
+ */
+function PhotoStateBadge({ photo }: { photo: ManagedPhoto }) {
+  if (photo.status === 'disabled' || photo.status === 'uploaded') return <StatusBadge status={photo.status} />;
+  if (photo.is_class_photo) return <span className="badge green">Verarbeitet</span>;
+  if (photo.child_id) return <StatusBadge status="assigned" />;
+  return <span className="badge amber">Nicht zugeordnet</span>;
 }
