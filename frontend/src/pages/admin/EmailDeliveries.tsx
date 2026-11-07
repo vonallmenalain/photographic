@@ -26,6 +26,11 @@ interface Overview {
   lastEventAt: string | null;
   lastEventType: string | null;
   eventsTotal: number;
+  /** Ereignisse anderer Apps im selben Resend-Konto – ignoriert. */
+  ignoredTotal?: number;
+  lastIgnoredAt?: string | null;
+  lastIgnoredFrom?: string | null;
+  ownSenders?: string[];
   openProblems: number;
   devLogOnly: boolean;
 }
@@ -116,6 +121,23 @@ export default function EmailDeliveries() {
                   }`
                 : ', noch keines empfangen'}
               ).
+              {overview.ownSenders && overview.ownSenders.length > 0 && (
+                <span style={{ display: 'block', marginTop: 4, fontSize: '0.85rem' }}>
+                  Übernommen werden nur E-Mails mit dem Absender{' '}
+                  <strong>{overview.ownSenders.join(' bzw. ')}</strong>.
+                  {overview.ignoredTotal
+                    ? ` ${overview.ignoredTotal} Ereignis${
+                        overview.ignoredTotal === 1 ? '' : 'se'
+                      } anderer Absender (andere Apps im selben Resend-Konto) wurden ignoriert${
+                        overview.lastIgnoredFrom
+                          ? `, zuletzt von ${overview.lastIgnoredFrom}${
+                              overview.lastIgnoredAt ? ` am ${formatDate(overview.lastIgnoredAt)}` : ''
+                            }`
+                          : ''
+                      }.`
+                    : ''}
+                </span>
+              )}
             </>
           ) : (
             <>
