@@ -249,44 +249,44 @@ export default function Events() {
     <div>
       <div className="orders-toolbar">
         <h1 className="orders-toolbar-title">Aufträge</h1>
-        {(events.length > 0 || showDeleted) && (
-          <div className="orders-toolbar-controls">
-            <input
-              type="search"
-              className="orders-search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Auftrag, Kind oder E-Mail-Adresse suchen …"
-              aria-label="Aufträge durchsuchen"
-            />
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey)}
-              aria-label="Aufträge sortieren"
-              title="Sortierung"
-            >
-              {SORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as FilterKey)}
-              aria-label="Aufträge filtern"
-              title="Filter"
-            >
-              {FILTER_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-              <option disabled>──────────</option>
-              <option value={DELETED_FILTER.value}>{DELETED_FILTER.label}</option>
-            </select>
-          </div>
-        )}
+        {/* Immer sichtbar – auch ohne laufende Aufträge, damit „Gelöschte
+            Aufträge“ im Filter erreichbar bleibt. */}
+        <div className="orders-toolbar-controls">
+          <input
+            type="search"
+            className="orders-search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Auftrag, Kind oder E-Mail-Adresse suchen …"
+            aria-label="Aufträge durchsuchen"
+          />
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+            aria-label="Aufträge sortieren"
+            title="Sortierung"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as FilterKey)}
+            aria-label="Aufträge filtern"
+            title="Filter"
+          >
+            {FILTER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+            <option disabled>──────────</option>
+            <option value={DELETED_FILTER.value}>{DELETED_FILTER.label}</option>
+          </select>
+        </div>
       </div>
 
       {error && <Alert kind="error">{error}</Alert>}
@@ -341,7 +341,17 @@ export default function Events() {
       ) : events.length === 0 ? (
         <p className="muted">
           Noch keine Aufträge. Erfasse deinen ersten Auftrag über{' '}
-          <Link to="/admin/import">Aufträge erfassen</Link>.
+          <Link to="/admin/import">Aufträge erfassen</Link>.{' '}
+          <button
+            type="button"
+            className="btn ghost small"
+            onClick={() => {
+              setSearch('');
+              setFilter('deleted');
+            }}
+          >
+            Gelöschte Aufträge ansehen
+          </button>
         </p>
       ) : visibleEvents.length === 0 ? (
         <p className="muted">
