@@ -159,7 +159,14 @@ export default function Verify() {
         body: { email },
       });
       setResent(res.message);
-    } catch {
+    } catch (err) {
+      // Bei zu vielen Anfragen wurde nichts verschickt – dann die Sperre samt
+      // Wartezeit anzeigen statt einer Versandbestätigung. Die Sperre gilt pro
+      // IP-Adresse und verrät nichts darüber, ob die Adresse bekannt ist.
+      if (err instanceof ApiError && err.status === 429) {
+        setError(err.message);
+        return;
+      }
       setResent('Falls die E-Mail-Adresse freigeschaltet ist, haben wir Ihnen erneut eine Nachricht gesendet.');
     }
   };
