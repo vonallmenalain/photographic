@@ -25,7 +25,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   // eslint-disable-next-line no-console
   console.error('[error]', err);
   res.status(500).json({
-    error: 'Es ist ein unerwarteter Fehler aufgetreten. Bitte versuche es später erneut.',
+    error: 'Es ist ein unerwarteter Fehler aufgetreten. Bitte versuchen Sie es später erneut.',
   });
   if (!config.isProd && err instanceof Error) {
     // help local debugging
