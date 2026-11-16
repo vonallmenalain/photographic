@@ -1056,6 +1056,8 @@ tr.clickable-row { cursor: pointer; }
   display: block; width: 100%; height: min(68vh, 680px);
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: #f4f5f7;
 }
+/* „Handy“: E-Mail in der Breite eines Smartphones (die E-Mail passt ihr Layout an). */
+.preview-frame.mobile { width: 390px; max-width: 100%; margin: 0 auto; }
 .preview-text {
   margin: 0; padding: 14px; max-height: min(68vh, 680px); overflow: auto;
   white-space: pre-wrap; font-size: 0.85rem; line-height: 1.55;

@@ -38,6 +38,7 @@ import {
   sendPasswordResetEmail,
   sendGalleryReadyEmail,
   sendShippingConfirmationEmail,
+  buildShippingConfirmationEmail,
   buildGalleryReadyEmail,
   buildConsentInviteEmail,
   mailEnvelope,
@@ -70,8 +71,10 @@ import {
   itemTotalCents,
   orderAmounts,
   resolveLine,
+  getOrderForEmail,
   type OrderItemDoc,
 } from '../services/orders';
+import { buildOrderConfirmationPreview, shippingConfirmationLink } from '../services/orderMails';
 import {
   cleanEmailList,
   getAppSettings,
@@ -2960,6 +2963,40 @@ async function orderHasPrint(orderId: string): Promise<boolean> {
   return unknown.some((it) => products.get(it.product_id)?.type === 'print');
 }
 
+// Vorschau der E-Mails zu einer Bestellung: die Bestellbestätigung („Bestell-
+// bestätigung ansehen“) und die Versandbestätigung („Vorschau“ im Versand-
+// Popup). Beide werden mit denselben Funktionen gebaut wie beim Versand. Die
+// Bestellbestätigung entsteht dabei neu aus den gespeicherten Bestelldaten
+// (Positionen und Preise sind bei der Bestellung festgehalten); die Miniatur-
+// bilder stehen in der Vorschau direkt im HTML statt als eingebettete Anhänge.
+router.get(
+  '/orders/:id/email-preview',
+  asyncHandler(async (req, res) => {
+    const { type } = parse(
+      z.object({ type: z.enum(['confirmation', 'shipping']) }),
+      req.query,
+    );
+    const order = await getById<{ email_id: string; status: string }>(COL.orders, req.params.id);
+    if (!order) throw new ApiError(404, 'Bestellung nicht gefunden.');
+    const parentEmail = await getById<{ email: string }>(COL.parentEmails, order.email_id);
+
+    let mail: { subject: string; html: string; text: string };
+    if (type === 'confirmation') {
+      // Warenkörbe und nie bezahlte Kaufvorgänge haben keine Bestätigung erhalten.
+      if (!isRealOrder(order.status)) {
+        throw new ApiError(400, 'Für diese Bestellung wurde keine Bestellbestätigung verschickt.');
+      }
+      const detail = await getOrderForEmail(order.email_id, req.params.id);
+      if (!detail) throw new ApiError(404, 'Bestellung nicht gefunden.');
+      mail = await buildOrderConfirmationPreview(detail);
+    } else {
+      mail = await buildShippingConfirmationEmail(shippingConfirmationLink());
+    }
+    const envelope = await mailEnvelope();
+    res.json({ ...mail, ...envelope, sample: parentEmail?.email ?? '' });
+  }),
+);
+
 router.post(
   '/orders/:id/send-shipping-confirmation',
   asyncHandler(async (req, res) => {
@@ -2987,8 +3024,7 @@ router.post(
       throw new ApiError(400, 'Für diese Bestellung ist keine aktive E-Mail-Adresse hinterlegt.');
     }
 
-    // "Zu meinen Fotos" soll direkt zu den Bestellungen führen, nicht zur Galerie.
-    const link = `${config.publicAppUrl}/bestellungen`;
+    const link = shippingConfirmationLink();
 
     let sent = 0;
     let failed = 0;

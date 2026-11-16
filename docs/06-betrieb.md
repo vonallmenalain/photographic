@@ -201,6 +201,26 @@ selbst keinen Auftrag; er wird aus den bestellten Fotos abgeleitet.
 - Enthält eine Bestellung ausnahmsweise Fotos aus mehreren Aufträgen, steht sie
   beim Auftrag mit den meisten Positionen; die übrigen Aufträge sind in der
   Bestellung als Hinweis vermerkt.
+- **Bestellbestätigung ansehen:** Bei jeder Bestellung zeigt dieser Knopf die
+  Bestellbestätigung, die die Eltern nach der Zahlung automatisch erhalten
+  haben – mit Absender, Empfänger, Betreff und der gestalteten E-Mail
+  (umschaltbar auf „Nur Text“ und auf die Breite eines Handys). Sie wird aus den
+  gespeicherten Bestelldaten neu aufgebaut; Positionen und Preise sind bei der
+  Bestellung festgehalten und stimmen deshalb mit dem Versand überein. Der Knopf
+  steht auch auf der Detailseite einer Bestellung (E-Mail-Detailseite →
+  „Details“).
+- **Versandbestätigung schicken:** Bei Bestellungen mit Druck. Im Popup zeigt
+  **„Vorschau“** vor dem Versand genau die E-Mail, die die Eltern erhalten.
+  „Jetzt senden“ verschickt sie an die Adresse der Bestellung (optional mit
+  Kopie an dich) und setzt die Bestellung auf „Abgeschlossen“.
+- **Aufbau der Bestellbestätigung:** je Position eine Zeile mit Miniaturbild
+  des bestellten Fotos, Produkt, Kind bzw. Dateiname des Fotos, „Druck per
+  Post“ oder „Digitale Datei zum Herunterladen“ und Preis; darunter
+  Zwischensumme, Versand und Gesamtbetrag, bei Druckprodukten die Lieferadresse
+  mit dem Hinweis auf 3–4 Wochen Lieferzeit. Die Miniaturbilder (ohne
+  Wasserzeichen – die Fotos sind ja gekauft) reisen als eingebettete Bilder in
+  der E-Mail mit; sie bleiben deshalb auch sichtbar, wenn der Auftrag später
+  archiviert ist, und es braucht keine öffentlich abrufbaren Bild-Links.
 
 ## 6.3 Supportfälle
 

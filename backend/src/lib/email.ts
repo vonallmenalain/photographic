@@ -51,9 +51,23 @@ interface SendArgs {
    * "Von"-Feld.
    */
   replyTo?: string;
+  /**
+   * Eingebettete Bilder (z. B. die Miniaturbilder der Bestellbestätigung). Sie
+   * reisen in der E-Mail selbst mit und werden im HTML über `cid:` angesprochen –
+   * so bleiben sie sichtbar, auch wenn die Fotos später archiviert sind, und es
+   * braucht keine öffentlich abrufbaren Bild-Links.
+   */
+  attachments?: MailAttachment[];
 }
 
-export async function sendMail({ to, subject, html, text, replyTo }: SendArgs): Promise<void> {
+export interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType: string;
+  cid: string;
+}
+
+export async function sendMail({ to, subject, html, text, replyTo, attachments }: SendArgs): Promise<void> {
   const t = getTransporter();
   const recipients = Array.isArray(to) ? to : [to];
   const [from, contact] = await Promise.all([mailFrom(), contactAddress()]);
@@ -68,6 +82,7 @@ export async function sendMail({ to, subject, html, text, replyTo }: SendArgs): 
     console.log(`An:      ${recipients.join(', ')}`);
     if (effectiveReplyTo) console.log(`Antwort: ${effectiveReplyTo}`);
     console.log(`Betreff: ${subject}`);
+    if (attachments?.length) console.log(`Bilder:  ${attachments.length} eingebettet`);
     console.log(text);
     console.log('───────────────────────────────────────\n');
     return;
@@ -81,6 +96,7 @@ export async function sendMail({ to, subject, html, text, replyTo }: SendArgs): 
       html,
       text,
       ...(effectiveReplyTo ? { replyTo: effectiveReplyTo } : {}),
+      ...(attachments?.length ? { attachments } : {}),
     });
   } catch (err) {
     // Fehlgeschlagene Versände landen im Zustellprotokoll (Adminbereich →
@@ -125,11 +141,31 @@ async function contactFooter(): Promise<{ html: string; text: string }> {
   };
 }
 
+/**
+ * Schrift aller E-Mails – dieselbe wie in der App. Tabellen erben die Schrift in
+ * manchen Mailprogrammen (Outlook) nicht, deshalb wird sie dort ausdrücklich
+ * wiederholt.
+ */
+const FONT = "'Comic Sans MS','Comic Sans','Comic Neue',Helvetica,Arial,sans-serif";
+const TEXT_COLOR = '#1f2933';
+const MUTED_COLOR = '#7b8794';
+const LINE_COLOR = '#e6e9ee';
+
+/**
+ * Rahmen aller E-Mails. Auf schmalen Bildschirmen (Handy) werden die Ränder um
+ * die weisse Karte verkleinert, damit der Inhalt mehr Platz bekommt. Programme
+ * ohne Unterstützung für `<style>` zeigen einfach die normalen Ränder.
+ */
 const wrap = (title: string, body: string, maxWidth = 520, footer = '') => `
-<!doctype html><html lang="de"><body style="margin:0;background:#f4f5f7;font-family:'Comic Sans MS','Comic Sans','Comic Neue',Helvetica,Arial,sans-serif;color:#1f2933;">
-  <div style="max-width:${maxWidth}px;margin:0 auto;padding:32px 20px;">
-    <div style="background:#fff;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,.08);">
-      <h1 style="font-size:20px;margin:0 0 16px;color:#1f2933;">${title}</h1>
+<!doctype html><html lang="de"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><style>
+  @media only screen and (max-width: 560px) {
+    .mail-outer { padding: 12px 8px !important; }
+    .mail-card { padding: 22px 16px !important; border-radius: 12px !important; }
+  }
+</style></head><body style="margin:0;background:#f4f5f7;font-family:${FONT};color:${TEXT_COLOR};">
+  <div class="mail-outer" style="max-width:${maxWidth}px;margin:0 auto;padding:32px 20px;">
+    <div class="mail-card" style="background:#fff;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,.08);">
+      <h1 style="font-size:20px;margin:0 0 16px;color:${TEXT_COLOR};">${title}</h1>
       ${body}
       ${footer}
     </div>
@@ -320,58 +356,237 @@ export interface OrderConfirmationAddress {
   city: string;
 }
 
-export async function sendOrderConfirmation(
-  to: string,
-  summary: string,
-  link: string,
-  opts: { hasPrint?: boolean; shippingAddress?: OrderConfirmationAddress | null } = {},
-) {
-  const { hasPrint = false, shippingAddress = null } = opts;
-  const footer = await contactFooter();
+/** Eine Position der Bestellbestätigung – mit Miniaturbild des bestellten Fotos. */
+export interface OrderMailItem {
+  /** Foto der Position; gleiche Fotos teilen sich ein eingebettetes Bild. */
+  photoId: string;
+  productName: string;
+  productType: 'digital' | 'print';
+  productKind: 'digital' | 'photo' | 'sticker' | 'magnet';
+  includesDigital: boolean;
+  qty: number;
+  lineTotalCents: number;
+  /** Wer bzw. was auf dem Foto ist: Name des Kindes oder Dateiname (z. B. „Klassenbild1“). */
+  label: string;
+  /** Kleines, quadratisches JPEG (siehe `mailThumbnail`); null, wenn keines vorliegt. */
+  image: Buffer | null;
+}
 
-  // Orders with a printed product get extra information about shipping time and,
-  // when available, the delivery address the customer entered at checkout.
-  const printHtml = hasPrint
-    ? `<p style="font-size:15px;line-height:1.6;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 16px;">
-         <strong>Hinweis zu Ihren ausgedruckten Fotos:</strong><br />
-         Ihre bestellten Fotos zum Ausdrucken werden in ca. <strong>3–4 Wochen</strong> an die unten angegebene Lieferadresse versandt.
-       </p>${
-         shippingAddress
-           ? `<p style="font-size:14px;line-height:1.6;">
-                <strong>Lieferadresse</strong><br />
-                ${shippingAddress.first_name} ${shippingAddress.last_name}<br />
-                ${shippingAddress.street} ${shippingAddress.house_no}<br />
-                ${shippingAddress.zip} ${shippingAddress.city}
-              </p>`
+export interface OrderConfirmationData {
+  currency: string;
+  /** Zeitpunkt der Bestellung (Zahlung) – erscheint als Datum im Einleitungssatz. */
+  orderedAt: string;
+  subtotalCents: number;
+  shippingFeeCents: number;
+  totalCents: number;
+  items: OrderMailItem[];
+  shippingAddress: OrderConfirmationAddress | null;
+  /** Link zur Bestellung in der App. */
+  link: string;
+}
+
+/**
+ * Wie die Miniaturbilder eingebunden werden: `cid` für den Versand (Bilder
+ * reisen als eingebettete Anhänge mit), `inline` für die Vorschau im
+ * Adminbereich (Bilder direkt als data:-URL im HTML).
+ */
+export type MailImageMode = 'cid' | 'inline';
+
+export interface BuiltMailWithImages extends BuiltMail {
+  attachments: MailAttachment[];
+}
+
+/**
+ * Preis ohne Währungsangabe ("15.-" / "15.50") – gleich wie in der App
+ * (siehe `formatPrice` im Frontend). Der Shop rechnet durchgehend in einer
+ * Währung, deshalb steht sie nur beim Gesamtbetrag.
+ */
+function formatMoney(cents: number, currency: string): string {
+  const code = currency.toUpperCase();
+  if (code === 'CHF') {
+    const hasRappen = Math.round(cents) % 100 !== 0;
+    const francs = Math.round(cents) / 100;
+    return hasRappen ? francs.toFixed(2) : `${Math.round(francs)}.-`;
+  }
+  return (cents / 100).toFixed(2);
+}
+
+/** Kurzbeschrieb einer Position: Druck oder Digital und wie sie zu den Eltern kommt. */
+function orderItemKindText(item: OrderMailItem): string {
+  if (item.productType === 'digital') return 'Digitale Datei zum Herunterladen';
+  switch (item.productKind) {
+    case 'sticker':
+      return 'Sticker per Post';
+    case 'magnet':
+      return 'Magnete per Post';
+    default:
+      return item.includesDigital ? 'Druck per Post, inkl. digitaler Datei' : 'Druck per Post';
+  }
+}
+
+function orderItemTitle(item: OrderMailItem): string {
+  return `${item.qty > 1 ? `${item.qty}× ` : ''}${item.productName}`;
+}
+
+function formatOrderDate(value: string): string {
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('de-CH', { dateStyle: 'long', timeZone: 'Europe/Zurich' });
+}
+
+/**
+ * Baut die Bestellbestätigung auf, ohne sie zu versenden. Versand und Vorschau
+ * im Adminbereich („Bestellbestätigung ansehen“) nutzen dieselbe Funktion.
+ *
+ * Aufbau: je Position eine Zeile mit Miniaturbild, Produkt, Foto (Kind bzw.
+ * Dateiname), Druck/Digital und Preis; darunter Zwischensumme, Versand und
+ * Gesamtbetrag, bei Druckprodukten die Lieferadresse. Alles in derselben
+ * Schrift wie der übrige Text, ohne farbige Kästen.
+ */
+export async function buildOrderConfirmationEmail(
+  data: OrderConfirmationData,
+  imageMode: MailImageMode = 'cid',
+): Promise<BuiltMailWithImages> {
+  const footer = await contactFooter();
+  const money = (cents: number) => formatMoney(cents, data.currency);
+  const currencyCode = data.currency.toUpperCase();
+  const hasPrint = data.items.some((i) => i.productType === 'print');
+  const hasDigital = data.items.some((i) => i.productType === 'digital' || i.includesDigital);
+  const date = formatOrderDate(data.orderedAt);
+  const address = hasPrint ? data.shippingAddress : null;
+
+  // Ein eingebettetes Bild je Foto – wird dasselbe Foto mehrfach bestellt
+  // (z. B. als Druck und als Magnete), reist es trotzdem nur einmal mit.
+  const attachments: MailAttachment[] = [];
+  const imageSrc = new Map<string, string>();
+  for (const item of data.items) {
+    if (!item.image || imageSrc.has(item.photoId)) continue;
+    if (imageMode === 'inline') {
+      imageSrc.set(item.photoId, `data:image/jpeg;base64,${item.image.toString('base64')}`);
+    } else {
+      const n = attachments.length + 1;
+      const cid = `foto-${n}@bestellung`;
+      attachments.push({ filename: `foto-${n}.jpg`, content: item.image, contentType: 'image/jpeg', cid });
+      imageSrc.set(item.photoId, `cid:${cid}`);
+    }
+  }
+
+  const cell = `font-family:${FONT};color:${TEXT_COLOR};`;
+  const itemRows = data.items
+    .map((item) => {
+      const src = imageSrc.get(item.photoId);
+      const thumb = src
+        ? `<img src="${src}" width="64" height="64" alt="${escapeHtml(item.label || item.productName)}" style="display:block;width:64px;height:64px;border:0;border-radius:8px;" />`
+        : `<div style="width:64px;height:64px;border-radius:8px;background:#f0f4f8;"></div>`;
+      return `<tr>
+          <td width="64" valign="top" style="width:64px;padding:12px 14px 12px 0;border-bottom:1px solid ${LINE_COLOR};">${thumb}</td>
+          <td valign="top" style="${cell}padding:12px 0;border-bottom:1px solid ${LINE_COLOR};font-size:15px;line-height:1.45;">
+            <strong>${escapeHtml(orderItemTitle(item))}</strong>${
+              item.label
+                ? `<br /><span style="font-size:14px;">${escapeHtml(item.label)}</span>`
+                : ''
+            }<br /><span style="font-size:13px;color:${MUTED_COLOR};">${escapeHtml(orderItemKindText(item))}</span>
+          </td>
+          <td valign="top" align="right" style="${cell}padding:12px 0 12px 12px;border-bottom:1px solid ${LINE_COLOR};font-size:15px;line-height:1.45;text-align:right;white-space:nowrap;">${money(item.lineTotalCents)}</td>
+        </tr>`;
+    })
+    .join('');
+
+  const sumRow = (label: string, value: string, strong = false) =>
+    `<tr>
+       <td style="${cell}padding:${strong ? '10px 0 0' : '4px 0'};font-size:${strong ? '16px' : '14px'};${strong ? '' : `color:${MUTED_COLOR};`}">${strong ? `<strong>${label}</strong>` : label}</td>
+       <td align="right" style="${cell}padding:${strong ? '10px 0 0' : '4px 0'};font-size:${strong ? '16px' : '14px'};text-align:right;white-space:nowrap;">${strong ? `<strong>${value}</strong>` : value}</td>
+     </tr>`;
+  const sums =
+    (data.shippingFeeCents > 0
+      ? sumRow('Zwischensumme', money(data.subtotalCents)) +
+        sumRow('Versand per Post', money(data.shippingFeeCents))
+      : '') + sumRow('Gesamt', `${money(data.totalCents)} ${currencyCode}`, true);
+
+  const addressLines = address
+    ? [
+        `${address.first_name} ${address.last_name}`,
+        `${address.street} ${address.house_no}`,
+        `${address.zip} ${address.city}`,
+      ]
+    : [];
+  const deliveryHtml = hasPrint
+    ? `<h2 style="font-size:16px;margin:28px 0 6px;color:${TEXT_COLOR};">Lieferung</h2>
+       <p style="font-size:15px;line-height:1.6;margin:0;">Ihre gedruckten Fotos schicken wir Ihnen in ca. <strong style="white-space:nowrap;">3–4 Wochen</strong> per Post${
+         address ? ' an diese Adresse:' : '.'
+       }</p>${
+         address
+           ? `<p style="font-size:15px;line-height:1.6;margin:8px 0 0;">${addressLines.map(escapeHtml).join('<br />')}</p>`
            : ''
        }`
     : '';
+  const downloadHtml = hasDigital
+    ? `<p style="font-size:15px;line-height:1.6;margin:24px 0 0;">Die digitalen Dateien stehen ab sofort zum Herunterladen bereit.</p>`
+    : '';
+  const buttonLabel = hasDigital ? 'Bestellung & Downloads ansehen' : 'Bestellung ansehen';
+
+  const intro = date
+    ? `Wir haben Ihre Bestellung vom ${escapeHtml(date)} erhalten und bestätigt.`
+    : 'Wir haben Ihre Bestellung erhalten und bestätigt.';
 
   const html = wrap(
     'Vielen Dank für Ihre Bestellung',
-    `<p style="font-size:15px;line-height:1.6;">Wir haben Ihre Bestellung erhalten und bestätigt.</p>
-     <pre style="font-size:14px;background:#f0f4f8;border-radius:12px;padding:16px;white-space:pre-wrap;">${summary}</pre>
-     ${printHtml}
-     <p style="text-align:center;margin:20px 0;">
-       <a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:600;">Bestellung & Downloads ansehen</a>
+    `<p style="font-size:15px;line-height:1.6;">Guten Tag</p>
+     <p style="font-size:15px;line-height:1.6;margin-bottom:8px;">${intro}</p>
+     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
+       ${itemRows}
+     </table>
+     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin-top:8px;">
+       ${sums}
+     </table>
+     ${deliveryHtml}
+     ${downloadHtml}
+     <p style="text-align:center;margin:${hasDigital ? '14px' : '28px'} 0 20px;">
+       <a href="${data.link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:600;">${buttonLabel}</a>
      </p>`,
     520,
     footer.html,
   );
 
-  const printText = hasPrint
-    ? `\n\nHinweis: Ihre bestellten Fotos zum Ausdrucken werden in ca. 3–4 Wochen an die angegebene Lieferadresse versandt.${
-        shippingAddress
-          ? `\n\nLieferadresse:\n${shippingAddress.first_name} ${shippingAddress.last_name}\n${shippingAddress.street} ${shippingAddress.house_no}\n${shippingAddress.zip} ${shippingAddress.city}`
-          : ''
+  const itemsText = data.items
+    .map(
+      (item) =>
+        `${orderItemTitle(item)} – ${money(item.lineTotalCents)}\n   ${[item.label, orderItemKindText(item)]
+          .filter(Boolean)
+          .join(' · ')}`,
+    )
+    .join('\n\n');
+  const sumsText = [
+    ...(data.shippingFeeCents > 0
+      ? [`Zwischensumme: ${money(data.subtotalCents)}`, `Versand per Post: ${money(data.shippingFeeCents)}`]
+      : []),
+    `Gesamt: ${money(data.totalCents)} ${currencyCode}`,
+  ].join('\n');
+  const deliveryText = hasPrint
+    ? `\n\nLieferung: Ihre gedruckten Fotos schicken wir Ihnen in ca. 3–4 Wochen per Post${
+        address ? ` an diese Adresse:\n${addressLines.join('\n')}` : '.'
       }`
     : '';
+  const downloadText = hasDigital ? '\n\nDie digitalen Dateien stehen ab sofort zum Herunterladen bereit.' : '';
 
   const subject = hasPrint
     ? 'Ihre Bestellung ist bestätigt – Druck folgt'
     : 'Ihre Bestellung ist bestätigt';
-  const text = `Vielen Dank für Ihre Bestellung.\n\n${summary}${printText}\n\nBestellung & Downloads: ${link}${footer.text}`;
-  await sendMail({ to, subject, html, text });
+  const text = `Guten Tag
+
+${intro}
+
+${itemsText}
+
+${sumsText}${deliveryText}${downloadText}
+
+${buttonLabel}: ${data.link}${footer.text}`;
+  return { subject, html, text, attachments };
+}
+
+export async function sendOrderConfirmation(to: string, data: OrderConfirmationData) {
+  const { attachments, ...mail } = await buildOrderConfirmationEmail(data, 'cid');
+  await sendMail({ to, ...mail, attachments });
 }
 
 /**
@@ -381,6 +596,11 @@ export async function sendOrderConfirmation(
  * und der Link zu den Bestellungen.
  */
 export async function sendShippingConfirmationEmail(to: string, link: string) {
+  await sendMail({ to, ...(await buildShippingConfirmationEmail(link)) });
+}
+
+/** Baut die Versandbestätigung auf (Versand und Vorschau im Adminbereich). */
+export async function buildShippingConfirmationEmail(link: string): Promise<BuiltMail> {
   const subject = 'Ihre Fotos sind unterwegs';
   const footer = await contactFooter();
   const html = wrap(
@@ -404,7 +624,7 @@ Wir haben Ihre bestellten Fotos heute verschickt. Sie sollten in den nächsten T
 Vielen Dank für Ihre Bestellung und herzliche Grüsse.
 
 Zu meinen Fotos: ${link}${footer.text}`;
-  await sendMail({ to, subject, html, text });
+  return { subject, html, text };
 }
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { Alert, Modal, SendToSelfCheckbox, Spinner, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
+import { OrderEmailPreviewModal } from '../../components/emailPreview';
 import { formatPrice, formatDate, formatDateShort, productKindLabel } from '../../lib/format';
 import { SummaryStat } from './EventAnalyticsPanel';
 
@@ -226,6 +227,8 @@ export default function AdminOrders() {
   const [details, setDetails] = useState<Record<string, OrderDetail>>({});
   const [loadingDetail, setLoadingDetail] = useState<Record<string, boolean>>({});
   const [shippingOrder, setShippingOrder] = useState<OrderRow | null>(null);
+  // Bestellung, deren Bestellbestätigung gerade angesehen wird.
+  const [confirmationOrder, setConfirmationOrder] = useState<OrderRow | null>(null);
   // Zu löschende Bestellung – das Popup fragt vor dem endgültigen Entfernen nach.
   const [deletingOrder, setDeletingOrder] = useState<OrderRow | null>(null);
   // Rückmeldung zur letzten Aktion (Versandbestätigung bzw. Löschen).
@@ -514,6 +517,7 @@ export default function AdminOrders() {
                   setNotice('');
                   setShippingOrder(o);
                 }}
+                onShowConfirmation={setConfirmationOrder}
                 onDelete={(o) => {
                   setNotice('');
                   setDeletingOrder(o);
@@ -535,6 +539,14 @@ export default function AdminOrders() {
             // Liste neu laden, damit der Status sofort stimmt.
             load();
           }}
+        />
+      )}
+
+      {confirmationOrder && (
+        <OrderEmailPreviewModal
+          orderId={confirmationOrder.id}
+          type="confirmation"
+          onClose={() => setConfirmationOrder(null)}
         />
       )}
 
@@ -568,6 +580,7 @@ function EventOrderGroup({
   onToggleOrder,
   onStatus,
   onShip,
+  onShowConfirmation,
   onDelete,
 }: {
   group: OrderGroup;
@@ -579,6 +592,7 @@ function EventOrderGroup({
   onToggleOrder: (id: string) => void;
   onStatus: (id: string, status: string) => void;
   onShip: (order: OrderRow) => void;
+  onShowConfirmation: (order: OrderRow) => void;
   onDelete: (order: OrderRow) => void;
 }) {
   // Nur auslösen, wenn die Kopfzeile selbst fokussiert ist – nicht, wenn ein
@@ -645,6 +659,7 @@ function EventOrderGroup({
                 onToggle={() => onToggleOrder(o.id)}
                 onStatus={(status) => onStatus(o.id, status)}
                 onShip={() => onShip(o)}
+                onShowConfirmation={() => onShowConfirmation(o)}
                 onDelete={() => onDelete(o)}
               />
             ))}
@@ -664,6 +679,7 @@ function OrderCard({
   onToggle,
   onStatus,
   onShip,
+  onShowConfirmation,
   onDelete,
 }: {
   order: OrderRow;
@@ -673,6 +689,7 @@ function OrderCard({
   onToggle: () => void;
   onStatus: (status: string) => void;
   onShip: () => void;
+  onShowConfirmation: () => void;
   onDelete: () => void;
 }) {
   const children = order.child_names ?? [];
@@ -714,6 +731,14 @@ function OrderCard({
           style={{ gap: 10, alignItems: 'center' }}
           onClick={(e) => e.stopPropagation()}
         >
+          <button
+            type="button"
+            className="btn secondary small"
+            onClick={onShowConfirmation}
+            title="Die Bestellbestätigung so ansehen, wie sie an die Eltern verschickt wurde"
+          >
+            Bestellbestätigung ansehen
+          </button>
           {order.has_print && (
             <button type="button" className="btn secondary small" onClick={onShip}>
               Versandbestätigung schicken
@@ -1001,6 +1026,7 @@ function ShippingConfirmationModal({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     api<ShippingMeta>('/api/admin/orders/shipping-meta', { admin: true })
@@ -1048,57 +1074,75 @@ function ShippingConfirmationModal({
   const canSend = !loading && !busy;
 
   return (
-    <Modal
-      title="Versandbestätigung schicken"
-      width={560}
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
-            Abbrechen
-          </button>
-          <button type="button" className="btn" onClick={send} disabled={!canSend}>
-            {busy ? 'Wird gesendet …' : 'Jetzt senden'}
-          </button>
-        </>
-      }
-    >
-      {error && <Alert kind="error">{error}</Alert>}
-      <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
-        Die Versandbestätigung informiert die Eltern, dass ihre bestellten Fotos heute verschickt
-        wurden. Sie wird an die zu dieser Bestellung gehörende E-Mail-Adresse gesendet.
-        Anschliessend wird
-        die Bestellung automatisch auf „Abgeschlossen“ gesetzt.
-      </p>
-      <div
-        style={{
-          border: '1px solid var(--border)',
-          borderRadius: 10,
-          padding: '12px 14px',
-          marginBottom: 12,
-        }}
+    <>
+      <Modal
+        title="Versandbestätigung schicken"
+        width={560}
+        onClose={onClose}
+        footer={
+          <>
+            <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
+              Abbrechen
+            </button>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setShowPreview(true)}
+              disabled={busy}
+              title="So sieht die E-Mail aus, die die Eltern erhalten"
+            >
+              Vorschau
+            </button>
+            <button type="button" className="btn" onClick={send} disabled={!canSend}>
+              {busy ? 'Wird gesendet …' : 'Jetzt senden'}
+            </button>
+          </>
+        }
       >
-        <div className="muted" style={{ fontSize: '0.78rem' }}>
-          Empfängeradresse
+        {error && <Alert kind="error">{error}</Alert>}
+        <p style={{ fontSize: '0.92rem', lineHeight: 1.6, marginTop: 0 }}>
+          Die Versandbestätigung informiert die Eltern, dass ihre bestellten Fotos heute verschickt
+          wurden. Sie wird an die zu dieser Bestellung gehörende E-Mail-Adresse gesendet.
+          Anschliessend wird
+          die Bestellung automatisch auf „Abgeschlossen“ gesetzt.
+        </p>
+        <div
+          style={{
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            padding: '12px 14px',
+            marginBottom: 12,
+          }}
+        >
+          <div className="muted" style={{ fontSize: '0.78rem' }}>
+            Empfängeradresse
+          </div>
+          <strong style={{ wordBreak: 'break-all' }}>{order.email || '—'}</strong>
         </div>
-        <strong style={{ wordBreak: 'break-all' }}>{order.email || '—'}</strong>
-      </div>
-      {loading ? (
-        <p className="muted">Angaben werden geladen …</p>
-      ) : meta ? (
-        <>
-          <SendToSelfCheckbox
-            checked={sendToSelf}
-            onChange={setSendToSelf}
-            adminEmail={meta.adminEmail}
-          />
-          {meta.devLogOnly && (
-            <p className="muted" style={{ fontSize: '0.8rem', marginTop: 8, marginBottom: 0 }}>
-              Achtung: Kein SMTP konfiguriert – die E-Mail landet nur im Server-Log.
-            </p>
-          )}
-        </>
-      ) : null}
-    </Modal>
+        {loading ? (
+          <p className="muted">Angaben werden geladen …</p>
+        ) : meta ? (
+          <>
+            <SendToSelfCheckbox
+              checked={sendToSelf}
+              onChange={setSendToSelf}
+              adminEmail={meta.adminEmail}
+            />
+            {meta.devLogOnly && (
+              <p className="muted" style={{ fontSize: '0.8rem', marginTop: 8, marginBottom: 0 }}>
+                Achtung: Kein SMTP konfiguriert – die E-Mail landet nur im Server-Log.
+              </p>
+            )}
+          </>
+        ) : null}
+      </Modal>
+      {showPreview && (
+        <OrderEmailPreviewModal
+          orderId={order.id}
+          type="shipping"
+          onClose={() => setShowPreview(false)}
+        />
+      )}
+    </>
   );
 }
