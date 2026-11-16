@@ -3,7 +3,7 @@ import { config } from '../config';
 import { getStripe } from '../services/payments';
 import { markOrderPaid, getOrderForEmail } from '../services/orders';
 import { COL, getById } from '../db';
-import { sendConfirmationEmail } from './parent';
+import { sendConfirmationEmail } from '../services/orderMails';
 import { verifySvixSignature } from '../lib/resendWebhook';
 import { recordResendEvent } from '../services/mailDelivery';
 import { resendWebhookSecret } from '../services/settings';

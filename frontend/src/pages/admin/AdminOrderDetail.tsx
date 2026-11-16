@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Alert, Spinner, StatusBadge } from '../../components/common';
 import { AdminThumb } from '../../components/AdminThumb';
+import { OrderEmailPreviewModal } from '../../components/emailPreview';
 import { formatPrice, formatDate, productKindLabel } from '../../lib/format';
 
 interface ShippingAddress {
@@ -51,6 +52,7 @@ export default function AdminOrderDetail() {
   const [order, setOrder] = useState<Order | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   const load = () =>
     api<{ order: Order; items: Item[] }>(`/api/admin/orders/${id}`, { admin: true })
@@ -87,6 +89,23 @@ export default function AdminOrderDetail() {
         {order.email} · {formatDate(order.created_at)}
         {order.payment_provider ? ` · Zahlung: ${order.payment_provider}` : ''}
       </p>
+      <p>
+        <button
+          type="button"
+          className="btn secondary small"
+          onClick={() => setShowConfirmation(true)}
+          title="Die Bestellbestätigung so ansehen, wie sie an die Eltern verschickt wurde"
+        >
+          Bestellbestätigung ansehen
+        </button>
+      </p>
+      {showConfirmation && id && (
+        <OrderEmailPreviewModal
+          orderId={id}
+          type="confirmation"
+          onClose={() => setShowConfirmation(false)}
+        />
+      )}
 
       <div className="card mb">
         <label>Status ändern</label>

@@ -200,6 +200,33 @@ export function fileExists(p: string): boolean {
 }
 
 /**
+ * Kleines, quadratisches Miniaturbild für E-Mails (Bestellbestätigung). Die
+ * Eltern haben das Foto gekauft, deshalb dient das saubere Admin-Thumbnail ohne
+ * Wasserzeichen als Grundlage; fehlt es, wird auf das Eltern-Thumbnail
+ * zurückgegriffen. `size` ist die Kantenlänge in Pixeln – doppelt so gross wie
+ * die Anzeige in der E-Mail (64 px), damit es auf hochauflösenden Displays scharf
+ * bleibt. Der Ausschnitt folgt dem auffälligsten Bildbereich (meist das
+ * Gesicht), statt stur die Bildmitte zu nehmen. Liefert null, wenn kein Bild
+ * vorliegt.
+ */
+export async function mailThumbnail(storageKey: string, size = 128): Promise<Buffer | null> {
+  if (!storageKey) return null;
+  for (const variant of ['admin', 'thumb'] as const) {
+    const p = variantPath(variant, storageKey);
+    if (!fs.existsSync(p)) continue;
+    try {
+      return await sharp(p, { failOn: 'none' })
+        .resize(size, size, { fit: 'cover', position: sharp.strategy.attention })
+        .jpeg({ quality: 80, mozjpeg: true })
+        .toBuffer();
+    } catch {
+      // Datei beschädigt → nächste Variante versuchen.
+    }
+  }
+  return null;
+}
+
+/**
  * Walks up from a (now deleted) file and removes parent directories as long as
  * they are empty, stopping at the storage root. Photos are stored under a
  * per-event sub-folder (`<variant>/<eventId>/<photoId>.<ext>`); without this the

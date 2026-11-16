@@ -41,7 +41,8 @@ import {
 import type { ShippingAddress } from '../services/orders';
 import { productView, type ProductDoc } from '../services/products';
 import { createCheckoutSession } from '../services/payments';
-import { sendOrderConfirmation, sendReportNotificationEmail } from '../lib/email';
+import { sendReportNotificationEmail } from '../lib/email';
+import { sendConfirmationEmail } from '../services/orderMails';
 import { getAppSettings } from '../services/settings';
 import { notificationRecipients } from '../services/mailDelivery';
 import {
@@ -769,44 +770,4 @@ router.post(
   }),
 );
 
-/**
- * Preis ohne Währungsangabe ("15.-" / "15.50") – gleich wie in der App
- * (siehe `formatPrice` im Frontend). Der Shop rechnet durchgehend in einer
- * Währung, deshalb steht sie nicht an jedem einzelnen Betrag.
- */
-function formatMoney(cents: number, currency: string): string {
-  const code = currency.toUpperCase();
-  if (code === 'CHF') {
-    const hasRappen = Math.round(cents) % 100 !== 0;
-    const francs = Math.round(cents) / 100;
-    return hasRappen ? francs.toFixed(2) : `${Math.round(francs)}.-`;
-  }
-  return (cents / 100).toFixed(2);
-}
-
-async function sendConfirmationEmail(email: string, order: NonNullable<Awaited<ReturnType<typeof getOrderForEmail>>>) {
-  const lines = order.items.map((i) => {
-    const extra = i.includes_digital ? ' (inkl. digitaler Datei)' : '';
-    return `• ${i.qty}× ${i.product_name}${extra} – ${formatMoney(i.line_total_cents, order.currency)}`;
-  });
-  // Versandpauschale und Gesamtbetrag ausweisen, damit die Bestätigung mit der
-  // Bezahlseite übereinstimmt.
-  if (order.shipping_fee_cents > 0) {
-    lines.push(`• Versand per Post – ${formatMoney(order.shipping_fee_cents, order.currency)}`);
-  }
-  lines.push('', `Gesamt: ${formatMoney(order.total_cents, order.currency)} ${order.currency.toUpperCase()}`);
-  const summary = lines.join('\n');
-  const link = `${config.publicAppUrl}/bestellung/${order.id}`;
-  const hasPrint = order.items.some((i) => i.product_type === 'print');
-  try {
-    await sendOrderConfirmation(email, summary, link, {
-      hasPrint,
-      shippingAddress: order.shipping_address,
-    });
-  } catch {
-    /* non fatal */
-  }
-}
-
-export { sendConfirmationEmail };
 export default router;
