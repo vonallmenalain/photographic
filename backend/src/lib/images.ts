@@ -81,11 +81,17 @@ function watermarkSvg(width: number, height: number, text: string): Buffer {
  */
 const SIGNATURE_WM = {
   /** Breite eines Schriftzugs relativ zur längeren Bildseite. */
-  scale: 0.42,
+  scale: 0.84,
+  /**
+   * Obergrenze der Breite relativ zur kürzeren Bildseite. Greift nur bei
+   * Hochformat: Dort wäre der Schriftzug sonst breiter als das Bild und der
+   * Name nirgends vollständig lesbar.
+   */
+  maxShortSide: 1.05,
   /** Horizontaler Abstand (Mitte zu Mitte) als Vielfaches der Schriftzugbreite. */
-  gapX: 1.12,
+  gapX: 1.02,
   /** Zeilenabstand als Vielfaches der Schriftzughöhe. */
-  gapY: 1.75,
+  gapY: 1.2,
   /** Drehung des ganzen Musters in Grad (negativ = steigt nach rechts an). */
   angle: -20,
   /** Gesamtdeckkraft (Schriftzug + Schatten). */
@@ -176,7 +182,15 @@ function signatureTile(source: Buffer, targetWidth: number): Promise<SignatureTi
  * sich das Wasserzeichen nicht einfach wegschneiden oder wegretuschieren lässt.
  */
 async function signatureWatermarkSvg(width: number, height: number, source: Buffer): Promise<Buffer> {
-  const sigWidth = Math.max(60, Math.round(Math.max(width, height) * SIGNATURE_WM.scale));
+  const sigWidth = Math.max(
+    60,
+    Math.round(
+      Math.min(
+        Math.max(width, height) * SIGNATURE_WM.scale,
+        Math.min(width, height) * SIGNATURE_WM.maxShortSide,
+      ),
+    ),
+  );
   const tile = await signatureTile(source, sigWidth);
   const href = `data:image/png;base64,${tile.png.toString('base64')}`;
   const stepX = tile.width * SIGNATURE_WM.gapX;
