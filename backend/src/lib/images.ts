@@ -80,18 +80,26 @@ function watermarkSvg(width: number, height: number, text: string): Buffer {
  * damit sich Grösse/Dichte/Deckkraft leicht nachjustieren lassen.
  */
 const SIGNATURE_WM = {
-  /** Breite eines Schriftzugs relativ zur längeren Bildseite. */
-  scale: 0.84,
   /**
-   * Obergrenze der Breite relativ zur kürzeren Bildseite. Greift nur bei
-   * Hochformat: Dort wäre der Schriftzug sonst breiter als das Bild und der
-   * Name nirgends vollständig lesbar.
+   * Breite eines Schriftzugs: das Kleinere aus `scale` × längere Bildseite und
+   * `maxShortSide` × kürzere Bildseite. Bei üblichen Formaten (3:2, 4:3) gibt
+   * die kürzere Seite den Ausschlag, Hoch- und Querformat erhalten also
+   * gleich grosse Schriftzüge. Bewusst grösser als das Bild: Jeder Schriftzug
+   * zieht sich als breites Band quer durch das Foto (auf Wunsch zweimal
+   * verdoppelt). Der Name ist dadurch nur noch in Teilen lesbar, deckt aber
+   * viel mehr ab.
    */
-  maxShortSide: 1.05,
+  scale: 1.68,
+  maxShortSide: 2.1,
   /** Horizontaler Abstand (Mitte zu Mitte) als Vielfaches der Schriftzugbreite. */
   gapX: 1.02,
-  /** Zeilenabstand als Vielfaches der Schriftzughöhe. */
-  gapY: 1.2,
+  /**
+   * Zeilenabstand als Vielfaches der Schriftzughöhe. Unter 1, weil Ober- und
+   * Unterlängen benachbarter Reihen ineinandergreifen; sonst blieben bei der
+   * grossen Schrift breite Streifen ohne Wasserzeichen. (0.75 deckt noch
+   * dichter ab, die Reihen überlagern sich dann aber unruhig.)
+   */
+  gapY: 0.9,
   /** Drehung des ganzen Musters in Grad (negativ = steigt nach rechts an). */
   angle: -20,
   /** Gesamtdeckkraft (Schriftzug + Schatten). */
