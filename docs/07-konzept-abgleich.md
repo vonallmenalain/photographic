@@ -58,9 +58,12 @@ umgesetzt**, **wie**, und **was musst du selbst einrichten**.
   - **Admin-Thumbnail** (sauber, nur im Adminbereich),
   - **Eltern-Thumbnail** (klein, Wasserzeichen),
   - **Preview** (größer, Wasserzeichen, bewusst nicht drucktauglich).
-- Wasserzeichen ist diagonal gekachelt, deutlich sichtbar, aber so dosiert, dass
-  die **Kaufentscheidung** (Gesicht/Ausdruck/Ausschnitt) möglich bleibt.
-- Parameter (Größe/Qualität/Text) über `.env` einstellbar (`IMG_*`).
+- Wasserzeichen ist der **Schriftzug der Fotografin**, versetzt und leicht
+  schräg über das ganze Bild gekachelt (weiss mit weichem Schatten, damit er auf
+  hellen wie dunklen Flächen sichtbar ist) – deutlich sichtbar, aber so dosiert,
+  dass die **Kaufentscheidung** (Gesicht/Ausdruck/Ausschnitt) möglich bleibt.
+- Parameter (Größe/Qualität/Wasserzeichen-Bild bzw. Ersatztext) über `.env`
+  einstellbar (`IMG_*`).
 
 ## Admin-Workflow (Konzept 8, 16.4)
 - Upload (Mehrfach), Fotoverwaltung (zuordnen, veröffentlichen/zurückziehen,

@@ -10,7 +10,7 @@ import { sweepAbandonedCheckouts } from './services/orders';
 import { pruneOldDeliveries } from './services/mailDelivery';
 import { runAutoReminders } from './services/autoReminders';
 import { getAppSettings } from './services/settings';
-import { checkWatermarkRendering } from './lib/images';
+import { checkWatermarkRendering, watermarkMode } from './lib/images';
 import { describeStripe, stripeWarnings } from './lib/stripeStatus';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { requestTiming } from './middleware/requestTiming';
@@ -116,6 +116,7 @@ async function main() {
   const settings = await getAppSettings();
 
   const watermarkOk = await checkWatermarkRendering();
+  const watermarkKind = await watermarkMode();
 
   const app = buildApp();
   app.listen(config.port, () => {
@@ -137,7 +138,15 @@ async function main() {
       }`,
     );
     console.log(`[server] shipping    : ${(settings.shipping_fee_cents / 100).toFixed(2)} ${config.stripe.currency.toUpperCase()} per order with printed products`);
-    console.log(`[server] watermark   : ${watermarkOk ? 'OK (fonts available)' : 'BROKEN — no fonts, previews NOT watermarked!'}`);
+    console.log(
+      `[server] watermark   : ${
+        watermarkOk
+          ? watermarkKind === 'signature'
+            ? 'OK (Schriftzug)'
+            : 'OK (Text, fonts available)'
+          : 'BROKEN — previews NOT watermarked!'
+      }`,
+    );
     // When parents can ONLY log in via the SMTP code flow but no SMTP server is
     // configured, verification codes are merely printed to this log and parents
     // can never sign in. Surface this prominently so it is easy to diagnose.

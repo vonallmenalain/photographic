@@ -74,7 +74,7 @@ optional SMTP/Stripe), ist Schritt für Schritt in [`docs/`](docs/) beschrieben.
 | Keine offenen Galerien | Eltern sehen nur explizit verknüpfte Fotos (Kind- oder Direktzuweisung) |
 | Keine Info-Lecks | Neutrale Meldung („Falls freigeschaltet …“), keine internen IDs/Namen, keine technischen Fehlertexte |
 | Originale geschützt | Originale nie als Vorschau; Download nur nach Kauf via Grant + Session |
-| Wasserzeichen-Previews | Server-seitig gerendert (diagonal gekachelt), reduzierte Auflösung/Qualität |
+| Wasserzeichen-Previews | Server-seitig gerendert (Schriftzug der Fotografin, schräg gekachelt), reduzierte Auflösung/Qualität |
 | Nur ein Original hochladen | `sharp` erzeugt Admin-Thumb, Eltern-Thumb, Preview automatisch |
 | Familienlogik | E-Mail ↔ Kind als n:m (Mutter+Vater, mehrere Kinder, Geschwister) |
 | Klassenfotos | Gruppen-/Klassenfoto „für die ganze Klasse sichtbar“ → alle Familien des Events sehen es automatisch; optional zusätzlich einzelnen E-Mails zuweisbar |
