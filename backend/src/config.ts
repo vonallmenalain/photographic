@@ -191,6 +191,17 @@ export const config = {
     previewMax: int('IMG_PREVIEW_MAX', 1100),
     previewQuality: int('IMG_PREVIEW_QUALITY', 62),
     thumbQuality: int('IMG_THUMB_QUALITY', 58),
+    // Wasserzeichen-Bild: der freigestellte Schriftzug der Fotografin (PNG mit
+    // Transparenz), der diagonal über Thumbnails und Previews gekachelt wird.
+    // Liegt im Image unter /app/assets/watermark (siehe backend/Dockerfile).
+    // Leer setzen (IMG_WATERMARK_IMAGE=), um stattdessen das Text-Wasserzeichen
+    // (IMG_WATERMARK_TEXT) zu verwenden. Fehlt die Datei, fällt das Backend
+    // ebenfalls auf den Text zurück und warnt beim Start.
+    watermarkImage: optional(
+      'IMG_WATERMARK_IMAGE',
+      path.resolve(__dirname, '..', 'assets', 'watermark', 'schriftzug.png'),
+    ),
+    // Text-Wasserzeichen – nur noch Rückfallebene ohne Schriftzug-Bild.
     watermarkText: optional('IMG_WATERMARK_TEXT', 'Vorschau'),
     // Font family used for the watermark text. Kept configurable so the
     // watermark always matches the typeface used across the website: the site

@@ -71,6 +71,151 @@ function watermarkSvg(width: number, height: number, text: string): Buffer {
   return Buffer.from(svg);
 }
 
+// ---------------------------------------------------------------------------
+// Wasserzeichen mit dem Schriftzug der Fotografin
+// ---------------------------------------------------------------------------
+
+/**
+ * Gestaltung des Schriftzug-Wasserzeichens. Bewusst an einer Stelle gebündelt,
+ * damit sich Grösse/Dichte/Deckkraft leicht nachjustieren lassen.
+ */
+const SIGNATURE_WM = {
+  /** Breite eines Schriftzugs relativ zur längeren Bildseite. */
+  scale: 0.42,
+  /** Horizontaler Abstand (Mitte zu Mitte) als Vielfaches der Schriftzugbreite. */
+  gapX: 1.12,
+  /** Zeilenabstand als Vielfaches der Schriftzughöhe. */
+  gapY: 1.75,
+  /** Drehung des ganzen Musters in Grad (negativ = steigt nach rechts an). */
+  angle: -20,
+  /** Gesamtdeckkraft (Schriftzug + Schatten). */
+  opacity: 0.55,
+  /**
+   * Stärke des weichen, dunklen Schattens unter dem weissen Schriftzug. Ohne
+   * ihn verschwindet der Schriftzug auf hellem Himmel, Schnee oder weissen
+   * Wänden fast vollständig.
+   */
+  shadow: 0.55,
+};
+
+let signatureSource: Promise<Buffer | null> | null = null;
+
+/** Liest das Schriftzug-PNG einmal ein; null, wenn keins konfiguriert/vorhanden ist. */
+function loadSignature(): Promise<Buffer | null> {
+  if (!signatureSource) {
+    const file = config.images.watermarkImage.trim();
+    signatureSource = file
+      ? fsp.readFile(file).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[images] WARNING: Wasserzeichen-Schriftzug ${file} nicht lesbar – verwende Text-Wasserzeichen.`,
+            err instanceof Error ? err.message : err,
+          );
+          return null;
+        })
+      : Promise.resolve(null);
+  }
+  return signatureSource;
+}
+
+interface SignatureTile {
+  png: Buffer;
+  width: number;
+  height: number;
+}
+
+// Fertige Kacheln je Schriftzugbreite. Thumbnails und Previews haben fast immer
+// dieselbe längere Seite (IMG_THUMB_MAX / IMG_PREVIEW_MAX), es entstehen also
+// nur wenige Einträge; die Obergrenze schützt trotzdem vor Wachstum.
+const tileCache = new Map<number, Promise<SignatureTile>>();
+const TILE_CACHE_MAX = 24;
+
+/**
+ * Skaliert den Schriftzug auf `targetWidth` und legt einen weichgezeichneten
+ * dunklen Schatten darunter – eine einzelne Kachel, die das SVG anschliessend
+ * vielfach wiederholt.
+ */
+function signatureTile(source: Buffer, targetWidth: number): Promise<SignatureTile> {
+  const cached = tileCache.get(targetWidth);
+  if (cached) return cached;
+  const build = (async (): Promise<SignatureTile> => {
+    const resized = await sharp(source)
+      .resize({ width: targetWidth })
+      .png()
+      .toBuffer({ resolveWithObject: true });
+    // Rand, damit der Schatten nicht abgeschnitten wird.
+    const pad = Math.max(2, Math.ceil(targetWidth / 60));
+    const padded = await sharp(resized.data)
+      .extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toBuffer({ resolveWithObject: true });
+    const { width, height } = padded.info;
+    const shadowAlpha = await sharp(padded.data)
+      .extractChannel('alpha')
+      .blur(Math.max(0.8, targetWidth / 260))
+      .linear(SIGNATURE_WM.shadow, 0)
+      .toBuffer();
+    // Zwei getrennte Pipelines: sharp würde composite() sonst vor
+    // joinChannel() ausführen (3 statt 4 Kanäle → Fehler).
+    const shadow = await sharp({ create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } } })
+      .joinChannel(shadowAlpha)
+      .png()
+      .toBuffer();
+    const png = await sharp(shadow).composite([{ input: padded.data }]).png().toBuffer();
+    return { png, width, height };
+  })();
+  if (tileCache.size >= TILE_CACHE_MAX) tileCache.clear();
+  tileCache.set(targetWidth, build);
+  build.catch(() => tileCache.delete(targetWidth));
+  return build;
+}
+
+/**
+ * Kachelt den Schriftzug versetzt (Mauerwerk-Muster) und leicht gedreht über
+ * das ganze Bild. Mehrere Wiederholungen statt eines einzelnen Logos, damit
+ * sich das Wasserzeichen nicht einfach wegschneiden oder wegretuschieren lässt.
+ */
+async function signatureWatermarkSvg(width: number, height: number, source: Buffer): Promise<Buffer> {
+  const sigWidth = Math.max(60, Math.round(Math.max(width, height) * SIGNATURE_WM.scale));
+  const tile = await signatureTile(source, sigWidth);
+  const href = `data:image/png;base64,${tile.png.toString('base64')}`;
+  const stepX = tile.width * SIGNATURE_WM.gapX;
+  const stepY = tile.height * SIGNATURE_WM.gapY;
+  // Das Muster wird um die Bildmitte gedreht; über die Diagonale in jede
+  // Richtung zu kacheln stellt sicher, dass auch die Ecken bedeckt sind.
+  const reach = Math.hypot(width, height);
+  const cx = width / 2 - tile.width / 2;
+  const cy = height / 2 - tile.height / 2;
+  const uses: string[] = [];
+  let row = 0;
+  for (let y = -reach; y <= reach; y += stepY, row += 1) {
+    const offset = row % 2 ? stepX / 2 : 0;
+    for (let x = -reach + offset; x <= reach; x += stepX) {
+      uses.push(`<use href="#sig" xlink:href="#sig" x="${(cx + x).toFixed(1)}" y="${(cy + y).toFixed(1)}"/>`);
+    }
+  }
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <defs><image id="sig" width="${tile.width}" height="${tile.height}" href="${href}" xlink:href="${href}"/></defs>
+    <g opacity="${SIGNATURE_WM.opacity}" transform="rotate(${SIGNATURE_WM.angle} ${width / 2} ${height / 2})">${uses.join('')}</g>
+  </svg>`;
+  return Buffer.from(svg);
+}
+
+/** Welche Art Wasserzeichen aktuell verwendet wird. */
+export async function watermarkMode(): Promise<'signature' | 'text'> {
+  return (await loadSignature()) ? 'signature' : 'text';
+}
+
+/**
+ * Overlay für ein Bild der Grösse width×height: der Schriftzug der Fotografin,
+ * sofern vorhanden, sonst das Text-Wasserzeichen.
+ */
+async function watermarkOverlay(width: number, height: number): Promise<Buffer> {
+  const signature = await loadSignature();
+  if (signature) return signatureWatermarkSvg(width, height, signature);
+  return watermarkSvg(width, height, config.images.watermarkText);
+}
+
 export interface ProcessResult {
   width: number;
   height: number;
@@ -137,7 +282,7 @@ async function renderWatermarked(
   const w = resizedMeta.info.width;
   const h = resizedMeta.info.height;
 
-  const overlay = watermarkSvg(w, h, config.images.watermarkText);
+  const overlay = await watermarkOverlay(w, h);
 
   await sharp(resizedMeta.data)
     .composite([{ input: overlay, top: 0, left: 0 }])
@@ -154,20 +299,20 @@ export async function reprocessFromOriginal(storageKey: string, ext: string): Pr
 }
 
 /**
- * Renders a small watermarked test tile and checks that the overlay text was
- * actually drawn. If no fonts are installed (common on slim base images),
- * librsvg silently produces an empty overlay and previews would ship WITHOUT a
- * watermark. We surface that as a loud warning on startup instead of failing
- * quietly. Returns true when watermark text renders, false otherwise.
+ * Renders a small watermarked test tile and checks that the overlay was
+ * actually drawn. For the text fallback this catches missing fonts (common on
+ * slim base images: librsvg then silently produces an empty overlay); for the
+ * signature it catches an unreadable PNG. Either way previews would ship
+ * WITHOUT a watermark, so we surface that as a loud warning on startup instead
+ * of failing quietly. Returns true when the watermark renders, false otherwise.
  */
 export async function checkWatermarkRendering(): Promise<boolean> {
   try {
     const w = 600;
     const h = 400;
-    const overlay = watermarkSvg(w, h, config.images.watermarkText);
-    // Composite onto a perfectly flat grey tile. With fonts the watermark text
-    // adds clear pixel variation; without usable fonts the overlay is (near)
-    // empty and the result stays essentially flat.
+    const overlay = await watermarkOverlay(w, h);
+    // Composite onto a perfectly flat grey tile. A working watermark adds
+    // clear pixel variation; a broken one leaves the result essentially flat.
     const flat = await sharp({
       create: { width: w, height: h, channels: 3, background: { r: 128, g: 128, b: 128 } },
     })
@@ -183,8 +328,11 @@ export async function checkWatermarkRendering(): Promise<boolean> {
     if (!ok) {
       // eslint-disable-next-line no-console
       console.warn(
-        '[images] WARNING: watermark text did not render — no usable fonts found. ' +
-          'Previews will NOT be watermarked. Install fonts (e.g. fontconfig + fonts-dejavu-core) in the runtime image.',
+        (await watermarkMode()) === 'signature'
+          ? '[images] WARNING: watermark signature did not render. Previews will NOT be watermarked. ' +
+              'Check IMG_WATERMARK_IMAGE / backend/assets/watermark/schriftzug.png.'
+          : '[images] WARNING: watermark text did not render — no usable fonts found. ' +
+              'Previews will NOT be watermarked. Install fonts (e.g. fontconfig + fonts-dejavu-core) in the runtime image.',
       );
     }
     return ok;

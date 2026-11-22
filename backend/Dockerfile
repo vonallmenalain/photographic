@@ -32,6 +32,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Comic Sans MS TTF – is just a file + an env var, no code change.
 COPY assets/fonts/ /usr/share/fonts/truetype/website/
 RUN fc-cache -f
+# Schriftzug der Fotografin für das Wasserzeichen (freigestelltes PNG). Der Pfad
+# /app/assets/watermark/schriftzug.png ist der Standardwert von
+# IMG_WATERMARK_IMAGE (relativ zu dist/config.js aufgelöst).
+COPY assets/watermark/schriftzug.png ./assets/watermark/schriftzug.png
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
